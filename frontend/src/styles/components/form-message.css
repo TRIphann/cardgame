@@ -1,0 +1,15 @@
+.form-message {
+  margin: -8px 0 16px;
+  padding: 10px 14px;
+  border-radius: 3px;
+  font-size: 12px;
+  letter-spacing: .03em;
+  border: 1px solid rgba(244, 162, 162, .35);
+  background: rgba(80, 20, 20, .35);
+  color: #f4d1d1;
+}
+.form-message[data-tone="info"] {
+  border-color: rgba(166, 144, 220, .35);
+  background: rgba(20, 25, 60, .35);
+  color: #c2bedf;
+}

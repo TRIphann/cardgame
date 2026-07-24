@@ -1,0 +1,25 @@
+[build]
+  publish = "frontend/src"
+  command = "echo 'Static site, no build needed'"
+
+[[redirects]]
+  from = "/"
+  to = "/pages/landing/index.html"
+  status = 302
+
+[[redirects]]
+  from = "/lobby"
+  to = "/pages/lobby/index.html"
+  status = 302
+
+[[redirects]]
+  from = "/room"
+  to = "/pages/room/index.html"
+  status = 302
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "SAMEORIGIN"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"

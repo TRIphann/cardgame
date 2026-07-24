@@ -1,0 +1,60 @@
+/* Room page — placeholder arena view */
+
+.room-page { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 32px 20px; }
+
+.room-panel {
+  width: min(100%, 720px);
+  position: relative;
+  padding: 56px 56px 40px;
+  border: 1px solid rgba(179, 148, 255, .25);
+  border-radius: 4px;
+  background: linear-gradient(145deg, rgba(31, 29, 66, .69), rgba(11, 13, 34, .76));
+  box-shadow: 0 35px 100px rgba(0, 0, 0, .4), inset 0 1px rgba(255,255,255,.05);
+  backdrop-filter: blur(13px);
+  animation: panel-in .6s cubic-bezier(.2,.75,.25,1) both;
+}
+
+.room-panel .corner { position: absolute; width: 22px; height: 22px; border-color: rgba(182, 146, 255, .4); border-style: solid; }
+.room-panel .corner-tl { left: 14px; top: 14px; border-width: 1px 0 0 1px; }
+.room-panel .corner-tr { right: 14px; top: 14px; border-width: 1px 1px 0 0; }
+.room-panel .corner-bl { left: 14px; bottom: 14px; border-width: 0 0 1px 1px; }
+.room-panel .corner-br { right: 14px; bottom: 14px; border-width: 0 1px 1px 0; }
+
+.back-link {
+  position: absolute; top: 18px; left: 22px;
+  color: #aaa1d4; font-size: 12px; letter-spacing: .08em; text-decoration: none;
+}
+.back-link span { margin-right: 6px; }
+
+.room-header { text-align: center; margin-bottom: 28px; }
+.room-header .eyebrow { margin: 0 0 10px; color: #aaa1d4; letter-spacing: .32em; font-size: 10px; font-weight: 700; }
+.room-header h1 { margin: 0; color: #faf7ff; font-family: Cinzel, serif; font-size: clamp(28px, 5vw, 38px); font-weight: 600; letter-spacing: .14em; text-indent: .14em; text-shadow: 0 0 26px rgba(184, 142, 255, .2); }
+.room-header .room-meta { margin: 12px 0 0; color: #c2bedf; font-size: 12px; letter-spacing: .05em; }
+.room-header .room-meta span { color: #faf7ff; font-weight: 600; letter-spacing: .12em; }
+
+.room-body { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 28px; }
+
+.seat-card {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 28px 22px;
+  border: 1px solid rgba(184, 142, 255, .35);
+  border-radius: 4px;
+  background: rgba(15, 12, 36, .55);
+  text-align: center;
+}
+.seat-card.alt { background: rgba(8, 10, 28, .45); border-style: dashed; }
+.seat-glyph { font-size: 36px; color: #c9a8ff; margin-bottom: 10px; }
+.seat-label { margin: 0; color: #aaa1d4; font-size: 11px; letter-spacing: .2em; }
+.seat-name { margin: 6px 0 0; color: #faf7ff; font-size: 18px; font-weight: 600; font-family: Cinzel, serif; }
+.seat-tag { margin: 6px 0 0; color: #c2bedf; font-size: 11px; letter-spacing: .03em; }
+
+.room-footer { display: flex; justify-content: center; }
+
+.action-button { height: 44px; padding: 0 22px; cursor: pointer; border: 1px solid rgba(181, 147, 244, .32); border-radius: 3px; color: #efeaff; font-size: 12px; font-weight: 700; letter-spacing: .07em; transition: border-color .2s, background .2s; }
+.action-button.secondary { background: rgba(255,255,255,.025); }
+.action-button:hover { border-color: rgba(220, 190, 255, .7); background: rgba(159, 113, 241, .12); }
+
+@media (max-width: 520px) {
+  .room-body { grid-template-columns: 1fr; }
+  .room-panel { padding: 48px 22px 30px; }
+}

@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: cardgame-api
+    runtime: docker
+    dockerfilePath: ./infra/docker/Dockerfile.api
+    plan: free
+    region: singapore
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: ASPNETCORE_URLS
+        value: http://0.0.0.0:10000
+      - key: Firebase__ProjectId
+        sync: false
+      - key: Firebase__CredentialsBase64
+        sync: false
+      - key: Cors__AllowedOrigins__0
+        sync: false
+      - key: Cors__AllowedOrigins__1
+        sync: false

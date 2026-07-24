@@ -1,0 +1,26 @@
+## .NET build output
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+## Secrets — never commit
+backend/src/Arcana.Api/Secrets/
+*.firebase-adminsdk*.json
+*.json
+!backend/src/Arcana.Api/appsettings*.json
+!frontend/src/config/firebase.js
+
+## OS
+.DS_Store
+Thumbs.db
+
+## IDE
+.idea/
+.vscode/
+
+## Logs
+*.log
+backend/.api.err
+backend/.api.out

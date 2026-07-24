@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#090d1f" />
+  <title>Arcana — Phòng chờ</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../../styles/main.css" />
+  <link rel="stylesheet" href="../../styles/pages/lobby.css" />
+</head>
+<body>
+  <main class="lobby-page">
+    <div class="ambient ambient-one"></div>
+    <div class="ambient ambient-two"></div>
+
+    <section class="lobby-panel" aria-labelledby="lobby-title">
+      <a class="back-link" href="../landing/index.html"><span>←</span> Quay lại</a>
+
+      <p class="eyebrow">PHÒNG CHỜ</p>
+      <h1 id="lobby-title">Đang triệu hồi đồng đội...</h1>
+
+      <div class="invite-card">
+        <p class="invite-label">Mã mời phòng</p>
+        <div class="invite-code-row">
+          <span class="invite-code" id="invite-code">------</span>
+          <button class="copy-button" id="copy-button" type="button">Sao chép</button>
+        </div>
+        <p class="invite-hint">Chia sẻ mã này cho 7 người bạn muốn mời vào cùng phòng.</p>
+      </div>
+
+      <div class="slots-grid" id="slots-grid" aria-live="polite"></div>
+
+      <div class="lobby-footer">
+        <span class="status-text" id="status-text">Đang tải phòng...</span>
+        <button class="action-button primary" id="start-button" type="button" disabled>Bắt đầu ván đấu <span>⚔</span></button>
+      </div>
+    </section>
+
+    <div class="corner corner-tl"></div><div class="corner corner-tr"></div>
+    <div class="corner corner-bl"></div><div class="corner corner-br"></div>
+  </main>
+  <script type="module" src="../../scripts/pages/lobby.js"></script>
+</body>
+</html>
