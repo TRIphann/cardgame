@@ -6,6 +6,7 @@ services:
     region: singapore
     healthCheckPath: /health
     autoDeploy: true
+    dockerfilePath: backend/Dockerfile
     envVars:
       - key: ASPNETCORE_ENVIRONMENT
         value: Production

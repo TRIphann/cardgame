@@ -50,5 +50,6 @@ if (app.Environment.IsDevelopment())
 app.UseCors();
 app.UseMiddleware<DomainExceptionMiddleware>();
 app.MapControllers();
+app.MapGet("/health", () => Results.Ok(new { status = "ok", time = DateTime.UtcNow }));
 
 app.Run();
