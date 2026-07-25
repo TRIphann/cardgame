@@ -44,13 +44,10 @@ FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 WORKDIR /app
 
 # Disable every code path that tries to register a FileSystemWatcher.
-# These env vars are belt-and-suspenders: the published production binary
-# doesn't enable reload by default, but if anything down the stack does
-# (Razor runtime compilation, Mvc watch, etc.) these short-circuit it.
+# Program.cs also disables JSON reload, but Razor runtime compilation and the
+# host's own watcher can still kick in; these env vars short-circuit them.
 ENV DOTNET_USE_POLLING_FILE_WATCHER=false \
     DOTNET_FILEWATCHER_ENABLED=false \
-    ASPNETCORE_hostBuilder__reloadConfigOnChange=false \
-    DOTNET_hostBuilder__reloadConfigOnChange=false \
     NUGET_XMLDOC_MODE=skip \
     ASPNETCORE_URLS=http://0.0.0.0:10000 \
     ASPNETCORE_ENVIRONMENT=Production \
