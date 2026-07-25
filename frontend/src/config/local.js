@@ -2,9 +2,9 @@
 export const API_BASE_URL = "http://localhost:5080";
 
 export const ROUTES = {
-  landing: "/games/exploding-cats/pages/landing/index.html",
-  lobby: "/games/exploding-cats/pages/lobby/index.html",
-  roomEntry: "/games/exploding-cats/pages/room-entry/index.html",
+  landing: "/pages/landing/index.html",
+  lobby: "/pages/lobby/index.html",
+  roomEntry: "/pages/room-entry/index.html",
 };
 
 const SESSION_KEY = "arcana.session.v1";

@@ -4,22 +4,43 @@
 
 [[redirects]]
   from = "/"
-  to = "/games/exploding-cats/pages/landing/index.html"
+  to = "/pages/landing/index.html"
   status = 302
 
 [[redirects]]
   from = "/lobby"
-  to = "/games/exploding-cats/pages/lobby/index.html"
+  to = "/pages/lobby/index.html"
   status = 302
 
 [[redirects]]
   from = "/room-entry"
-  to = "/games/exploding-cats/pages/room-entry/index.html"
+  to = "/pages/room-entry/index.html"
   status = 302
+
+# Cache busting — short TTL on HTML, long on assets
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+    X-Content-Type-Options = "nosniff"
+
+[[headers]]
+  for = "/pages/*"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/shared/*"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/games/*"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
 
 [[headers]]
   for = "/*"
   [headers.values]
     X-Frame-Options = "SAMEORIGIN"
-    X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"

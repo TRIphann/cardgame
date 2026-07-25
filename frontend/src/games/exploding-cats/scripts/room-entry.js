@@ -62,7 +62,7 @@ buttons.forEach((button) => {
       });
 
       audioManager.playSfx(action === "create" ? "roomCodeReveal" : "playerJoin");
-      window.location.href = "../lobby/index.html";
+      window.location.href = "/pages/lobby/index.html";
     } catch (err) {
       audioManager.playSfx("error");
       alert(err.message || "Có lỗi xảy ra, vui lòng thử lại.");

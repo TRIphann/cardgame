@@ -18,5 +18,5 @@ const explodingCard = document.querySelector('[data-game="exploding-cats"]');
 explodingCard?.addEventListener("click", () => {
   // In the next iteration this routes to a per-game lobby entry form.
   // For now we go straight into room creation using the legacy flow.
-  window.location.href = "../exploding-cats/pages/room-entry/index.html";
+  window.location.href = "/pages/room-entry/index.html";
 });
