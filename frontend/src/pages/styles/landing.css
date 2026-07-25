@@ -429,6 +429,22 @@ h1 {
   .corner { width: 15px; height: 15px; }
 }
 
+/* Retry button — secondary, sits below the form-message */
+#retry-button {
+  margin-top: 12px;
+  background: rgba(220, 190, 255, 0.08);
+  color: #d9c8ff;
+  border: 1px solid rgba(220, 190, 255, 0.4);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 11px;
+  height: 42px;
+}
+#retry-button:hover {
+  background: rgba(220, 190, 255, 0.18);
+  border-color: rgba(220, 190, 255, 0.7);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;

@@ -15,6 +15,7 @@
 import { saveSession, ROUTES, API_BASE_URL } from "../../config/env.js";
 import { roomsApi } from "../../shared/api/roomsApi.js";
 import { audioManager } from "../../shared/audio/AudioManager.js";
+import { toast } from "../../shared/ui/toast.js";
 
 console.log("[arcana] landing: entry.js loaded");
 
@@ -74,7 +75,7 @@ function pickMember(room, isHostAction, name) {
 }
 
 // fetch with explicit timeout + clear error messages for CORS / network failures.
-async function fetchWithTimeout(path, options = {}, timeoutMs = 90000) {
+async function fetchWithTimeout(path, options = {}, timeoutMs = 30000) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
@@ -86,7 +87,7 @@ async function fetchWithTimeout(path, options = {}, timeoutMs = 90000) {
     return res;
   } catch (err) {
     if (err.name === "AbortError") {
-      throw new Error("Máy chủ không phản hồi (timeout 90s). Vui lòng thử lại.");
+      throw new Error("Máy chủ không phản hồi (timeout 30s). Vui lòng thử lại.");
     }
     // Network/CORS failure usually surfaces here with a TypeError.
     throw new Error(`Không kết nối được máy chủ (${err.message || err}). Kiểm tra CORS hoặc mạng.`);
@@ -94,6 +95,59 @@ async function fetchWithTimeout(path, options = {}, timeoutMs = 90000) {
     clearTimeout(t);
   }
 }
+
+// --- Health probe ----------------------------------------------------
+// Render free tier spins down idle services for ~50s. When the user first
+// loads this page we have no idea whether the backend is awake. We ping
+// /health so that before any button click we know if it is online, and if
+// not we surface a clear "Máy chủ đang khởi động" message + a retry button.
+async function pingBackend() {
+  try {
+    const res = await fetchWithTimeout("/health", { method: "GET" }, 10000);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
+const statusDot = document.querySelector(".status-dot");
+async function probeBackend(showSpinner = false) {
+  if (statusDot) {
+    statusDot.style.background = "#f0c14b";
+    statusDot.style.boxShadow = "0 0 8px #f0c14b";
+  }
+  if (showSpinner) showLoading("Đang kết nối máy chủ...");
+  const result = await pingBackend();
+  hideLoading();
+  if (result.ok) {
+    if (statusDot) {
+      statusDot.style.background = "#5ddc8f";
+      statusDot.style.boxShadow = "0 0 8px #5ddc8f";
+    }
+    toast.success("Máy chủ đã sẵn sàng", { duration: 2500, title: "Đấu trường" });
+  } else {
+    if (statusDot) {
+      statusDot.style.background = "#d94545";
+      statusDot.style.boxShadow = "0 0 8px #d94545";
+    }
+    toast.error(
+      "Không kết nối được máy chủ. Bấm «Thử lại kết nối» bên dưới.",
+      { title: "Mất kết nối", duration: 0 },
+    );
+    const retryBtn = document.querySelector("#retry-button");
+    if (retryBtn) retryBtn.hidden = false;
+  }
+}
+
+const retryBtn = document.querySelector("#retry-button");
+retryBtn?.addEventListener("click", async () => {
+  retryBtn.hidden = true;
+  hideMessage();
+  await probeBackend(true);
+});
+// Kick off the initial probe but don't block the UI.
+probeBackend(false);
 
 async function goToFlow(action) {
   const name = nameInput.value.trim();
@@ -153,11 +207,17 @@ async function goToFlow(action) {
 
     audioManager.playSfx(effectiveAction === "create" ? "roomCodeReveal" : "playerJoin");
     showLoading("Đang vào phòng chờ...");
+    toast.success(`Đã ${effectiveAction === "create" ? "tạo" : "vào"} phòng ${room.code}`, {
+      title: "Thành công",
+      duration: 2500,
+    });
     console.log("[arcana] landing: room ready", { id: room.id, code: room.code, action: effectiveAction });
     window.location.href = ROUTES.lobby;
   } catch (err) {
     console.error("[arcana] landing: room flow failed", err);
-    showMessage(err.message || "Có lỗi xảy ra, vui lòng thử lại.");
+    toast.error(err.message || "Có lỗi xảy ra, vui lòng thử lại.", {
+      title: effectiveAction === "create" ? "Tạo phòng thất bại" : "Vào phòng thất bại",
+    });
     audioManager.playSfx("error");
     shakeForm();
   } finally {
