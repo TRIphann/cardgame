@@ -1,18 +1,18 @@
-// Landing page — single-step flow:
-//   - Player enters their name and (optionally) a room code
-//   - "Tạo phòng" → POST /api/rooms { hostName } → lobby
-//   - "Vào phòng" with code → POST /api/rooms/join { code, playerName } → lobby
-//   - "Vào phòng" without code → also creates a new room (acts as create)
+// Landing page — two-step flow:
+//   1. Player enters name → clicks "Vào đấu trường" → reveal room code + buttons
+//   2. Player clicks "Tạo phòng" or "Vào phòng" (with optional code) → API call → lobby
 //
-// The form is structured so both the room code and the buttons are visible from
-// the start. That way:
-//   - If JS fails to load, the user can still see the controls without a confusing
-//     "two-step" reveal collapsing away.
-//   - The form has an inline `onsubmit="event.preventDefault(); return false;"`
-//     as a hard guarantee it never reloads the page (default browser submit would
-//     have reloaded the landing and lost the user's input).
+// Why two-step?
+//   - UX: feels less crowded on first load, room code is "scoped" to the action
+//   - Lets us do a single click confirmation of the name before any network call
+//
+// Robustness:
+//   - The form has inline onsubmit="event.preventDefault()" so it NEVER reloads
+//   - All fetches go through `fetchWithTimeout` so a stuck request (e.g. CORS
+//     rejection, hung cold-start) fails after 90 s instead of forever
+//   - Loading spinner is shown during the network round-trip
 
-import { saveSession, ROUTES } from "../../config/env.js";
+import { saveSession, ROUTES, API_BASE_URL } from "../../config/env.js";
 import { roomsApi } from "../../shared/api/roomsApi.js";
 import { audioManager } from "../../shared/audio/AudioManager.js";
 
@@ -21,12 +21,18 @@ console.log("[arcana] landing: entry.js loaded");
 const form = document.querySelector("#player-form");
 const nameInput = document.querySelector("#player-name");
 const roomCodeInput = document.querySelector("#room-code");
+const enterButton = document.querySelector("#enter-button");
+const roomActions = document.querySelector("#room-actions");
 const createButton = document.querySelector("#create-button");
 const joinButton = document.querySelector("#join-button");
 const messageEl = document.querySelector("#form-message");
+const loadingEl = document.querySelector("#loading");
+const loadingText = document.querySelector("#loading-text");
 
-if (!form || !nameInput || !createButton || !joinButton) {
-  console.error("[arcana] landing: required DOM nodes missing", { form, nameInput, createButton, joinButton });
+if (!form || !nameInput || !enterButton || !roomActions || !createButton || !joinButton) {
+  console.error("[arcana] landing: required DOM nodes missing", {
+    form, nameInput, enterButton, roomActions, createButton, joinButton,
+  });
 }
 
 function showMessage(text, tone = "error") {
@@ -47,16 +53,46 @@ function shakeForm() {
   setTimeout(() => form?.classList.remove("form-attention"), 450);
 }
 
-function setBusy(busy) {
-  [createButton, joinButton].forEach((b) => { if (b) b.disabled = busy; });
+function showLoading(text = "Đang kết nối máy chủ...") {
+  if (loadingEl) loadingEl.hidden = false;
+  if (loadingText) loadingText.textContent = text;
+}
+function hideLoading() {
+  if (loadingEl) loadingEl.hidden = true;
 }
 
-function pickMember(room, action, name) {
-  if (action === "create") {
+function setBusy(busy) {
+  [enterButton, createButton, joinButton].forEach((b) => { if (b) b.disabled = busy; });
+}
+
+function pickMember(room, isHostAction, name) {
+  if (isHostAction) {
     return room.members.find((m) => m.isHost) ?? room.members[0];
   }
-  // For join, the last-added member is the new arrival (others were already there).
+  // For join, the last-added member is the new arrival.
   return room.members.find((m) => !m.isHost && m.name === name) ?? room.members.at(-1);
+}
+
+// fetch with explicit timeout + clear error messages for CORS / network failures.
+async function fetchWithTimeout(path, options = {}, timeoutMs = 90000) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${API_BASE_URL}${path}`, {
+      ...options,
+      signal: ctrl.signal,
+      headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+    });
+    return res;
+  } catch (err) {
+    if (err.name === "AbortError") {
+      throw new Error("Máy chủ không phản hồi (timeout 90s). Vui lòng thử lại.");
+    }
+    // Network/CORS failure usually surfaces here with a TypeError.
+    throw new Error(`Không kết nối được máy chủ (${err.message || err}). Kiểm tra CORS hoặc mạng.`);
+  } finally {
+    clearTimeout(t);
+  }
 }
 
 async function goToFlow(action) {
@@ -69,21 +105,39 @@ async function goToFlow(action) {
   }
 
   const code = roomCodeInput.value.trim().toUpperCase();
-  // If the user typed a code, we always JOIN, regardless of which button they clicked.
-  // If the code is empty, "Tạo phòng" creates, "Vào phòng" also creates (forgiving UX).
+  // Code typed => always join. No code => create when "Tạo", create when "Vào" too (forgiving UX).
   const effectiveAction = code ? "join" : action;
 
   audioManager.unlock();
   audioManager.playSfx("buttonClick");
   setBusy(true);
   hideMessage();
+  showLoading(effectiveAction === "create" ? "Đang tạo phòng..." : "Đang vào phòng...");
 
   try {
-    const room = effectiveAction === "create"
-      ? await roomsApi.create(name)
-      : await roomsApi.join(code, name);
+    const res = effectiveAction === "create"
+      ? await fetchWithTimeout("/api/rooms", {
+          method: "POST",
+          body: JSON.stringify({ hostName: name }),
+        })
+      : await fetchWithTimeout("/api/rooms/join", {
+          method: "POST",
+          body: JSON.stringify({ code, playerName: name }),
+        });
 
-    const member = pickMember(room, effectiveAction, name);
+    if (!res.ok) {
+      let msg = `HTTP ${res.status}`;
+      try {
+        const body = await res.json();
+        msg = body.title || body.message || body.error || msg;
+      } catch (_) { /* ignore */ }
+      throw new Error(humanizeApiError(res.status, msg, effectiveAction));
+    }
+
+    const body = await res.json();
+    const room = body.room ?? body; // tolerate wrapped/unwrapped response shape
+
+    const member = pickMember(room, effectiveAction === "create", name);
     if (!member) {
       throw new Error("Không tìm thấy thành viên trong phòng sau khi tạo/join.");
     }
@@ -98,6 +152,7 @@ async function goToFlow(action) {
     });
 
     audioManager.playSfx(effectiveAction === "create" ? "roomCodeReveal" : "playerJoin");
+    showLoading("Đang vào phòng chờ...");
     console.log("[arcana] landing: room ready", { id: room.id, code: room.code, action: effectiveAction });
     window.location.href = ROUTES.lobby;
   } catch (err) {
@@ -107,27 +162,59 @@ async function goToFlow(action) {
     shakeForm();
   } finally {
     setBusy(false);
+    hideLoading();
   }
 }
 
+function humanizeApiError(status, msg, action) {
+  if (status === 400) {
+    if (action === "join") return "Mã phòng không hợp lệ. Hãy kiểm tra lại.";
+    return "Tên không hợp lệ. Vui lòng thử tên khác.";
+  }
+  if (status === 404) return "Phòng không tồn tại hoặc đã đóng.";
+  if (status === 409) return "Phòng đã đầy hoặc trò chơi đã bắt đầu.";
+  if (status === 403) return "Bạn không có quyền vào phòng này.";
+  if (status >= 500) return "Máy chủ đang gặp sự cố. Vui lòng thử lại sau ít phút.";
+  return msg;
+}
+
+// --- Step 1: reveal room code + buttons ---
+enterButton?.addEventListener("click", () => {
+  const name = nameInput.value.trim();
+  if (!name) {
+    showMessage("Vui lòng nhập tên trước.");
+    nameInput.focus();
+    shakeForm();
+    return;
+  }
+  audioManager.unlock();
+  audioManager.playSfx("buttonClick");
+  hideMessage();
+  roomActions.hidden = false;
+  enterButton.hidden = true;
+  roomCodeInput.focus();
+});
+
+// --- Step 2: create / join ---
 createButton?.addEventListener("click", () => goToFlow("create"));
 joinButton?.addEventListener("click", () => goToFlow("join"));
 
-// Auto-format room code to uppercase.
 roomCodeInput?.addEventListener("input", () => {
   roomCodeInput.value = roomCodeInput.value.toUpperCase();
   hideMessage();
 });
-
 nameInput?.addEventListener("input", () => {
   nameInput.setCustomValidity("");
   hideMessage();
 });
 
-// Submitting the form (Enter key) triggers the primary action — create.
-form?.addEventListener("submit", (e) => {
-  e.preventDefault();
-  goToFlow("create");
+// Enter in name field → advance to step 2.
+nameInput?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); enterButton.click(); }
+});
+// Enter in code field → trigger join (or create if empty).
+roomCodeInput?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); joinButton.click(); }
 });
 
 console.log("[arcana] landing: entry.js ready");

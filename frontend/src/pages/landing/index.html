@@ -12,11 +12,6 @@
   <link rel="stylesheet" href="/pages/styles/landing.css" />
 </head>
 <body>
-  <!--
-    Inline fallback so the form NEVER reloads the page, even if the JS module
-    fails to load for any reason (404, CORS, MIME, syntax error, network...).
-    We just intercept submit here and rely on entry.js to actually do the work.
-  -->
   <main class="landing-page">
     <div class="ambient ambient-one"></div>
     <div class="ambient ambient-two"></div>
@@ -38,6 +33,8 @@
 
       <div class="divider"><i></i><span>✧</span><i></i></div>
 
+      <!-- Inline onsubmit = hard guarantee the form NEVER reloads the page,
+           even if entry.js fails to load for any reason. -->
       <form class="player-form" id="player-form" novalidate onsubmit="event.preventDefault(); return false;">
         <label for="player-name">Tên người chơi</label>
         <div class="name-input-wrap">
@@ -46,9 +43,14 @@
         </div>
         <p class="hint">Tên của bạn sẽ được hiển thị trong đấu trường</p>
 
-        <!-- Always visible: room code + create/join buttons -->
-        <div class="room-actions" id="room-actions">
-          <label for="room-code">Mã phòng (tùy chọn)</label>
+        <!-- Step 1: primary CTA — opens the room code + create/join buttons -->
+        <button class="action-button primary enter-button" id="enter-button" type="button">
+          Vào đấu trường <span>→</span>
+        </button>
+
+        <!-- Step 2: revealed after the player commits to a name -->
+        <div class="room-actions" id="room-actions" hidden>
+          <label for="room-code">Mã phòng</label>
           <div class="name-input-wrap">
             <span class="input-icon">✦</span>
             <input id="room-code" name="roomCode" type="text" maxlength="6" autocomplete="off" placeholder="Nhập mã 6 ký tự (bỏ trống nếu muốn tạo mới)" />
@@ -64,6 +66,12 @@
         </div>
 
         <p class="form-message" id="form-message" hidden></p>
+
+        <!-- Spinner shown while waiting for the backend (Render cold-start can take ~30s) -->
+        <div class="loading" id="loading" hidden>
+          <span class="loading-spinner" aria-hidden="true"></span>
+          <span id="loading-text">Đang kết nối máy chủ...</span>
+        </div>
       </form>
 
       <p class="footer-note"><span class="status-dot"></span> Sẵn sàng cho một ván đấu huyền bí?</p>
@@ -74,7 +82,7 @@
   </main>
 
   <script>
-    // Diagnostics: surfaces whether the module loaded, even if the console isn't open.
+    // Boot diagnostics — surfaces module-load errors even with console closed.
     window.__arcanaBootError = null;
     window.addEventListener("error", (e) => {
       window.__arcanaBootError = (e.error?.message) || e.message || "unknown";
