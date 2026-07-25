@@ -4,6 +4,8 @@ public record CreateRoomRequest(string HostName);
 
 public record JoinRoomRequest(string Code, string PlayerName);
 
+public record KickMemberRequest(string HostId, string TargetMemberId);
+
 public record RoomMemberDto(string Id, string Name, bool IsHost, bool IsReady, DateTime JoinedAt);
 
 public record RoomDto(
@@ -20,5 +22,7 @@ public record RoomDto(
 public record CreateRoomResponse(RoomDto Room);
 
 public record JoinRoomResponse(RoomDto Room);
+
+public record KickMemberResponse(RoomDto Room);
 
 public record ErrorResponse(string Code, string Message);

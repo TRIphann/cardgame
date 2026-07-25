@@ -8,6 +8,10 @@ namespace Arcana.Infrastructure.Repositories;
 public class FirestoreRoomRepository : IRoomRepository
 {
     private const string RoomsCollection = "rooms";
+    // Reservation collection: doc ID = invitation code, value = roomId it points to.
+    // Atomic Create() on this document is the synchronization primitive — Firestore guarantees
+    // that exactly one concurrent create succeeds; we use that to claim a code without a race.
+    private const string CodesCollection = "room_codes";
 
     private readonly FirestoreDb _db;
 
@@ -19,21 +23,43 @@ public class FirestoreRoomRepository : IRoomRepository
     public async Task<Room?> GetByIdAsync(string id, CancellationToken ct = default)
     {
         var snapshot = await _db.Collection(RoomsCollection).Document(id).GetSnapshotAsync(ct);
-        return snapshot.Exists ? MapRoom(snapshot) : null;
+        return snapshot.Exists ? await MapRoomAsync(snapshot, ct) : null;
     }
 
     public async Task<Room?> GetByCodeAsync(string code, CancellationToken ct = default)
     {
-        var query = _db.Collection(RoomsCollection).WhereEqualTo("code", code).Limit(1);
-        var snapshot = await query.GetSnapshotAsync(ct);
-        return snapshot.Documents.Count > 0 ? MapRoom(snapshot.Documents[0]) : null;
+        var reserved = await _db.Collection(CodesCollection).Document(code).GetSnapshotAsync(ct);
+        if (!reserved.Exists) return null;
+        var roomId = reserved.GetValue<string>("roomId");
+        return await GetByIdAsync(roomId, ct);
     }
 
     public async Task<bool> CodeExistsAsync(string code, CancellationToken ct = default)
     {
-        var query = _db.Collection(RoomsCollection).WhereEqualTo("code", code).Limit(1);
-        var snapshot = await query.GetSnapshotAsync(ct);
-        return snapshot.Documents.Count > 0;
+        var snapshot = await _db.Collection(CodesCollection).Document(code).GetSnapshotAsync(ct);
+        return snapshot.Exists;
+    }
+
+    public async Task<bool> TryReserveCodeAsync(string code, string roomId, CancellationToken ct = default)
+    {
+        var docRef = _db.Collection(CodesCollection).Document(code);
+        // Create() on a DocumentReference adds a precondition that the doc must not exist.
+        // When another writer has already claimed the same code, Firestore raises
+        // RpcException(AlreadyExists). We treat that as a taken-slot and return false;
+        // the caller retries with a fresh code.
+        try
+        {
+            await docRef.CreateAsync(new Dictionary<string, object>
+            {
+                ["roomId"] = roomId,
+                ["createdAt"] = Timestamp.GetCurrentTimestamp(),
+            }, cancellationToken: ct);
+            return true;
+        }
+        catch (Grpc.Core.RpcException ex) when (ex.Status.StatusCode == Grpc.Core.StatusCode.AlreadyExists)
+        {
+            return false;
+        }
     }
 
     public async Task CreateAsync(Room room, CancellationToken ct = default)
@@ -64,6 +90,48 @@ public class FirestoreRoomRepository : IRoomRepository
         await docRef.SetAsync(BuildMemberDoc(member), SetOptions.Overwrite, cancellationToken: ct);
     }
 
+    public async Task<Room?> TryJoinRoomAsync(string roomId, RoomMember candidate, CancellationToken ct = default)
+    {
+        var roomRef = _db.Collection(RoomsCollection).Document(roomId);
+        var memberRef = roomRef.Collection("members").Document(candidate.Id);
+
+        return await _db.RunTransactionAsync(async tx =>
+        {
+            var snapshot = await tx.GetSnapshotAsync(roomRef);
+            if (!snapshot.Exists) return null;
+
+            var status = snapshot.GetValue<string>("status");
+            if (!string.Equals(status, "waiting", StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            var maxPlayers = snapshot.GetValue<int>("maxPlayers");
+            var membersSnap = await tx.GetSnapshotAsync(roomRef.Collection("members"));
+            if (membersSnap.Count >= maxPlayers) return null;
+
+            tx.Set(memberRef, BuildMemberDoc(candidate));
+            return await MapRoomAsync(snapshot, ct, membersSnapshot: membersSnap);
+        });
+    }
+
+    public async Task<Room?> RemoveMemberAsync(string roomId, string memberId, CancellationToken ct = default)
+    {
+        var roomRef = _db.Collection(RoomsCollection).Document(roomId);
+        var memberRef = roomRef.Collection("members").Document(memberId);
+
+        return await _db.RunTransactionAsync(async tx =>
+        {
+            var roomSnap = await tx.GetSnapshotAsync(roomRef);
+            if (!roomSnap.Exists) return null;
+
+            var memberSnap = await tx.GetSnapshotAsync(memberRef);
+            if (!memberSnap.Exists) return null;
+
+            tx.Delete(memberRef);
+            var membersSnapshot = await tx.GetSnapshotAsync(roomRef.Collection("members"));
+            return await MapRoomAsync(roomSnap, ct, membersSnapshot: membersSnapshot);
+        });
+    }
+
     private static Dictionary<string, object> BuildRoomDoc(Room room) => new()
     {
         ["code"] = room.Code,
@@ -82,7 +150,7 @@ public class FirestoreRoomRepository : IRoomRepository
         ["joinedAt"] = Timestamp.FromDateTime(member.JoinedAt.ToUniversalTime()),
     };
 
-    private static Room MapRoom(DocumentSnapshot snapshot)
+    private static async Task<Room> MapRoomAsync(DocumentSnapshot snapshot, CancellationToken ct, QuerySnapshot? membersSnapshot = null)
     {
         var data = snapshot.ToDictionary();
         var room = new Room
@@ -97,7 +165,7 @@ public class FirestoreRoomRepository : IRoomRepository
             Members = new List<RoomMember>(),
         };
 
-        var membersSnapshot = snapshot.Reference.Collection("members").GetSnapshotAsync().GetAwaiter().GetResult();
+        membersSnapshot ??= await snapshot.Reference.Collection("members").GetSnapshotAsync(ct);
         foreach (var memberDoc in membersSnapshot.Documents)
         {
             var md = memberDoc.ToDictionary();

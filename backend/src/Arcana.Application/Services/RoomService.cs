@@ -8,7 +8,9 @@ namespace Arcana.Application.Services;
 public class RoomService : Abstractions.IRoomService
 {
     private const int MaxPlayers = 8;
-    private const int MaxCodeAttempts = 12;
+    // Code search space: 32^6 ≈ 1.07B. With 100k active rooms the collision probability
+    // per attempt is ~9.3e-5. 16 attempts keeps the cumulative failure probability under 1.5e-3.
+    private const int MaxCodeAttempts = 16;
 
     private readonly IRoomRepository _repository;
     private readonly Abstractions.IInvitationCodeGenerator _codeGenerator;
@@ -25,10 +27,17 @@ public class RoomService : Abstractions.IRoomService
             throw new DomainException("invalid_name", "Tên người chơi không được để trống.");
 
         var hostId = Guid.NewGuid().ToString("N");
+        var roomId = Guid.NewGuid().ToString("N");
+
+        // Atomically claim a unique invitation code. If two requests generate the same
+        // string at the same time, exactly one of them wins the Create on
+        // room_codes/{code}; the loser retries with a fresh code.
+        var code = await ClaimUniqueCodeAsync(roomId, ct);
+
         var room = new Room
         {
-            Id = Guid.NewGuid().ToString("N"),
-            Code = await GenerateUniqueCodeAsync(ct),
+            Id = roomId,
+            Code = code,
             HostId = hostId,
             HostName = hostName.Trim(),
             Status = RoomStatus.Waiting,
@@ -60,12 +69,6 @@ public class RoomService : Abstractions.IRoomService
         var room = await _repository.GetByCodeAsync(code.ToUpperInvariant(), ct)
             ?? throw new DomainException("room_not_found", "Không tìm thấy phòng với mã này.");
 
-        if (room.Status != RoomStatus.Waiting)
-            throw new DomainException("room_closed", "Phòng đã bắt đầu hoặc đã đóng.");
-
-        if (room.Members.Count >= room.MaxPlayers)
-            throw new DomainException("room_full", "Phòng đã đủ 8 người chơi.");
-
         var member = new RoomMember
         {
             Id = Guid.NewGuid().ToString("N"),
@@ -75,10 +78,16 @@ public class RoomService : Abstractions.IRoomService
             JoinedAt = DateTime.UtcNow,
         };
 
-        await _repository.AddMemberAsync(room.Id, member, ct);
+        // Atomic capacity check + add. If 9 requests race when one slot is left, all but
+        // one get null back and surface a room_full error.
+        var updated = await _repository.TryJoinRoomAsync(room.Id, member, ct);
+        if (updated is null)
+            throw new DomainException("room_full", "Phòng đã đủ người chơi hoặc đã bắt đầu.");
 
-        room.Members.Add(member);
-        return room;
+        // Surface the added member inside the returned DTO.
+        if (!updated.Members.Any(m => m.Id == member.Id))
+            updated.Members.Add(member);
+        return updated;
     }
 
     public async Task<Room?> GetRoomAsync(string id, CancellationToken ct = default)
@@ -86,12 +95,30 @@ public class RoomService : Abstractions.IRoomService
         return await _repository.GetByIdAsync(id, ct);
     }
 
-    private async Task<string> GenerateUniqueCodeAsync(CancellationToken ct)
+    public async Task<Room?> KickMemberAsync(string roomId, string hostId, string targetMemberId, CancellationToken ct = default)
+    {
+        var room = await _repository.GetByIdAsync(roomId, ct)
+            ?? throw new DomainException("room_not_found", "Phòng không tồn tại.");
+
+        if (!string.Equals(room.HostId, hostId, StringComparison.Ordinal))
+            throw new DomainException("not_host", "Chỉ chủ phòng mới có quyền đá thành viên.");
+
+        if (string.Equals(room.HostId, targetMemberId, StringComparison.Ordinal))
+            throw new DomainException("cannot_kick_host", "Không thể đá chủ phòng.");
+
+        var updated = await _repository.RemoveMemberAsync(roomId, targetMemberId, ct);
+        if (updated is null)
+            throw new DomainException("member_not_found", "Thành viên không còn trong phòng.");
+
+        return updated;
+    }
+
+    private async Task<string> ClaimUniqueCodeAsync(string roomId, CancellationToken ct)
     {
         for (var attempt = 0; attempt < MaxCodeAttempts; attempt++)
         {
             var code = _codeGenerator.Generate();
-            if (!await _repository.CodeExistsAsync(code, ct))
+            if (await _repository.TryReserveCodeAsync(code, roomId, ct))
                 return code;
         }
         throw new DomainException("code_exhausted", "Không thể tạo mã phòng duy nhất, vui lòng thử lại.");

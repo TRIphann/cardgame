@@ -3,11 +3,12 @@
 //   - Polls room data every 2.5s
 //   - Renders up to 8 seats split 4/4
 //   - Carousel of available games in the center (with < > arrows + flip animation)
+//   - Settings modal: Settings tab (audio) + Members tab (host can kick members)
 //   - Drives copy / leave / start interactions
-//   - Wires audio manager + settings modal
+//   - Wires audio manager
 
 import { loadSession, saveSession, clearSession, ROUTES } from "../../config/env.js";
-import { getRoom } from "../../shared/api/roomsApi.js";
+import { getRoom, roomsApi } from "../../shared/api/roomsApi.js";
 import { audioManager } from "../../shared/audio/AudioManager.js";
 import { SettingsModal } from "../../shared/components/SettingsModal.js";
 
@@ -78,8 +79,15 @@ let cachedRoom = null;
 let currentGameIndex = 0;
 let isFlipping = false;
 
-// ---- Settings modal ----
-const settings = new SettingsModal(settingsMount);
+// ---- Settings modal: Settings tab + Members tab ----
+const settings = new SettingsModal(settingsMount, [
+  {
+    id: "members",
+    label: "Thành viên",
+    render: (mount) => renderMembersTab(mount, null),
+    onAction: handleMemberAction,
+  },
+]);
 settingsButton.addEventListener("click", () => settings.open());
 
 // ---- Game carousel ----
@@ -155,7 +163,6 @@ startButton.addEventListener("click", () => {
   audioManager.unlock();
   audioManager.playSfx("buttonClick");
   saveSession({ ...session, stage: "playing" });
-  // Future: route to in-game page for the selected game.
   statusEl.textContent = `Game đã chọn: ${GAMES[currentGameIndex].label} — sắp sẵn sàng!`;
 });
 
@@ -211,6 +218,98 @@ function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+// ---- Members tab ----
+function renderMembersTab(mount) {
+  return renderMembersInto(mount);
+}
+
+function renderMembersInto(mount) {
+  if (!cachedRoom) {
+    mount.innerHTML = `<p class="settings-hint">Đang tải danh sách thành viên…</p>`;
+    return;
+  }
+  const me = cachedRoom.members?.find((m) => m.id === session.playerId);
+  const isHost = me?.isHost === true;
+  const members = [...(cachedRoom.members || [])].sort((a, b) => new Date(a.joinedAt) - new Date(b.joinedAt));
+
+  const rows = members.map((m) => {
+    const classes = ["member-row"];
+    if (m.isHost) classes.push("is-host");
+    if (m.id === session.playerId) classes.push("is-me");
+    const tag = m.isHost ? "Chủ phòng" : "Thành viên";
+    const kickBtn = isHost && !m.isHost
+      ? `<button class="kick-button" type="button" data-action="kick" data-member-id="${escapeHtml(m.id)}" title="Đá ${escapeHtml(m.name)} ra khỏi phòng">⤴</button>`
+      : `<span style="width: 32px"></span>`;
+    return `
+      <div class="${classes.join(" ")}">
+        <div class="member-avatar">${m.avatar ?? "🐱"}</div>
+        <div class="member-info">
+          <p class="member-name">${escapeHtml(m.name)}${m.id === session.playerId ? ` <span style="opacity:.6">(bạn)</span>` : ""}</p>
+          <p class="member-tag">${tag}</p>
+        </div>
+        ${kickBtn}
+      </div>
+    `;
+  }).join("");
+
+  mount.innerHTML = `
+    <div class="settings-group">
+      <label class="settings-label">${members.length}/${cachedRoom.maxPlayers} người — mã phòng ${escapeHtml(cachedRoom.code)}</label>
+      <div class="members-list">${rows || `<p class="settings-hint">Chưa có ai trong phòng.</p>`}</div>
+      ${isHost ? `<p class="settings-hint">Bạn là chủ phòng — bấm ⤴ để đá thành viên ra khỏi lobby.</p>` : ""}
+    </div>
+  `;
+}
+
+async function handleMemberAction(action, payload) {
+  if (action !== "kick") return;
+  const targetId = payload?.memberId;
+  if (!targetId) return;
+  const me = cachedRoom?.members?.find((m) => m.id === session.playerId);
+  if (!me?.isHost) {
+    showToast("Chỉ chủ phòng mới có thể đá thành viên.", "error");
+    return;
+  }
+  if (targetId === me.id) return;
+
+  audioManager.unlock();
+  audioManager.playSfx("buttonClick");
+
+  try {
+    const resp = await roomsApi.kick(session.roomId, me.id, targetId);
+    cachedRoom = resp.room;
+    settings.refresh();
+    await refreshRoom();
+  } catch (err) {
+    audioManager.playSfx("error");
+    showToast(err.message || "Không thể đá thành viên.", "error");
+  }
+}
+
+// ---- Toast (transient notification inside the lobby) ----
+let toastTimer = null;
+function showToast(text, tone = "info") {
+  let el = document.querySelector("#lobby-toast");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "lobby-toast";
+    el.className = "lobby-toast";
+    el.setAttribute("role", "status");
+    el.setAttribute("aria-live", "polite");
+    document.body.appendChild(el);
+  }
+  el.textContent = text;
+  el.dataset.tone = tone;
+  el.hidden = false;
+  void el.offsetWidth;
+  el.classList.add("is-visible");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    el.classList.remove("is-visible");
+    setTimeout(() => (el.hidden = true), 280);
+  }, 2400);
+}
+
 // ---- Poll room ----
 async function refreshRoom() {
   if (!session?.roomId) return;
@@ -224,6 +323,13 @@ async function refreshRoom() {
     }
 
     renderSeats(room.members || [], session.playerId);
+
+    // If I'm no longer in the room (was kicked), bounce back to landing.
+    if (!room.members?.some((m) => m.id === session.playerId)) {
+      clearSession();
+      window.location.replace(ROUTES.landing);
+      return;
+    }
 
     const count = room.members?.length ?? 0;
     const remaining = room.maxPlayers - count;

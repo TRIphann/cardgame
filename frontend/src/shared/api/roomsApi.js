@@ -30,6 +30,12 @@ export const roomsApi = {
   get(roomId) {
     return request(`/api/rooms/${roomId}`);
   },
+  kick(roomId, hostId, targetMemberId) {
+    return request(`/api/rooms/${roomId}/kick`, {
+      method: "POST",
+      body: JSON.stringify({ hostId, targetMemberId }),
+    });
+  },
 };
 
 export const getRoom = roomsApi.get;

@@ -39,6 +39,16 @@ public class RoomsController : ControllerBase
         return Ok(MapToDto(room));
     }
 
+    [HttpPost("{id}/kick")]
+    public async Task<ActionResult<KickMemberResponse>> Kick(
+        [FromRoute] string id,
+        [FromBody] KickMemberRequest request,
+        CancellationToken ct)
+    {
+        var room = await _roomService.KickMemberAsync(id, request.HostId, request.TargetMemberId, ct);
+        return Ok(new KickMemberResponse(MapToDto(room!)));
+    }
+
     private static RoomDto MapToDto(Room room) => new(
         room.Id,
         room.Code,

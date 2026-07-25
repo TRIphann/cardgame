@@ -32,6 +32,9 @@ public class DomainExceptionMiddleware
                 "invalid_code" => StatusCodes.Status400BadRequest,
                 "invalid_name" => StatusCodes.Status400BadRequest,
                 "code_exhausted" => StatusCodes.Status503ServiceUnavailable,
+                "not_host" => StatusCodes.Status403Forbidden,
+                "cannot_kick_host" => StatusCodes.Status400BadRequest,
+                "member_not_found" => StatusCodes.Status404NotFound,
                 _ => StatusCodes.Status400BadRequest,
             };
             context.Response.ContentType = "application/json";
