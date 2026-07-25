@@ -256,16 +256,31 @@ h1 {
   letter-spacing: 0.03em;
 }
 
-/* Step 1 — single primary CTA that opens the rest */
-.enter-button {
+/* Buttons (primary + secondary) */
+.action-button {
   width: 100%;
-  margin-top: 4px;
-  letter-spacing: 0.18em;
+  height: 48px;
+  cursor: pointer;
+  border: 1px solid rgba(181, 147, 244, 0.32);
+  border-radius: 3px;
+  color: #efeaff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
-  font-size: 13px;
+  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s, background 0.2s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.action-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
 }
 
-/* Step 2 — revealed after commit, slides into view */
+/* Step 2 — always visible: room code input + create / join buttons */
 .room-actions {
   margin-top: 22px;
   padding-top: 22px;
@@ -291,17 +306,6 @@ h1 {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
-}
-.action-button {
-  height: 48px;
-  cursor: pointer;
-  border: 1px solid rgba(181, 147, 244, 0.32);
-  border-radius: 3px;
-  color: #efeaff;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s, background 0.2s;
 }
 .action-button span {
   margin-left: 8px;

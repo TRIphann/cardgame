@@ -1,18 +1,33 @@
-// Landing page — two-step flow:
-//   1. Player types a name and clicks "Vào đấu trường" — locks the name + reveals the rest
-//   2. Player either creates a room (becomes host) or joins with a code (optional input)
+// Landing page — single-step flow:
+//   - Player enters their name and (optionally) a room code
+//   - "Tạo phòng" → POST /api/rooms { hostName } → lobby
+//   - "Vào phòng" with code → POST /api/rooms/join { code, playerName } → lobby
+//   - "Vào phòng" without code → also creates a new room (acts as create)
+//
+// The form is structured so both the room code and the buttons are visible from
+// the start. That way:
+//   - If JS fails to load, the user can still see the controls without a confusing
+//     "two-step" reveal collapsing away.
+//   - The form has an inline `onsubmit="event.preventDefault(); return false;"`
+//     as a hard guarantee it never reloads the page (default browser submit would
+//     have reloaded the landing and lost the user's input).
 
 import { saveSession, ROUTES } from "../../config/env.js";
 import { roomsApi } from "../../shared/api/roomsApi.js";
 import { audioManager } from "../../shared/audio/AudioManager.js";
 
+console.log("[arcana] landing: entry.js loaded");
+
 const form = document.querySelector("#player-form");
 const nameInput = document.querySelector("#player-name");
 const roomCodeInput = document.querySelector("#room-code");
-const enterButton = document.querySelector("#enter-button");
-const roomActions = document.querySelector("#room-actions");
-const actionButtons = document.querySelectorAll("[data-action]");
+const createButton = document.querySelector("#create-button");
+const joinButton = document.querySelector("#join-button");
 const messageEl = document.querySelector("#form-message");
+
+if (!form || !nameInput || !createButton || !joinButton) {
+  console.error("[arcana] landing: required DOM nodes missing", { form, nameInput, createButton, joinButton });
+}
 
 function showMessage(text, tone = "error") {
   if (!messageEl) return;
@@ -32,77 +47,71 @@ function shakeForm() {
   setTimeout(() => form?.classList.remove("form-attention"), 450);
 }
 
+function setBusy(busy) {
+  [createButton, joinButton].forEach((b) => { if (b) b.disabled = busy; });
+}
+
 function pickMember(room, action, name) {
   if (action === "create") {
     return room.members.find((m) => m.isHost) ?? room.members[0];
   }
+  // For join, the last-added member is the new arrival (others were already there).
   return room.members.find((m) => !m.isHost && m.name === name) ?? room.members.at(-1);
 }
 
-// Step 1 — commit the name and reveal the create/join block.
-form.addEventListener("submit", (e) => {
-  e.preventDefault();
+async function goToFlow(action) {
   const name = nameInput.value.trim();
   if (!name) {
+    showMessage("Vui lòng nhập tên trước.");
     nameInput.focus();
-    nameInput.reportValidity();
     shakeForm();
     return;
   }
 
+  const code = roomCodeInput.value.trim().toUpperCase();
+  // If the user typed a code, we always JOIN, regardless of which button they clicked.
+  // If the code is empty, "Tạo phòng" creates, "Vào phòng" also creates (forgiving UX).
+  const effectiveAction = code ? "join" : action;
+
   audioManager.unlock();
   audioManager.playSfx("buttonClick");
+  setBusy(true);
+  hideMessage();
 
-  // Lock the name input and reveal the room actions
-  nameInput.setAttribute("readonly", "readonly");
-  nameInput.style.opacity = "0.75";
-  enterButton.hidden = true;
-  roomActions.hidden = false;
-  // Focus the room code field for quick keyboard entry
-  setTimeout(() => roomCodeInput.focus(), 200);
-});
+  try {
+    const room = effectiveAction === "create"
+      ? await roomsApi.create(name)
+      : await roomsApi.join(code, name);
 
-// Step 2 — create or join.
-actionButtons.forEach((button) => {
-  button.addEventListener("click", async () => {
-    const name = nameInput.value.trim();
-    if (!name) {
-      // Player tried to skip step 1; shake and bail
-      showMessage("Vui lòng nhập tên trước.");
-      shakeForm();
-      return;
+    const member = pickMember(room, effectiveAction, name);
+    if (!member) {
+      throw new Error("Không tìm thấy thành viên trong phòng sau khi tạo/join.");
     }
-    const code = roomCodeInput.value.trim().toUpperCase();
-    const action = code ? "join" : button.dataset.action;
-    audioManager.unlock();
-    actionButtons.forEach((b) => (b.disabled = true));
 
-    try {
-      const room = action === "create"
-        ? await roomsApi.create(name)
-        : await roomsApi.join(code, name);
+    saveSession({
+      roomId: room.id,
+      roomCode: room.code,
+      playerId: member.id,
+      playerName: member.name,
+      isHost: effectiveAction === "create",
+      stage: "lobby",
+    });
 
-      const member = pickMember(room, action, name);
-      saveSession({
-        roomId: room.id,
-        roomCode: room.code,
-        playerId: member.id,
-        playerName: member.name,
-        isHost: action === "create",
-        stage: "lobby",
-      });
+    audioManager.playSfx(effectiveAction === "create" ? "roomCodeReveal" : "playerJoin");
+    console.log("[arcana] landing: room ready", { id: room.id, code: room.code, action: effectiveAction });
+    window.location.href = ROUTES.lobby;
+  } catch (err) {
+    console.error("[arcana] landing: room flow failed", err);
+    showMessage(err.message || "Có lỗi xảy ra, vui lòng thử lại.");
+    audioManager.playSfx("error");
+    shakeForm();
+  } finally {
+    setBusy(false);
+  }
+}
 
-      audioManager.playSfx(action === "create" ? "roomCodeReveal" : "playerJoin");
-      window.location.href = ROUTES.lobby;
-    } catch (err) {
-      showMessage(err.message || "Có lỗi xảy ra, vui lòng thử lại.");
-      audioManager.playSfx("error");
-      shakeForm();
-    } finally {
-      actionButtons.forEach((b) => (b.disabled = false));
-    }
-  });
-});
+createButton?.addEventListener("click", () => goToFlow("create"));
+joinButton?.addEventListener("click", () => goToFlow("join"));
 
 // Auto-format room code to uppercase.
 roomCodeInput?.addEventListener("input", () => {
@@ -110,7 +119,15 @@ roomCodeInput?.addEventListener("input", () => {
   hideMessage();
 });
 
-nameInput.addEventListener("input", () => {
+nameInput?.addEventListener("input", () => {
   nameInput.setCustomValidity("");
   hideMessage();
 });
+
+// Submitting the form (Enter key) triggers the primary action — create.
+form?.addEventListener("submit", (e) => {
+  e.preventDefault();
+  goToFlow("create");
+});
+
+console.log("[arcana] landing: entry.js ready");
