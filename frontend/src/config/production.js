@@ -1,5 +1,5 @@
 // Production config — used when deployed on Netlify / Vercel.
-export const API_BASE_URL = "https://cardgame-hndy.onrender.com";
+export const API_BASE_URL = "https://cardgame-lwsk.onrender.com";
 
 export const ROUTES = {
   landing: "/pages/landing/index.html",
