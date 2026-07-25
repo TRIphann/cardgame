@@ -44,10 +44,15 @@ FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 WORKDIR /app
 
 # Disable every code path that tries to register a FileSystemWatcher.
-# Program.cs also disables JSON reload, but Razor runtime compilation and the
-# host's own watcher can still kick in; these env vars short-circuit them.
+# `DOTNET_hostBuilder__reloadConfigOnChange=false` is read by
+# HostingHostBuilderExtensions.ApplyDefaultAppConfiguration (see
+# https://github.com/dotnet/runtime HostingHostBuilderExtensions.cs). Without
+# it, WebApplication.CreateBuilder registers a FileSystemWatcher per
+# appsettings*.json file and Render's shared inotify pool (max 128 instances
+# per user) is exhausted at startup -> IOException -> exit 139.
 ENV DOTNET_USE_POLLING_FILE_WATCHER=false \
     DOTNET_FILEWATCHER_ENABLED=false \
+    DOTNET_hostBuilder__reloadConfigOnChange=false \
     NUGET_XMLDOC_MODE=skip \
     ASPNETCORE_URLS=http://0.0.0.0:10000 \
     ASPNETCORE_ENVIRONMENT=Production \
