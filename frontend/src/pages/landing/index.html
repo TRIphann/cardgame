@@ -40,10 +40,25 @@
           <input id="player-name" name="playerName" type="text" maxlength="24" autocomplete="nickname" placeholder="Nhập tên của bạn..." required />
         </div>
         <p class="hint">Tên của bạn sẽ được hiển thị trong đấu trường</p>
-        <div class="action-row">
-          <button class="action-button primary" type="button" data-action="create">Tạo phòng <span>↗</span></button>
-          <button class="action-button secondary" type="button" data-action="join">Vào phòng <span>→</span></button>
+
+        <!-- Step 1: single primary CTA — opens the rest of the form -->
+        <button class="action-button primary enter-button" id="enter-button" type="submit">
+          Vào đấu trường <span>→</span>
+        </button>
+
+        <!-- Step 2: revealed after the player commits to a name -->
+        <div class="room-actions" id="room-actions" hidden>
+          <label for="room-code">Mã phòng</label>
+          <div class="name-input-wrap">
+            <span class="input-icon">✦</span>
+            <input id="room-code" name="roomCode" type="text" maxlength="6" autocomplete="off" placeholder="Nhập mã 6 ký tự (bỏ trống nếu muốn tạo mới)" />
+          </div>
+          <div class="action-row">
+            <button class="action-button primary" type="button" data-action="create">Tạo phòng <span>↗</span></button>
+            <button class="action-button secondary" type="button" data-action="join">Vào phòng <span>→</span></button>
+          </div>
         </div>
+
         <p class="form-message" id="form-message" hidden></p>
       </form>
 

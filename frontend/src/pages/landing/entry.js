@@ -1,5 +1,6 @@
-// Landing page — name input + create/join room.
-// Single-page flow: pick name → either create a room (becomes host) or join with a code.
+// Landing page — two-step flow:
+//   1. Player types a name and clicks "Vào đấu trường" — locks the name + reveals the rest
+//   2. Player either creates a room (becomes host) or joins with a code (optional input)
 
 import { saveSession, ROUTES } from "../../config/env.js";
 import { roomsApi } from "../../shared/api/roomsApi.js";
@@ -7,7 +8,10 @@ import { audioManager } from "../../shared/audio/AudioManager.js";
 
 const form = document.querySelector("#player-form");
 const nameInput = document.querySelector("#player-name");
-const buttons = document.querySelectorAll("[data-action]");
+const roomCodeInput = document.querySelector("#room-code");
+const enterButton = document.querySelector("#enter-button");
+const roomActions = document.querySelector("#room-actions");
+const actionButtons = document.querySelectorAll("[data-action]");
 const messageEl = document.querySelector("#form-message");
 
 function showMessage(text, tone = "error") {
@@ -35,30 +39,48 @@ function pickMember(room, action, name) {
   return room.members.find((m) => !m.isHost && m.name === name) ?? room.members.at(-1);
 }
 
-function promptCode() {
-  const raw = window.prompt("Nhập mã mời phòng (6 ký tự):");
-  if (!raw) throw new Error("Bạn chưa nhập mã phòng.");
-  return raw.trim().toUpperCase();
-}
+// Step 1 — commit the name and reveal the create/join block.
+form.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const name = nameInput.value.trim();
+  if (!name) {
+    nameInput.focus();
+    nameInput.reportValidity();
+    shakeForm();
+    return;
+  }
 
-buttons.forEach((button) => {
+  audioManager.unlock();
+  audioManager.playSfx("buttonClick");
+
+  // Lock the name input and reveal the room actions
+  nameInput.setAttribute("readonly", "readonly");
+  nameInput.style.opacity = "0.75";
+  enterButton.hidden = true;
+  roomActions.hidden = false;
+  // Focus the room code field for quick keyboard entry
+  setTimeout(() => roomCodeInput.focus(), 200);
+});
+
+// Step 2 — create or join.
+actionButtons.forEach((button) => {
   button.addEventListener("click", async () => {
     const name = nameInput.value.trim();
     if (!name) {
-      nameInput.focus();
-      nameInput.reportValidity();
+      // Player tried to skip step 1; shake and bail
+      showMessage("Vui lòng nhập tên trước.");
       shakeForm();
       return;
     }
-
-    const action = button.dataset.action;
+    const code = roomCodeInput.value.trim().toUpperCase();
+    const action = code ? "join" : button.dataset.action;
     audioManager.unlock();
-    button.disabled = true;
+    actionButtons.forEach((b) => (b.disabled = true));
 
     try {
       const room = action === "create"
         ? await roomsApi.create(name)
-        : await roomsApi.join(promptCode(), name);
+        : await roomsApi.join(code, name);
 
       const member = pickMember(room, action, name);
       saveSession({
@@ -77,9 +99,15 @@ buttons.forEach((button) => {
       audioManager.playSfx("error");
       shakeForm();
     } finally {
-      button.disabled = false;
+      actionButtons.forEach((b) => (b.disabled = false));
     }
   });
+});
+
+// Auto-format room code to uppercase.
+roomCodeInput?.addEventListener("input", () => {
+  roomCodeInput.value = roomCodeInput.value.toUpperCase();
+  hideMessage();
 });
 
 nameInput.addEventListener("input", () => {

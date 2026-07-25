@@ -119,8 +119,8 @@ body { }
 }
 
 .welcome-panel {
-  width: min(100%, 520px);
-  min-height: 650px;
+  width: min(100%, 540px);
+  min-height: auto;
   position: relative;
   text-align: center;
   padding: 58px 64px 42px;
@@ -254,6 +254,37 @@ h1 {
   color: #777a9d;
   font-size: 10px;
   letter-spacing: 0.03em;
+}
+
+/* Step 1 — single primary CTA that opens the rest */
+.enter-button {
+  width: 100%;
+  margin-top: 4px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-size: 13px;
+}
+
+/* Step 2 — revealed after commit, slides into view */
+.room-actions {
+  margin-top: 22px;
+  padding-top: 22px;
+  border-top: 1px solid rgba(166, 144, 220, 0.18);
+  animation: room-actions-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.room-actions label {
+  display: block;
+  margin-bottom: 10px;
+  color: #e1dcef;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+.room-actions .name-input-wrap { margin-bottom: 18px; }
+
+@keyframes room-actions-in {
+  from { opacity: 0; transform: translateY(-8px); max-height: 0; }
+  to { opacity: 1; transform: translateY(0); max-height: 320px; }
 }
 
 .action-row {
