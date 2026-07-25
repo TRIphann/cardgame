@@ -1,9 +1,10 @@
+// Local dev config.
 export const API_BASE_URL = "http://localhost:5080";
 
 export const ROUTES = {
-  landing: "/frontend/src/pages/landing/index.html",
-  lobby: "/frontend/src/pages/lobby/index.html",
-  room: "/frontend/src/pages/room/index.html",
+  landing: "/games/exploding-cats/pages/landing/index.html",
+  lobby: "/games/exploding-cats/pages/lobby/index.html",
+  roomEntry: "/games/exploding-cats/pages/room-entry/index.html",
 };
 
 const SESSION_KEY = "arcana.session.v1";

@@ -1,7 +1,6 @@
 // Auto-resolving environment module.
-// On localhost (hostname === "localhost" or "127.0.0.1") we use the dev config
-// pointing at the local .NET API. Anywhere else we use the production config
-// pointing at the Render-hosted API.
+// On localhost we use the dev config pointing at the local .NET API.
+// Anywhere else we use the production config pointing at the Render-hosted API.
 
 import * as dev from "./local.js";
 import * as prod from "./production.js";

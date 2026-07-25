@@ -4,17 +4,17 @@
 
 [[redirects]]
   from = "/"
-  to = "/pages/landing/index.html"
+  to = "/games/exploding-cats/pages/landing/index.html"
   status = 302
 
 [[redirects]]
   from = "/lobby"
-  to = "/pages/lobby/index.html"
+  to = "/games/exploding-cats/pages/lobby/index.html"
   status = 302
 
 [[redirects]]
-  from = "/room"
-  to = "/pages/room/index.html"
+  from = "/room-entry"
+  to = "/games/exploding-cats/pages/room-entry/index.html"
   status = 302
 
 [[headers]]

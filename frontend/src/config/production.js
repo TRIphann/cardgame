@@ -1,10 +1,10 @@
-// Production config — used when deployed on Netlify / Vercel
+// Production config — used when deployed on Netlify / Vercel.
 export const API_BASE_URL = "https://cardgame-hndy.onrender.com";
 
 export const ROUTES = {
-  landing: "/pages/landing/index.html",
-  lobby: "/pages/lobby/index.html",
-  room: "/pages/room/index.html",
+  landing: "/games/exploding-cats/pages/landing/index.html",
+  lobby: "/games/exploding-cats/pages/lobby/index.html",
+  roomEntry: "/games/exploding-cats/pages/room-entry/index.html",
 };
 
 const SESSION_KEY = "arcana.session.v1";
