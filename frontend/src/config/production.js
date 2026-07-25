@@ -4,7 +4,6 @@ export const API_BASE_URL = "https://cardgame-hndy.onrender.com";
 export const ROUTES = {
   landing: "/pages/landing/index.html",
   lobby: "/pages/lobby/index.html",
-  roomEntry: "/pages/room-entry/index.html",
 };
 
 const SESSION_KEY = "arcana.session.v1";

@@ -12,11 +12,6 @@
   to = "/pages/lobby/index.html"
   status = 302
 
-[[redirects]]
-  from = "/room-entry"
-  to = "/pages/room-entry/index.html"
-  status = 302
-
 # Cache busting — short TTL on HTML, long on assets
 [[headers]]
   for = "/*.html"

@@ -3,68 +3,56 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#0a0a1a" />
-  <title>Arcana — Lobby Hub</title>
+  <meta name="theme-color" content="#090d1f" />
+  <title>Arcana — Card Battle</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/shared/styles/global.css" />
   <link rel="stylesheet" href="/pages/styles/landing.css" />
 </head>
-<body class="landing-page-body">
-  <div class="landing-stage">
+<body>
+  <main class="landing-page">
+    <div class="ambient ambient-one"></div>
+    <div class="ambient ambient-two"></div>
+    <div class="stars" aria-hidden="true"></div>
 
-    <div class="landing-bg">
-      <div class="bg-mesh" aria-hidden="true"></div>
-      <div class="bg-aurora" aria-hidden="true">
-        <span class="aurora aurora-1"></span>
-        <span class="aurora aurora-2"></span>
-      </div>
-      <div class="bg-vignette" aria-hidden="true"></div>
+    <div class="cards-scene" aria-hidden="true">
+      <article class="floating-card card-sun"><span class="card-glyph">☼</span><span class="card-title">SOL</span></article>
+      <article class="floating-card card-moon"><span class="card-glyph">☾</span><span class="card-title">LUNA</span></article>
+      <article class="floating-card card-eye"><span class="card-glyph">◉</span><span class="card-title">ORACLE</span></article>
+      <article class="floating-card card-star"><span class="card-glyph">✦</span><span class="card-title">ASTRA</span></article>
+      <article class="floating-card card-flame"><span class="card-glyph">♠</span><span class="card-title">IGNIS</span></article>
     </div>
 
-    <header class="landing-brand">
-      <p class="eyebrow" data-i18n="landing.eyebrow">ĐẤU TRƯỜNG THẺ HUYỀN BÍ</p>
-      <h1 data-i18n="landing.title">Arcana</h1>
-      <p class="tagline" data-i18n="landing.tagline">Số phận nằm trong tay bạn.</p>
-    </header>
+    <section class="welcome-panel" aria-labelledby="game-title">
+      <div class="brand-mark"><span></span><b>✦</b><span></span></div>
+      <p class="eyebrow">THE MYSTIC CARD ARENA</p>
+      <h1 id="game-title">ARCANA</h1>
+      <p class="tagline">Số phận nằm trong tay bạn.</p>
 
-    <main class="landing-main">
-      <p class="section-label" data-i18n="landing.pickGame">CHỌN TRÒ CHƠI</p>
+      <div class="divider"><i></i><span>✧</span><i></i></div>
 
-      <div class="game-grid">
-        <article class="game-card" data-game="exploding-cats">
-          <div class="game-card-art">
-            <span class="art-glyph">🐱</span>
-            <span class="art-explosion">💥</span>
-          </div>
-          <div class="game-card-body">
-            <h2 class="game-card-title" data-i18n="landing.game.explodingCats">Mèo Nổ</h2>
-            <p class="game-card-desc">Đặt bài, rút bài, đừng để con mèo nổ!</p>
-          </div>
-          <div class="game-card-cta">
-            <span>Chơi ngay</span>
-            <span class="cta-arrow">→</span>
-          </div>
-        </article>
+      <form class="player-form" id="player-form">
+        <label for="player-name">Tên người chơi</label>
+        <div class="name-input-wrap">
+          <span class="input-icon">♙</span>
+          <input id="player-name" name="playerName" type="text" maxlength="24" autocomplete="nickname" placeholder="Nhập tên của bạn..." required />
+        </div>
+        <p class="hint">Tên của bạn sẽ được hiển thị trong đấu trường</p>
+        <div class="action-row">
+          <button class="action-button primary" type="button" data-action="create">Tạo phòng <span>↗</span></button>
+          <button class="action-button secondary" type="button" data-action="join">Vào phòng <span>→</span></button>
+        </div>
+        <p class="form-message" id="form-message" hidden></p>
+      </form>
 
-        <article class="game-card is-locked">
-          <div class="game-card-art">
-            <span class="art-glyph">🃏</span>
-          </div>
-          <div class="game-card-body">
-            <h2 class="game-card-title" data-i18n="landing.game.comingSoon">Sắp ra mắt</h2>
-            <p class="game-card-desc">Trò chơi tiếp theo đang được phát triển.</p>
-          </div>
-          <div class="game-card-cta"><span>Soon</span></div>
-        </article>
-      </div>
+      <p class="footer-note"><span class="status-dot"></span> Sẵn sàng cho một ván đấu huyền bí?</p>
+    </section>
 
-      <p class="landing-footer" data-i18n="landing.footer">Sẵn sàng cho một ván đấu huyền bí?</p>
-    </main>
-
-    <div id="settings-mount"></div>
-  </div>
+    <div class="corner corner-tl"></div><div class="corner corner-tr"></div>
+    <div class="corner corner-bl"></div><div class="corner corner-br"></div>
+  </main>
 
   <script type="module" src="./entry.js"></script>
 </body>

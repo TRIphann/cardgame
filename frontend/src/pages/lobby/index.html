@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#0a0a1a" />
+  <meta name="theme-color" content="#090d1f" />
   <title>Arcana — Phòng chờ</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -11,86 +11,75 @@
   <link rel="stylesheet" href="/shared/styles/global.css" />
   <link rel="stylesheet" href="/pages/styles/lobby.css" />
 </head>
-<body class="lobby-page-body">
-  <div class="lobby-stage">
+<body>
+  <main class="lobby-page">
+    <div class="ambient ambient-one"></div>
+    <div class="ambient ambient-two"></div>
+    <div class="stars" aria-hidden="true"></div>
 
-    <!-- Background layers: gradient mesh, drifting cats silhouettes, particles, scanlines -->
-    <div class="lobby-bg">
-      <div class="bg-mesh" aria-hidden="true"></div>
-      <div class="bg-aurora" aria-hidden="true">
-        <span class="aurora aurora-1"></span>
-        <span class="aurora aurora-2"></span>
-        <span class="aurora aurora-3"></span>
-      </div>
-      <div class="bg-cats" aria-hidden="true">
-        <span class="cat-silhouette cat-1">🐱</span>
-        <span class="cat-silhouette cat-2">😺</span>
-        <span class="cat-silhouette cat-3">😼</span>
-        <span class="cat-silhouette cat-4">😻</span>
-        <span class="cat-silhouette cat-5">🙀</span>
-      </div>
-      <canvas class="bg-particles" aria-hidden="true"></canvas>
-      <div class="bg-scanlines" aria-hidden="true"></div>
-      <div class="bg-vignette" aria-hidden="true"></div>
+    <!-- Floating tarot cards echoing the landing page -->
+    <div class="cards-scene" aria-hidden="true">
+      <article class="floating-card card-sun"><span class="card-glyph">☼</span><span class="card-title">SOL</span></article>
+      <article class="floating-card card-moon"><span class="card-glyph">☾</span><span class="card-title">LUNA</span></article>
+      <article class="floating-card card-eye"><span class="card-glyph">◉</span><span class="card-title">ORACLE</span></article>
+      <article class="floating-card card-star"><span class="card-glyph">✦</span><span class="card-title">ASTRA</span></article>
     </div>
 
-    <!-- Top corner controls -->
-    <button class="lobby-corner-btn lobby-btn-exit" id="leave-button" type="button" aria-label="Rời phòng">
-      <span class="btn-glyph">⤺</span>
-      <span class="btn-text" data-i18n="lobby.leave">Rời phòng</span>
-    </button>
+    <!-- Top: back link + settings -->
+    <a class="back-link" href="/pages/landing/index.html"><span>←</span> Quay lại</a>
+    <button class="settings-button" id="settings-button" type="button" aria-label="Cài đặt">⚙</button>
 
-    <button class="lobby-corner-btn lobby-btn-settings" id="settings-button" type="button" aria-label="Cài đặt">
-      <span class="btn-glyph">⚙</span>
-    </button>
+    <header class="lobby-header">
+      <p class="eyebrow">PHÒNG CHỜ</p>
+      <h1 id="lobby-title">Đang triệu hồi đồng đội...</h1>
 
-    <!-- Top: invite code -->
-    <section class="invite-banner" aria-labelledby="invite-code-label">
-      <p class="invite-eyebrow" data-i18n="lobby.inviteCode">MÃ MỜI PHÒNG</p>
-      <div class="invite-code-row">
-        <span class="invite-code" id="invite-code">------</span>
-        <button class="invite-copy" id="copy-button" type="button" data-i18n="lobby.copy">Sao chép</button>
+      <div class="invite-card">
+        <p class="invite-label">Mã mời phòng</p>
+        <div class="invite-code-row">
+          <span class="invite-code" id="invite-code">------</span>
+          <button class="copy-button" id="copy-button" type="button">Sao chép</button>
+        </div>
+        <p class="invite-hint">Chia sẻ mã này cho 7 người bạn muốn mời vào cùng phòng.</p>
       </div>
-      <p class="invite-hint" data-i18n="lobby.shareHint">Chia sẻ mã này cho tối đa 7 người bạn.</p>
-    </section>
+    </header>
 
-    <!-- Middle: player seats (4 left, 4 right) + deck center -->
+    <!-- Middle: 4 seats left, big deck carousel center, 4 seats right -->
     <section class="lobby-arena">
       <div class="seats seats-left" id="seats-left"></div>
 
-      <div class="deck-area" aria-hidden="false">
-        <p class="deck-label">EXPLODING CATS</p>
-        <div class="deck-stack">
-          <div class="deck-card deck-card-back card-1"></div>
-          <div class="deck-card deck-card-back card-2"></div>
-          <div class="deck-card deck-card-back card-3"></div>
-          <div class="deck-card deck-card-back card-4"></div>
-          <div class="deck-card deck-card-front">
-            <span class="deck-card-glyph">🐱</span>
-            <span class="deck-card-explosion">💥</span>
+      <div class="deck-area">
+        <button class="deck-arrow deck-arrow-prev" id="game-prev" type="button" aria-label="Game trước">‹</button>
+
+        <div class="deck-stage" id="deck-stage">
+          <div class="deck-card deck-card-back deck-card-1"></div>
+          <div class="deck-card deck-card-back deck-card-2"></div>
+          <div class="deck-card deck-card-back deck-card-3"></div>
+          <div class="deck-card deck-card-back deck-card-4"></div>
+          <div class="deck-card deck-card-front" id="deck-card-front">
+            <span class="deck-card-glyph" id="deck-glyph">🐱</span>
+            <span class="deck-card-explosion" id="deck-explosion">💥</span>
           </div>
         </div>
-        <div class="deck-glow"></div>
+
+        <button class="deck-arrow deck-arrow-next" id="game-next" type="button" aria-label="Game tiếp theo">›</button>
+
+        <p class="deck-label" id="deck-label">EXPLODING CATS</p>
+        <p class="deck-subtitle" id="deck-subtitle">Đặt bài, rút bài, đừng để con mèo nổ!</p>
       </div>
 
       <div class="seats seats-right" id="seats-right"></div>
     </section>
 
-    <!-- Bottom: status + start -->
     <footer class="lobby-footer">
-      <span class="status-text" id="status-text">Đang tải phòng…</span>
-      <button class="lobby-start-btn" id="start-button" type="button" disabled>
-        <span data-i18n="lobby.startGame">Bắt đầu</span>
-        <span class="start-glyph">⚔</span>
-      </button>
+      <span class="status-text" id="status-text">Đang tải phòng...</span>
+      <button class="action-button primary" id="start-button" type="button" disabled>Bắt đầu ván đấu <span>⚔</span></button>
     </footer>
 
-    <!-- Settings modal mount -->
-    <div id="settings-mount"></div>
+    <div class="corner corner-tl"></div><div class="corner corner-tr"></div>
+    <div class="corner corner-bl"></div><div class="corner corner-br"></div>
 
-    <!-- Toast layer -->
-    <div class="lobby-toast" id="toast" hidden></div>
-  </div>
+    <div id="settings-mount"></div>
+  </main>
 
   <script type="module" src="./entry.js"></script>
 </body>
