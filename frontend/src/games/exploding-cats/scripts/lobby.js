@@ -8,8 +8,9 @@
 //   - Wires audio manager
 
 import { loadSession, saveSession, clearSession, ROUTES } from "../../config/env.js";
-import { getRoom, roomsApi } from "../../shared/api/roomsApi.js";
+import { getRoom, roomsApi, prewarmBackend } from "../../shared/api/roomsApi.js";
 import { audioManager } from "../../shared/audio/AudioManager.js";
+import { toast } from "../../shared/ui/toast.js";
 import { SettingsModal } from "../../shared/components/SettingsModal.js";
 
 // ---- Game catalog ----
@@ -56,6 +57,9 @@ const session = loadSession();
 if (!session || !session.roomId || !session.playerId) {
   window.location.replace(ROUTES.landing);
 }
+
+// Best-effort: keep the backend warm so the first poll doesn't pay cold-start cost.
+prewarmBackend();
 
 // ---- DOM refs ----
 const inviteCodeEl = document.querySelector("#invite-code");
@@ -213,6 +217,7 @@ copyButton.addEventListener("click", async () => {
     const labelEl = copyButton.querySelector(".copy-button__label");
     if (labelEl) labelEl.textContent = "Đã sao chép";
     audioManager.playSfx("roomCodeReveal");
+    toast.success(`Đã sao chép mã phòng ${realCode}`, { title: "Sao chép", duration: 1800 });
     setTimeout(() => {
       copyButton.classList.remove("is-copied");
       if (labelEl) labelEl.textContent = "Sao chép";
@@ -220,6 +225,9 @@ copyButton.addEventListener("click", async () => {
   } else {
     copyButton.classList.add("is-error");
     audioManager.playSfx("error");
+    toast.error("Không thể sao chép tự động. Hãy chọn và copy thủ công.", {
+      title: "Sao chép thất bại",
+    });
     setTimeout(() => copyButton.classList.remove("is-error"), 1600);
   }
 });

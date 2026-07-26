@@ -15,10 +15,15 @@
 //     no inline spinner, no "Đang kết nối..." text — per latest UX request.
 
 import { saveSession, ROUTES, API_BASE_URL } from "../../config/env.js";
+import { prewarmBackend, request } from "../../shared/api/roomsApi.js";
 import { audioManager } from "../../shared/audio/AudioManager.js";
 import { toast } from "../../shared/ui/toast.js";
 
 console.log("[arcana] landing: entry.js loaded");
+
+// Wake the Render free-tier container up-front so the first user action
+// doesn't pay the full cold-start cost (~30-60s).
+prewarmBackend();
 
 const form = document.querySelector("#player-form");
 const nameInput = document.querySelector("#player-name");
@@ -70,24 +75,19 @@ function pickMember(room, isHostAction, name) {
 }
 
 // fetch with explicit timeout + clear error messages for CORS / network failures.
-async function fetchWithTimeout(path, options = {}, timeoutMs = 30000) {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+// `request` is the retry-aware wrapper in roomsApi.js; here we just translate
+// errors into user-friendly Vietnamese messages.
+async function fetchWithTimeout(path, options = {}) {
   try {
-    const res = await fetch(`${API_BASE_URL}${path}`, {
-      ...options,
-      signal: ctrl.signal,
-      headers: { "Content-Type": "application/json", ...(options.headers || {}) },
-    });
-    return res;
+    return await request(path, options);
   } catch (err) {
-    if (err.name === "AbortError") {
-      throw new Error("Máy chủ không phản hồi (timeout 30s). Vui lòng thử lại.");
+    if (err && (err.name === "AbortError" || /abort/i.test(String(err.message || "")))) {
+      throw new Error("Máy chủ không phản hồi. Vui lòng thử lại.");
     }
-    // Network/CORS failure usually surfaces here with a TypeError.
+    if (/timeout/i.test(err?.message || "")) {
+      throw new Error("Máy chủ không phản hồi. Vui lòng thử lại.");
+    }
     throw new Error(`Không kết nối được máy chủ (${err.message || err}). Kiểm tra CORS hoặc mạng.`);
-  } finally {
-    clearTimeout(t);
   }
 }
 

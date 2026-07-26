@@ -303,12 +303,12 @@ body { }
 }
 .code-visibility:active { transform: scale(0.9); }
 .code-visibility .eye-icon { display: inline-flex; align-items: center; justify-content: center; }
-.code-visibility .eye-icon svg { display: block; }
-/* Show only one of the two SVGs based on data-state */
+/* Eye-open is the default visible icon; eye-closed hides by default. */
 .code-visibility .eye-open { display: block; }
-.code-visibility .eye-closed { display: none; }
-.code-visibility .eye-icon[data-state="hidden"] .eye-open { display: none; }
-.code-visibility .eye-icon[data-state="hidden"] .eye-closed { display: block; }
+.code-visibility .eye-closed { display: none !important; }
+/* When parent span is in "hidden" state, swap which SVG is shown. */
+.eye-icon[data-state="hidden"] .eye-open { display: none !important; }
+.eye-icon[data-state="hidden"] .eye-closed { display: block !important; }
 
 /* Hide animation for the code text */
 .invite-code.is-hidden {
