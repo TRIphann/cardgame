@@ -43,42 +43,29 @@
         </div>
         <p class="hint">Tên của bạn sẽ được hiển thị trong đấu trường</p>
 
-        <!-- Step 1: primary CTA — opens the room code + create/join buttons -->
-        <button class="action-button primary enter-button" id="enter-button" type="button">
-          Vào đấu trường <span>→</span>
-        </button>
+        <!-- Two CTAs side-by-side. "Tạo phòng" creates + joins in one click.
+             "Vào phòng" reveals the code input on first click, then joins on the second. -->
+        <div class="action-row landing-actions">
+          <button class="action-button primary" type="button" id="create-button" data-action="create">
+            Tạo phòng <span>✦</span>
+          </button>
+          <button class="action-button secondary" type="button" id="join-button" data-action="join" data-stage="enter-code">
+            Vào phòng <span>→</span>
+          </button>
+        </div>
 
-        <!-- Step 2: revealed after the player commits to a name -->
+        <!-- Hidden until user clicks "Vào phòng" the first time. -->
         <div class="room-actions" id="room-actions" hidden>
           <label for="room-code">Mã phòng</label>
           <div class="name-input-wrap">
             <span class="input-icon">✦</span>
-            <input id="room-code" name="roomCode" type="text" maxlength="6" autocomplete="off" placeholder="Nhập mã 6 ký tự (bỏ trống nếu muốn tạo mới)" />
+            <input id="room-code" name="roomCode" type="text" maxlength="6" autocomplete="off" placeholder="Nhập mã 6 ký tự" />
           </div>
-          <div class="action-row">
-            <button class="action-button primary" type="button" id="create-button" data-action="create">
-              Tạo phòng <span>↗</span>
-            </button>
-            <button class="action-button secondary" type="button" id="join-button" data-action="join">
-              Vào phòng <span>→</span>
-            </button>
-          </div>
+          <p class="hint">Nhập mã phòng rồi bấm «Vào phòng» lần nữa.</p>
         </div>
 
         <p class="form-message" id="form-message" hidden></p>
-
-        <button class="action-button secondary" id="retry-button" type="button" hidden>
-          Thử lại kết nối ↻
-        </button>
-
-        <!-- Spinner shown while waiting for the backend (Render cold-start can take ~30s) -->
-        <div class="loading" id="loading" hidden>
-          <span class="loading-spinner" aria-hidden="true"></span>
-          <span id="loading-text">Đang kết nối máy chủ...</span>
-        </div>
       </form>
-
-      <p class="footer-note"><span class="status-dot"></span> Sẵn sàng cho một ván đấu huyền bí?</p>
     </section>
 
     <div class="corner corner-tl"></div><div class="corner corner-tr"></div>

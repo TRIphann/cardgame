@@ -1,19 +1,20 @@
-// Landing page — two-step flow:
-//   1. Player enters name → clicks "Vào đấu trường" → reveal room code + buttons
-//   2. Player clicks "Tạo phòng" or "Vào phòng" (with optional code) → API call → lobby
+// Landing page — direct-action flow:
+//   - "Tạo phòng"  → POST /api/rooms, then jump to lobby (1 click).
+//   - "Vào phòng"  → first click reveals the room-code input,
+//                    second click posts /api/rooms/join and jumps to lobby.
 //
-// Why two-step?
-//   - UX: feels less crowded on first load, room code is "scoped" to the action
-//   - Lets us do a single click confirmation of the name before any network call
+// Why no intermediate "Vào đấu trường" button?
+//   The action IS the act of creating/joining. Clicking "Tạo phòng" is the
+//   strongest possible commitment from the user — no extra confirmation gate.
 //
-// Robustness:
-//   - The form has inline onsubmit="event.preventDefault()" so it NEVER reloads
-//   - All fetches go through `fetchWithTimeout` so a stuck request (e.g. CORS
-//     rejection, hung cold-start) fails after 90 s instead of forever
-//   - Loading spinner is shown during the network round-trip
+// Backend:
+//   - env.js picks the correct API_BASE_URL (local -> localhost:5080,
+//     production -> https://cardgame-lwsk.onrender.com).
+//   - Render free tier spins down idle services, so the first request after
+//     a quiet period can take ~30s. We surface progress via toast only —
+//     no inline spinner, no "Đang kết nối..." text — per latest UX request.
 
 import { saveSession, ROUTES, API_BASE_URL } from "../../config/env.js";
-import { roomsApi } from "../../shared/api/roomsApi.js";
 import { audioManager } from "../../shared/audio/AudioManager.js";
 import { toast } from "../../shared/ui/toast.js";
 
@@ -22,17 +23,14 @@ console.log("[arcana] landing: entry.js loaded");
 const form = document.querySelector("#player-form");
 const nameInput = document.querySelector("#player-name");
 const roomCodeInput = document.querySelector("#room-code");
-const enterButton = document.querySelector("#enter-button");
-const roomActions = document.querySelector("#room-actions");
 const createButton = document.querySelector("#create-button");
 const joinButton = document.querySelector("#join-button");
+const roomActions = document.querySelector("#room-actions");
 const messageEl = document.querySelector("#form-message");
-const loadingEl = document.querySelector("#loading");
-const loadingText = document.querySelector("#loading-text");
 
-if (!form || !nameInput || !enterButton || !roomActions || !createButton || !joinButton) {
+if (!form || !nameInput || !createButton || !joinButton || !roomActions) {
   console.error("[arcana] landing: required DOM nodes missing", {
-    form, nameInput, enterButton, roomActions, createButton, joinButton,
+    form, nameInput, createButton, joinButton, roomActions,
   });
 }
 
@@ -54,16 +52,13 @@ function shakeForm() {
   setTimeout(() => form?.classList.remove("form-attention"), 450);
 }
 
-function showLoading(text = "Đang kết nối máy chủ...") {
-  if (loadingEl) loadingEl.hidden = false;
-  if (loadingText) loadingText.textContent = text;
-}
-function hideLoading() {
-  if (loadingEl) loadingEl.hidden = true;
+function setBusy(busy) {
+  if (createButton) createButton.disabled = busy;
+  if (joinButton) joinButton.disabled = busy;
 }
 
-function setBusy(busy) {
-  [enterButton, createButton, joinButton].forEach((b) => { if (b) b.disabled = busy; });
+function getName() {
+  return nameInput?.value.trim() ?? "";
 }
 
 function pickMember(room, isHostAction, name) {
@@ -96,80 +91,50 @@ async function fetchWithTimeout(path, options = {}, timeoutMs = 30000) {
   }
 }
 
-// --- Health probe ----------------------------------------------------
-// Render free tier spins down idle services for ~50s. When the user first
-// loads this page we have no idea whether the backend is awake. We ping
-// /health so that before any button click we know if it is online, and if
-// not we surface a clear "Máy chủ đang khởi động" message + a retry button.
-async function pingBackend() {
-  try {
-    const res = await fetchWithTimeout("/health", { method: "GET" }, 10000);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, error: err.message };
+function humanizeApiError(status, msg, action) {
+  if (status === 400) {
+    if (action === "join") return "Mã phòng không hợp lệ. Hãy kiểm tra lại.";
+    return "Tên không hợp lệ. Vui lòng thử tên khác.";
   }
+  if (status === 404) return "Phòng không tồn tại hoặc đã đóng.";
+  if (status === 409) return "Phòng đã đầy hoặc trò chơi đã bắt đầu.";
+  if (status === 403) return "Bạn không có quyền vào phòng này.";
+  if (status >= 500) return "Máy chủ đang gặp sự cố. Vui lòng thử lại sau ít phút.";
+  return msg;
 }
 
-const statusDot = document.querySelector(".status-dot");
-async function probeBackend(showSpinner = false) {
-  if (statusDot) {
-    statusDot.style.background = "#f0c14b";
-    statusDot.style.boxShadow = "0 0 8px #f0c14b";
-  }
-  if (showSpinner) showLoading("Đang kết nối máy chủ...");
-  const result = await pingBackend();
-  hideLoading();
-  if (result.ok) {
-    if (statusDot) {
-      statusDot.style.background = "#5ddc8f";
-      statusDot.style.boxShadow = "0 0 8px #5ddc8f";
-    }
-    toast.success("Máy chủ đã sẵn sàng", { duration: 2500, title: "Đấu trường" });
-  } else {
-    if (statusDot) {
-      statusDot.style.background = "#d94545";
-      statusDot.style.boxShadow = "0 0 8px #d94545";
-    }
-    toast.error(
-      "Không kết nối được máy chủ. Bấm «Thử lại kết nối» bên dưới.",
-      { title: "Mất kết nối", duration: 0 },
-    );
-    const retryBtn = document.querySelector("#retry-button");
-    if (retryBtn) retryBtn.hidden = false;
-  }
-}
-
-const retryBtn = document.querySelector("#retry-button");
-retryBtn?.addEventListener("click", async () => {
-  retryBtn.hidden = true;
-  hideMessage();
-  await probeBackend(true);
-});
-// Kick off the initial probe but don't block the UI.
-probeBackend(false);
-
-async function goToFlow(action) {
-  const name = nameInput.value.trim();
+async function runAction(action) {
+  const name = getName();
   if (!name) {
     showMessage("Vui lòng nhập tên trước.");
-    nameInput.focus();
+    nameInput?.focus();
     shakeForm();
     return;
   }
 
-  const code = roomCodeInput.value.trim().toUpperCase();
-  // Code typed => always join. No code => create when "Tạo", create when "Vào" too (forgiving UX).
-  const effectiveAction = code ? "join" : action;
+  let code = "";
+  if (action === "join") {
+    code = (roomCodeInput?.value ?? "").trim().toUpperCase();
+    if (!code) {
+      showMessage("Vui lòng nhập mã phòng rồi bấm «Vào phòng» lần nữa.");
+      roomCodeInput?.focus();
+      shakeForm();
+      return;
+    }
+  }
 
   audioManager.unlock();
   audioManager.playSfx("buttonClick");
   setBusy(true);
   hideMessage();
-  showLoading(effectiveAction === "create" ? "Đang tạo phòng..." : "Đang vào phòng...");
+
+  const pendingToast = toast.info(
+    action === "create" ? "Đang tạo phòng..." : "Đang vào phòng...",
+    { title: action === "create" ? "Tạo phòng" : "Vào phòng", duration: 0 },
+  );
 
   try {
-    const res = effectiveAction === "create"
+    const res = action === "create"
       ? await fetchWithTimeout("/api/rooms", {
           method: "POST",
           body: JSON.stringify({ hostName: name }),
@@ -185,13 +150,13 @@ async function goToFlow(action) {
         const body = await res.json();
         msg = body.title || body.message || body.error || msg;
       } catch (_) { /* ignore */ }
-      throw new Error(humanizeApiError(res.status, msg, effectiveAction));
+      throw new Error(humanizeApiError(res.status, msg, action));
     }
 
     const body = await res.json();
-    const room = body.room ?? body; // tolerate wrapped/unwrapped response shape
+    const room = body.room ?? body;
 
-    const member = pickMember(room, effectiveAction === "create", name);
+    const member = pickMember(room, action === "create", name);
     if (!member) {
       throw new Error("Không tìm thấy thành viên trong phòng sau khi tạo/join.");
     }
@@ -201,78 +166,81 @@ async function goToFlow(action) {
       roomCode: room.code,
       playerId: member.id,
       playerName: member.name,
-      isHost: effectiveAction === "create",
+      isHost: action === "create",
       stage: "lobby",
     });
 
-    audioManager.playSfx(effectiveAction === "create" ? "roomCodeReveal" : "playerJoin");
-    showLoading("Đang vào phòng chờ...");
-    toast.success(`Đã ${effectiveAction === "create" ? "tạo" : "vào"} phòng ${room.code}`, {
-      title: "Thành công",
-      duration: 2500,
-    });
-    console.log("[arcana] landing: room ready", { id: room.id, code: room.code, action: effectiveAction });
+    audioManager.playSfx(action === "create" ? "roomCodeReveal" : "playerJoin");
+
+    if (pendingToast?.dismiss) pendingToast.dismiss();
+    toast.success(
+      `Đã ${action === "create" ? "tạo" : "vào"} phòng ${room.code}`,
+      { title: "Thành công", duration: 2000 },
+    );
+
+    console.log("[arcana] landing: room ready", { id: room.id, code: room.code, action });
     window.location.href = ROUTES.lobby;
   } catch (err) {
     console.error("[arcana] landing: room flow failed", err);
+    if (pendingToast?.dismiss) pendingToast.dismiss();
     toast.error(err.message || "Có lỗi xảy ra, vui lòng thử lại.", {
-      title: effectiveAction === "create" ? "Tạo phòng thất bại" : "Vào phòng thất bại",
+      title: action === "create" ? "Tạo phòng thất bại" : "Vào phòng thất bại",
     });
     audioManager.playSfx("error");
     shakeForm();
   } finally {
     setBusy(false);
-    hideLoading();
   }
 }
 
-function humanizeApiError(status, msg, action) {
-  if (status === 400) {
-    if (action === "join") return "Mã phòng không hợp lệ. Hãy kiểm tra lại.";
-    return "Tên không hợp lệ. Vui lòng thử tên khác.";
-  }
-  if (status === 404) return "Phòng không tồn tại hoặc đã đóng.";
-  if (status === 409) return "Phòng đã đầy hoặc trò chơi đã bắt đầu.";
-  if (status === 403) return "Bạn không có quyền vào phòng này.";
-  if (status >= 500) return "Máy chủ đang gặp sự cố. Vui lòng thử lại sau ít phút.";
-  return msg;
-}
+// --- "Tạo phòng": one click, done. ---
+createButton?.addEventListener("click", () => runAction("create"));
 
-// --- Step 1: reveal room code + buttons ---
-enterButton?.addEventListener("click", () => {
-  const name = nameInput.value.trim();
-  if (!name) {
-    showMessage("Vui lòng nhập tên trước.");
-    nameInput.focus();
-    shakeForm();
+// --- "Vào phòng": two-stage button.
+//     stage="enter-code"  → reveal the input, focus it.
+//     stage="submit"      → runAction("join"). ---
+joinButton?.addEventListener("click", () => {
+  if (joinButton.dataset.stage === "enter-code") {
+    const name = getName();
+    if (!name) {
+      showMessage("Vui lòng nhập tên trước.");
+      nameInput?.focus();
+      shakeForm();
+      return;
+    }
+    audioManager.unlock();
+    audioManager.playSfx("buttonClick");
+    hideMessage();
+    roomActions.hidden = false;
+    joinButton.dataset.stage = "submit";
+    joinButton.querySelector("span").textContent = "↳";
+    roomCodeInput?.focus();
     return;
   }
-  audioManager.unlock();
-  audioManager.playSfx("buttonClick");
-  hideMessage();
-  roomActions.hidden = false;
-  enterButton.hidden = true;
-  roomCodeInput.focus();
+  runAction("join");
 });
 
-// --- Step 2: create / join ---
-createButton?.addEventListener("click", () => goToFlow("create"));
-joinButton?.addEventListener("click", () => goToFlow("join"));
-
+// If user changes the code, re-arm the button to require a fresh second click.
 roomCodeInput?.addEventListener("input", () => {
   roomCodeInput.value = roomCodeInput.value.toUpperCase();
   hideMessage();
+  if (joinButton?.dataset.stage === "submit") {
+    joinButton.dataset.stage = "enter-code";
+    joinButton.querySelector("span").textContent = "→";
+  }
 });
+
 nameInput?.addEventListener("input", () => {
   nameInput.setCustomValidity("");
   hideMessage();
 });
 
-// Enter in name field → advance to step 2.
+// Enter in name field → trigger Tạo phòng (fastest path).
 nameInput?.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") { e.preventDefault(); enterButton.click(); }
+  if (e.key === "Enter") { e.preventDefault(); createButton.click(); }
 });
-// Enter in code field → trigger join (or create if empty).
+
+// Enter in code field → trigger join.
 roomCodeInput?.addEventListener("keydown", (e) => {
   if (e.key === "Enter") { e.preventDefault(); joinButton.click(); }
 });
