@@ -2,6 +2,15 @@ using Arcana.Api.Middleware;
 using Arcana.Infrastructure;
 using Microsoft.OpenApi.Models;
 
+// Disable FileSystemWatcher + config hot-reload. Render free-tier containers
+// cap inotify instances at 128; each appsettings*.json provider opens its own
+// watcher by default and crashes the host with:
+//   System.IO.IOException: The configured user limit (128) on the number of
+//   inotify instances has been reached ...
+// Config is immutable in production (env vars + redeploy), so turn it off.
+Environment.SetEnvironmentVariable("DOTNET_hostBuilder__reloadConfigOnChange", "false");
+Environment.SetEnvironmentVariable("DOTNET_fileWatcher__enabled", "false");
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();

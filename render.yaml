@@ -12,6 +12,20 @@ services:
         value: Production
       - key: ASPNETCORE_URLS
         value: http://0.0.0.0:10000
+      # Render free-tier containers run with a low inotify-instance cap
+      # (128). Each appsettings*.json provider opens its own FileSystemWatcher
+      # by default — when the host has multiple processes or noisy disk I/O,
+      # the watcher exhausts the cap and the app crashes with:
+      #   System.IO.IOException: The configured user limit (128) on the
+      #   number of inotify instances has been reached, ...
+      # Production doesn't need config hot-reload (env vars + redeploy),
+      # so disable both file watching and reload-on-change.
+      - key: DOTNET_hostBuilder__reloadConfigOnChange
+        value: "false"
+      - key: DOTNET_fileWatcher__enabled
+        value: "false"
+      - key: DOTNET_EnableDiagnostics
+        value: "0"
       - key: Firebase__ProjectId
         sync: false
       - key: Firebase__CredentialsBase64
