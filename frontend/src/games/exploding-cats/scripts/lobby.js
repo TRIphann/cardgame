@@ -59,6 +59,8 @@ if (!session || !session.roomId || !session.playerId) {
 
 // ---- DOM refs ----
 const inviteCodeEl = document.querySelector("#invite-code");
+const codeVisibilityBtn = document.querySelector("#code-visibility");
+const codeHiddenDots = "••••••";
 const copyButton = document.querySelector("#copy-button");
 const seatsLeftEl = document.querySelector("#seats-left");
 const seatsRightEl = document.querySelector("#seats-right");
@@ -68,7 +70,6 @@ const settingsButton = document.querySelector("#settings-button");
 const settingsMount = document.querySelector("#settings-mount");
 
 const deckCardEl = document.querySelector("#deck-card-front");
-const deckGlyphEl = document.querySelector("#deck-glyph");
 const deckExplosionEl = document.querySelector("#deck-explosion");
 const deckLabelEl = document.querySelector("#deck-label");
 const deckSubtitleEl = document.querySelector("#deck-subtitle");
@@ -78,6 +79,7 @@ const nextBtn = document.querySelector("#game-next");
 let cachedRoom = null;
 let currentGameIndex = 0;
 let isFlipping = false;
+let codeVisible = true;
 
 // ---- Settings modal: Settings tab + Members tab ----
 const settings = new SettingsModal(settingsMount, [
@@ -96,10 +98,20 @@ function renderGame(index) {
   if (!game) return;
   deckLabelEl.textContent = game.label;
   deckSubtitleEl.textContent = game.subtitle;
-  deckGlyphEl.textContent = game.glyph;
-  deckExplosionEl.textContent = game.explosion;
-  deckExplosionEl.style.display = game.explosion ? "inline" : "none";
+  // Toggle explosion layer based on whether this game has one.
+  deckExplosionEl.classList.toggle("has-explosion", Boolean(game.explosion));
+  deckExplosionEl.classList.toggle("is-idle", Boolean(game.explosion));
+  // Cat SVG is always present; only its color accent changes per game.
   document.documentElement.style.setProperty("--c-accent", game.accent);
+  document.documentElement.style.setProperty("--c-accent-glow", hexToGlow(game.accent));
+}
+
+function hexToGlow(hex) {
+  // Convert "#ff5d8f" → "rgba(255, 93, 143, 0.55)" for the glow shadow.
+  const m = hex.replace("#", "").match(/.{2}/g);
+  if (!m) return "rgba(159, 113, 241, 0.55)";
+  const [r, g, b] = m.map((h) => parseInt(h, 16));
+  return `rgba(${r}, ${g}, ${b}, 0.55)`;
 }
 
 function flipToGame(newIndex) {
@@ -145,17 +157,84 @@ document.addEventListener("pointerdown", armMusic, { once: true });
 document.addEventListener("keydown", armMusic, { once: true });
 
 // ---- Buttons ----
+// Eye toggle — show/hide the room code (default: visible).
+codeVisibilityBtn?.addEventListener("click", () => {
+  codeVisible = !codeVisible;
+  codeVisibilityBtn.setAttribute("aria-pressed", String(codeVisible));
+  const eyeIcon = codeVisibilityBtn.querySelector(".eye-icon");
+  eyeIcon?.setAttribute("data-state", codeVisible ? "visible" : "hidden");
+  // Cache last real code so we can restore on toggle.
+  if (!codeVisibilityBtn.dataset.realCode) {
+    codeVisibilityBtn.dataset.realCode = inviteCodeEl.textContent;
+  }
+  const realCode = codeVisibilityBtn.dataset.realCode || "------";
+  if (codeVisible) {
+    inviteCodeEl.textContent = realCode;
+    inviteCodeEl.classList.remove("is-hidden");
+  } else {
+    inviteCodeEl.textContent = codeHiddenDots;
+    inviteCodeEl.classList.add("is-hidden");
+  }
+  audioManager.unlock();
+  audioManager.playSfx("buttonClick");
+});
+
+// Robust copy: try modern Clipboard API, fall back to execCommand for
+// non-secure contexts. Animation runs on success either way.
+async function copyToClipboard(text) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (_) { /* fall through */ }
+  // Fallback: stash text in a hidden <textarea>, select, copy.
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.setAttribute("readonly", "");
+  ta.style.position = "fixed";
+  ta.style.opacity = "0";
+  ta.style.pointerEvents = "none";
+  document.body.appendChild(ta);
+  ta.select();
+  let ok = false;
+  try { ok = document.execCommand("copy"); } catch (_) { ok = false; }
+  document.body.removeChild(ta);
+  return ok;
+}
+
 copyButton.addEventListener("click", async () => {
   if (!cachedRoom) return;
+  const realCode = codeVisibilityBtn?.dataset.realCode || inviteCodeEl.textContent;
+  const ok = await copyToClipboard(realCode);
   audioManager.unlock();
-  try {
-    await navigator.clipboard.writeText(cachedRoom.code);
-    copyButton.textContent = "Đã sao chép ✓";
+  if (ok) {
+    copyButton.classList.add("is-copied");
+    const labelEl = copyButton.querySelector(".copy-button__label");
+    if (labelEl) labelEl.textContent = "Đã sao chép";
     audioManager.playSfx("roomCodeReveal");
-    setTimeout(() => (copyButton.textContent = "Sao chép"), 1600);
-  } catch {
-    copyButton.textContent = "Không thể sao chép";
+    setTimeout(() => {
+      copyButton.classList.remove("is-copied");
+      if (labelEl) labelEl.textContent = "Sao chép";
+    }, 1600);
+  } else {
+    copyButton.classList.add("is-error");
+    audioManager.playSfx("error");
+    setTimeout(() => copyButton.classList.remove("is-error"), 1600);
   }
+});
+
+// Click the deck → trigger an explosion animation (cat "booms").
+deckCardEl?.addEventListener("click", () => {
+  if (!deckExplosionEl.classList.contains("has-explosion")) return;
+  deckExplosionEl.classList.remove("is-bursting");
+  // Force reflow so the animation re-runs.
+  void deckExplosionEl.offsetWidth;
+  deckExplosionEl.classList.add("is-bursting");
+  deckCardEl.classList.add("is-shaking");
+  audioManager.unlock();
+  audioManager.playSfx("roomCodeReveal");
+  setTimeout(() => deckCardEl.classList.remove("is-shaking"), 600);
 });
 
 startButton.addEventListener("click", () => {
@@ -317,9 +396,13 @@ async function refreshRoom() {
     const room = await getRoom(session.roomId);
     cachedRoom = room;
 
-    if (inviteCodeEl.textContent !== room.code) {
+    if (inviteCodeEl.textContent !== room.code && (codeVisible || inviteCodeEl.textContent === "------")) {
       inviteCodeEl.textContent = room.code;
+      inviteCodeEl.classList.remove("is-hidden");
+      if (codeVisibilityBtn) codeVisibilityBtn.dataset.realCode = room.code;
       audioManager.unlock();
+    } else if (codeVisibilityBtn) {
+      codeVisibilityBtn.dataset.realCode = room.code;
     }
 
     renderSeats(room.members || [], session.playerId);
