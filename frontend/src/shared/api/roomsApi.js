@@ -1,7 +1,7 @@
 // Shared HTTP client + room endpoints.
 // Centralized here so any game can call into the backend without rewriting fetches.
 
-import { API_BASE_URL } from "../config/env.js";
+import { API_BASE_URL } from "../../config/env.js";
 
 const COLD_START_TIMEOUT_MS = 50000;
 const WARM_TIMEOUT_MS = 15000;
