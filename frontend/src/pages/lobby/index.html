@@ -18,7 +18,7 @@
     <div class="ambient ambient-two"></div>
     <div class="stars" aria-hidden="true"></div>
 
-    <!-- Floating tarot cards echoing the landing page -->
+    <!-- Floating tarot cards -->
     <div class="cards-scene" aria-hidden="true">
       <article class="floating-card card-sun"><span class="card-glyph">☼</span><span class="card-title">SOL</span></article>
       <article class="floating-card card-moon"><span class="card-glyph">☾</span><span class="card-title">LUNA</span></article>
@@ -59,76 +59,86 @@
       </div>
     </header>
 
-    <!-- Middle: 4 seats left, big deck carousel center, 4 seats right -->
+    <!-- Middle: seats + deck area + seats -->
     <section class="lobby-arena">
       <div class="seats seats-left" id="seats-left"></div>
 
+      <!-- NEW DECK ANIMATION AREA -->
       <div class="deck-area">
         <button class="deck-arrow deck-arrow-prev" id="game-prev" type="button" aria-label="Game trước">‹</button>
 
         <div class="deck-stage" id="deck-stage">
-          <div class="deck-card deck-card-back deck-card-1"></div>
-          <div class="deck-card deck-card-back deck-card-2"></div>
-          <div class="deck-card deck-card-back deck-card-3"></div>
-          <div class="deck-card deck-card-back deck-card-4"></div>
-          <button class="deck-card deck-card-front" id="deck-card-front" type="button" aria-label="Bấm để mèo nổ">
-            <div class="deck-card-aura" aria-hidden="true"></div>
-            <svg class="deck-cat-svg" viewBox="0 0 200 200" aria-hidden="true">
-              <!-- Cat body -->
-              <ellipse cx="100" cy="135" rx="55" ry="40" fill="url(#catBody)" class="cat-body"/>
-              <!-- Head -->
-              <circle cx="100" cy="92" r="48" fill="url(#catBody)" class="cat-head"/>
-              <!-- Ears -->
-              <polygon points="62,62 80,38 92,72" fill="url(#catBody)" class="cat-ear cat-ear-left"/>
-              <polygon points="138,62 120,38 108,72" fill="url(#catBody)" class="cat-ear cat-ear-right"/>
-              <!-- Inner ears -->
-              <polygon points="68,60 80,46 88,68" fill="#ff9eb5" class="cat-ear-inner"/>
-              <polygon points="132,60 120,46 112,68" fill="#ff9eb5" class="cat-ear-inner"/>
-              <!-- Eyes -->
-              <g class="cat-eyes">
-                <ellipse cx="82" cy="92" rx="6" ry="9" fill="#1a0a26" class="cat-eye"/>
-                <ellipse cx="118" cy="92" rx="6" ry="9" fill="#1a0a26" class="cat-eye"/>
-                <circle cx="84" cy="89" r="2" fill="#fff" class="cat-shine"/>
-                <circle cx="120" cy="89" r="2" fill="#fff" class="cat-shine"/>
-              </g>
-              <!-- Cheeks -->
-              <circle cx="68" cy="108" r="8" fill="#ff9eb5" opacity="0.55" class="cat-cheek"/>
-              <circle cx="132" cy="108" r="8" fill="#ff9eb5" opacity="0.55" class="cat-cheek"/>
-              <!-- Nose + mouth -->
-              <polygon points="100,102 95,107 105,107" fill="#ff5d8f" class="cat-nose"/>
-              <path d="M100 107 Q94 114 88 112" fill="none" stroke="#1a0a26" stroke-width="1.5" stroke-linecap="round" class="cat-mouth"/>
-              <path d="M100 107 Q106 114 112 112" fill="none" stroke="#1a0a26" stroke-width="1.5" stroke-linecap="round" class="cat-mouth"/>
-              <!-- Whiskers -->
-              <g class="cat-whiskers" stroke="#fff" stroke-width="1.2" stroke-linecap="round" opacity="0.7">
-                <line x1="56" y1="108" x2="76" y2="110"/>
-                <line x1="56" y1="114" x2="76" y2="114"/>
-                <line x1="124" y1="110" x2="144" y2="108"/>
-                <line x1="124" y1="114" x2="144" y2="114"/>
-              </g>
-              <!-- Paws -->
-              <ellipse cx="74" cy="174" rx="14" ry="8" fill="url(#catBody)" class="cat-paw"/>
-              <ellipse cx="126" cy="174" rx="14" ry="8" fill="url(#catBody)" class="cat-paw"/>
-              <defs>
-                <radialGradient id="catBody" cx="50%" cy="30%" r="80%">
-                  <stop offset="0%" stop-color="#fff5fa"/>
-                  <stop offset="100%" stop-color="#c9a8ff"/>
-                </radialGradient>
-              </defs>
-            </svg>
-            <span class="deck-card-explosion" id="deck-explosion" aria-hidden="true">
-              <span class="blast-ring"></span>
-              <span class="blast-ring blast-ring-2"></span>
-              <span class="blast-glyph">💥</span>
-              <span class="blast-spark blast-spark-1"></span>
-              <span class="blast-spark blast-spark-2"></span>
-              <span class="blast-spark blast-spark-3"></span>
-              <span class="blast-spark blast-spark-4"></span>
-              <span class="blast-spark blast-spark-5"></span>
-              <span class="blast-spark blast-spark-6"></span>
-              <span class="blast-spark blast-spark-7"></span>
-              <span class="blast-spark blast-spark-8"></span>
-            </span>
-          </button>
+          <!-- The deck pile (visible at rest) -->
+          <div class="deck-pile idle" id="deck-pile">
+            <!-- Layered cards for deck effect -->
+            <div class="pile-card" style="transform: translate(-8px, -6px) rotate(-4deg); opacity: 0.6;"></div>
+            <div class="pile-card" style="transform: translate(-4px, -3px) rotate(-2deg); opacity: 0.8;"></div>
+            <div class="pile-card" style="transform: translate(0, 0) rotate(0deg); opacity: 1;"></div>
+          </div>
+
+          <!-- Flying cards container (hidden initially) -->
+          <div class="flying-cards-container" id="flying-cards" style="display: none;">
+            <!-- Card 1 -->
+            <div class="flying-card" data-index="0">
+              <div class="card-face card-back-face">
+                <div class="card-back">
+                  <div class="card-back-pattern" id="pattern-0"></div>
+                  <div class="card-back-text">
+                    <div class="line1">cái gì đây</div>
+                    <div class="line2">???</div>
+                  </div>
+                </div>
+              </div>
+              <div class="card-face card-front-face">
+                <img src="" alt="Card" class="card-img" />
+              </div>
+            </div>
+            <!-- Card 2 -->
+            <div class="flying-card" data-index="1">
+              <div class="card-face card-back-face">
+                <div class="card-back">
+                  <div class="card-back-pattern" id="pattern-1"></div>
+                  <div class="card-back-text">
+                    <div class="line1">cái gì đây</div>
+                    <div class="line2">???</div>
+                  </div>
+                </div>
+              </div>
+              <div class="card-face card-front-face">
+                <img src="" alt="Card" class="card-img" />
+              </div>
+            </div>
+            <!-- Card 3 -->
+            <div class="flying-card" data-index="2">
+              <div class="card-face card-back-face">
+                <div class="card-back">
+                  <div class="card-back-pattern" id="pattern-2"></div>
+                  <div class="card-back-text">
+                    <div class="line1">cái gì đây</div>
+                    <div class="line2">???</div>
+                  </div>
+                </div>
+              </div>
+              <div class="card-face card-front-face">
+                <img src="" alt="Card" class="card-img" />
+              </div>
+            </div>
+            <!-- Card 4 -->
+            <div class="flying-card" data-index="3">
+              <div class="card-face card-back-face">
+                <div class="card-back">
+                  <div class="card-back-pattern" id="pattern-3"></div>
+                  <div class="card-back-text">
+                    <div class="line1">cái gì đây</div>
+                    <div class="line2">???</div>
+                  </div>
+                </div>
+              </div>
+              <div class="card-face card-front-face">
+                <img src="" alt="Card" class="card-img" />
+              </div>
+            </div>
+          </div>
         </div>
 
         <button class="deck-arrow deck-arrow-next" id="game-next" type="button" aria-label="Game tiếp theo">›</button>

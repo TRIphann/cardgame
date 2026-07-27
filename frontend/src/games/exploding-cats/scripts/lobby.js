@@ -2,16 +2,16 @@
 //   - Validates session, redirects if missing
 //   - Polls room data every 2.5s
 //   - Renders up to 8 seats split 4/4
-//   - Carousel of available games in the center (with < > arrows + flip animation)
-//   - Settings modal: Settings tab (audio) + Members tab (host can kick members)
+//   - Deck animation: idle wiggle → 4 cards fly out → flip reveal → return
+//   - Settings modal: Members tab (host can kick members)
 //   - Drives copy / leave / start interactions
-//   - Wires audio manager
 
 import { loadSession, saveSession, clearSession, ROUTES } from "../../config/env.js";
 import { getRoom, roomsApi, prewarmBackend } from "../../shared/api/roomsApi.js";
 import { audioManager } from "../../shared/audio/AudioManager.js";
 import { toast } from "../../shared/ui/toast.js";
 import { SettingsModal } from "../../shared/components/SettingsModal.js";
+import { CARD_CLOUDINARY } from "../../games/exploding-cats/cardCloudinary.js";
 
 // ---- Game catalog ----
 const GAMES = [
@@ -19,32 +19,24 @@ const GAMES = [
     id: "exploding-cats",
     label: "EXPLODING CATS",
     subtitle: "Đặt bài, rút bài, đừng để con mèo nổ!",
-    glyph: "🐱",
-    explosion: "💥",
     accent: "#ff5d8f",
   },
   {
     id: "love-letter",
     label: "LOVE LETTER",
     subtitle: "Một lá thư tình, một mưu kế — ai còn sống đến cuối?",
-    glyph: "💌",
-    explosion: "",
     accent: "#ff7aa1",
   },
   {
     id: "coup",
     label: "COUP",
     subtitle: "Nói dối, phản bội, giành quyền lực tối thượng.",
-    glyph: "👑",
-    explosion: "",
     accent: "#ffd47a",
   },
   {
     id: "uno",
     label: "UNO",
     subtitle: "Hét UNO trước khi đối thủ kịp phản đòn!",
-    glyph: "🃏",
-    explosion: "",
     accent: "#6f7bff",
   },
 ];
@@ -52,13 +44,27 @@ const GAMES = [
 const MAX_SLOTS = 8;
 const POLL_INTERVAL_MS = 2500;
 
+// Animation timing (ms)
+const ANIM = {
+  WIGGLE_1_DELAY: 5000,      // First gentle wiggle after 5s
+  WIGGLE_2_DELAY: 4000,      // Second stronger wiggle after 4s more
+  WIGGLE_3_DELAY: 2000,      // Third intense wiggle after 2s more
+  FLY_OUT_DURATION: 600,
+  ORBIT_DURATION: 4000,      // Total orbit time
+  FLIP_DURATION: 600,
+  FLY_BACK_DURATION: 500,
+  BETWEEN_FLIPS: 800,        // Time between each card flip
+};
+
+// Get all card URLs for random selection
+const CARD_URLS = Object.values(CARD_CLOUDINARY.cards);
+
 // ---- Session guard ----
 const session = loadSession();
 if (!session || !session.roomId || !session.playerId) {
   window.location.replace(ROUTES.landing);
 }
 
-// Best-effort: keep the backend warm so the first poll doesn't pay cold-start cost.
 prewarmBackend();
 
 // ---- DOM refs ----
@@ -73,8 +79,9 @@ const startButton = document.querySelector("#start-button");
 const settingsButton = document.querySelector("#settings-button");
 const settingsMount = document.querySelector("#settings-mount");
 
-const deckCardEl = document.querySelector("#deck-card-front");
-const deckExplosionEl = document.querySelector("#deck-explosion");
+const deckPile = document.querySelector("#deck-pile");
+const flyingCardsContainer = document.querySelector("#flying-cards");
+const flyingCards = document.querySelectorAll(".flying-card");
 const deckLabelEl = document.querySelector("#deck-label");
 const deckSubtitleEl = document.querySelector("#deck-subtitle");
 const prevBtn = document.querySelector("#game-prev");
@@ -82,15 +89,19 @@ const nextBtn = document.querySelector("#game-next");
 
 let cachedRoom = null;
 let currentGameIndex = 0;
-let isFlipping = false;
 let codeVisible = true;
 
-// ---- Settings modal: Settings tab + Members tab ----
+// Animation state
+let animationPhase = 0; // 0: idle, 1: wiggle1, 2: wiggle2, 3: wiggle3, 4: flying
+let animationTimer = null;
+let isAnimating = false;
+
+// ---- Settings modal ----
 const settings = new SettingsModal(settingsMount, [
   {
     id: "members",
     label: "Thành viên",
-    render: (mount) => renderMembersTab(mount, null),
+    render: () => renderMembersTab(),
     onAction: handleMemberAction,
   },
 ]);
@@ -102,43 +113,29 @@ function renderGame(index) {
   if (!game) return;
   deckLabelEl.textContent = game.label;
   deckSubtitleEl.textContent = game.subtitle;
-  // Toggle explosion layer based on whether this game has one.
-  deckExplosionEl.classList.toggle("has-explosion", Boolean(game.explosion));
-  deckExplosionEl.classList.toggle("is-idle", Boolean(game.explosion));
-  // Cat SVG is always present; only its color accent changes per game.
   document.documentElement.style.setProperty("--c-accent", game.accent);
   document.documentElement.style.setProperty("--c-accent-glow", hexToGlow(game.accent));
 }
 
 function hexToGlow(hex) {
-  // Convert "#ff5d8f" → "rgba(255, 93, 143, 0.55)" for the glow shadow.
   const m = hex.replace("#", "").match(/.{2}/g);
   if (!m) return "rgba(159, 113, 241, 0.55)";
   const [r, g, b] = m.map((h) => parseInt(h, 16));
   return `rgba(${r}, ${g}, ${b}, 0.55)`;
 }
 
-function flipToGame(newIndex) {
-  if (isFlipping || newIndex === currentGameIndex) return;
-  isFlipping = true;
-  deckCardEl.classList.add("is-flipping");
-  audioManager.playSfx("buttonClick");
-
-  setTimeout(() => {
-    currentGameIndex = newIndex;
-    renderGame(currentGameIndex);
-    deckCardEl.classList.remove("is-flipping");
-    isFlipping = false;
-  }, 250);
-}
-
 prevBtn.addEventListener("click", () => {
   const next = (currentGameIndex - 1 + GAMES.length) % GAMES.length;
-  flipToGame(next);
+  currentGameIndex = next;
+  renderGame(currentGameIndex);
+  audioManager.playSfx("buttonClick");
 });
+
 nextBtn.addEventListener("click", () => {
   const next = (currentGameIndex + 1) % GAMES.length;
-  flipToGame(next);
+  currentGameIndex = next;
+  renderGame(currentGameIndex);
+  audioManager.playSfx("buttonClick");
 });
 
 document.addEventListener("keydown", (e) => {
@@ -147,8 +144,166 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") settings.close();
 });
 
-// initial render
 renderGame(currentGameIndex);
+
+// ---- Card Back Pattern Generation ----
+function generatePattern(containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  
+  container.innerHTML = "";
+  const sizes = [10, 12, 14, 16, 18, 20];
+  
+  for (let i = 0; i < 15; i++) {
+    const span = document.createElement("span");
+    span.className = "qmark";
+    span.textContent = "?";
+    span.style.fontSize = sizes[Math.floor(Math.random() * sizes.length)] + "px";
+    span.style.opacity = 0.1 + Math.random() * 0.2;
+    container.appendChild(span);
+  }
+}
+
+// Generate patterns for all card backs
+for (let i = 0; i < 4; i++) {
+  generatePattern(`pattern-${i}`);
+}
+
+// ---- Deck Animation System ----
+function startIdleAnimation() {
+  stopAnimation();
+  animationPhase = 0;
+  
+  // Phase 1: Gentle wiggle after 5s
+  animationTimer = setTimeout(() => {
+    if (animationPhase === 0) {
+      triggerWiggle(1);
+    }
+  }, ANIM.WIGGLE_1_DELAY);
+}
+
+function triggerWiggle(level) {
+  animationPhase = level;
+  
+  // Remove all wiggle classes
+  deckPile.classList.remove("idle", "wiggle-1", "wiggle-2", "wiggle-3");
+  
+  // Force reflow
+  void deckPile.offsetWidth;
+  
+  // Add appropriate wiggle class
+  deckPile.classList.add(`wiggle-${level}`);
+  
+  const wiggleDuration = level === 3 ? 1000 : 800;
+  
+  animationTimer = setTimeout(() => {
+    deckPile.classList.remove(`wiggle-${level}`);
+    
+    if (level === 1) {
+      // Phase 2: Stronger wiggle after 4s
+      animationTimer = setTimeout(() => {
+        if (animationPhase === 1) triggerWiggle(2);
+      }, ANIM.WIGGLE_2_DELAY);
+    } else if (level === 2) {
+      // Phase 3: Intense wiggle then start flying animation
+      animationTimer = setTimeout(() => {
+        if (animationPhase === 2) {
+          triggerWiggle(3);
+        }
+      }, ANIM.WIGGLE_3_DELAY);
+    } else if (level === 3) {
+      // Start the flying cards animation
+      startFlyingAnimation();
+    }
+  }, wiggleDuration);
+}
+
+function startFlyingAnimation() {
+  if (isAnimating) return;
+  isAnimating = true;
+  animationPhase = 4;
+  
+  // Hide deck pile, show flying cards
+  deckPile.style.display = "none";
+  flyingCardsContainer.style.display = "block";
+  
+  // Pick random cards for each flying card
+  const cardImgs = flyingCardsContainer.querySelectorAll(".card-img");
+  cardImgs.forEach((img) => {
+    const randomUrl = CARD_URLS[Math.floor(Math.random() * CARD_URLS.length)];
+    img.src = randomUrl;
+  });
+  
+  // Step 1: Fly out
+  flyingCards.forEach((card) => {
+    card.classList.remove("fly-out", "orbit", "flip", "fly-back", "revealed");
+    void card.offsetWidth;
+    card.classList.add("fly-out");
+  });
+  
+  // Step 2: After fly out, start orbiting
+  setTimeout(() => {
+    flyingCards.forEach((card) => {
+      card.classList.remove("fly-out");
+      card.classList.add("orbit");
+    });
+    
+    // Step 3: Flip cards one by one while orbiting
+    let flipIndex = 0;
+    const flipInterval = setInterval(() => {
+      if (flipIndex < 4) {
+        const card = flyingCards[flipIndex];
+        card.classList.remove("orbit");
+        card.classList.add("flip");
+        
+        // After flip, check if it's the card facing front (we'll pick one)
+        if (flipIndex === 0) { // First card to flip becomes the "revealed" one
+          setTimeout(() => {
+            card.classList.add("revealed");
+          }, ANIM.FLIP_DURATION);
+        }
+        
+        flipIndex++;
+      } else {
+        clearInterval(flipInterval);
+        
+        // Step 4: Show all cards revealed for a moment
+        setTimeout(() => {
+          // Step 5: Fly back to deck
+          flyingCards.forEach((card) => {
+            card.classList.remove("flip", "revealed");
+            void card.offsetWidth;
+            card.classList.add("fly-back");
+          });
+          
+          // Step 6: Reset
+          setTimeout(() => {
+            flyingCardsContainer.style.display = "none";
+            flyingCards.forEach((card) => {
+              card.classList.remove("fly-back");
+            });
+            deckPile.style.display = "";
+            deckPile.classList.add("idle");
+            isAnimating = false;
+            
+            // Restart the cycle
+            startIdleAnimation();
+          }, ANIM.FLY_BACK_DURATION);
+        }, 2000); // Show revealed cards for 2s
+      }
+    }, ANIM.BETWEEN_FLIPS);
+  }, ANIM.FLY_OUT_DURATION + 300);
+}
+
+function stopAnimation() {
+  if (animationTimer) {
+    clearTimeout(animationTimer);
+    animationTimer = null;
+  }
+}
+
+// Start the animation on load
+startIdleAnimation();
 
 // ---- Audio unlock ----
 const armMusic = () => {
@@ -161,17 +316,17 @@ document.addEventListener("pointerdown", armMusic, { once: true });
 document.addEventListener("keydown", armMusic, { once: true });
 
 // ---- Buttons ----
-// Eye toggle — show/hide the room code (default: visible).
 codeVisibilityBtn?.addEventListener("click", () => {
   codeVisible = !codeVisible;
   codeVisibilityBtn.setAttribute("aria-pressed", String(codeVisible));
   const eyeIcon = codeVisibilityBtn.querySelector(".eye-icon");
   eyeIcon?.setAttribute("data-state", codeVisible ? "visible" : "hidden");
-  // Cache last real code so we can restore on toggle.
+  
   if (!codeVisibilityBtn.dataset.realCode) {
     codeVisibilityBtn.dataset.realCode = inviteCodeEl.textContent;
   }
   const realCode = codeVisibilityBtn.dataset.realCode || "------";
+  
   if (codeVisible) {
     inviteCodeEl.textContent = realCode;
     inviteCodeEl.classList.remove("is-hidden");
@@ -183,8 +338,6 @@ codeVisibilityBtn?.addEventListener("click", () => {
   audioManager.playSfx("buttonClick");
 });
 
-// Robust copy: try modern Clipboard API, fall back to execCommand for
-// non-secure contexts. Animation runs on success either way.
 async function copyToClipboard(text) {
   try {
     if (navigator.clipboard && window.isSecureContext) {
@@ -192,7 +345,7 @@ async function copyToClipboard(text) {
       return true;
     }
   } catch (_) { /* fall through */ }
-  // Fallback: stash text in a hidden <textarea>, select, copy.
+  
   const ta = document.createElement("textarea");
   ta.value = text;
   ta.setAttribute("readonly", "");
@@ -225,24 +378,9 @@ copyButton.addEventListener("click", async () => {
   } else {
     copyButton.classList.add("is-error");
     audioManager.playSfx("error");
-    toast.error("Không thể sao chép tự động. Hãy chọn và copy thủ công.", {
-      title: "Sao chép thất bại",
-    });
+    toast.error("Không thể sao chép tự động.", { title: "Sao chép thất bại" });
     setTimeout(() => copyButton.classList.remove("is-error"), 1600);
   }
-});
-
-// Click the deck → trigger an explosion animation (cat "booms").
-deckCardEl?.addEventListener("click", () => {
-  if (!deckExplosionEl.classList.contains("has-explosion")) return;
-  deckExplosionEl.classList.remove("is-bursting");
-  // Force reflow so the animation re-runs.
-  void deckExplosionEl.offsetWidth;
-  deckExplosionEl.classList.add("is-bursting");
-  deckCardEl.classList.add("is-shaking");
-  audioManager.unlock();
-  audioManager.playSfx("roomCodeReveal");
-  setTimeout(() => deckCardEl.classList.remove("is-shaking"), 600);
 });
 
 startButton.addEventListener("click", () => {
@@ -306,15 +444,11 @@ function escapeHtml(value) {
 }
 
 // ---- Members tab ----
-function renderMembersTab(mount) {
-  return renderMembersInto(mount);
-}
-
-function renderMembersInto(mount) {
+function renderMembersTab() {
   if (!cachedRoom) {
-    mount.innerHTML = `<p class="settings-hint">Đang tải danh sách thành viên…</p>`;
-    return;
+    return `<p class="settings-hint">Đang tải danh sách thành viên…</p>`;
   }
+  
   const me = cachedRoom.members?.find((m) => m.id === session.playerId);
   const isHost = me?.isHost === true;
   const members = [...(cachedRoom.members || [])].sort((a, b) => new Date(a.joinedAt) - new Date(b.joinedAt));
@@ -339,7 +473,7 @@ function renderMembersInto(mount) {
     `;
   }).join("");
 
-  mount.innerHTML = `
+  return `
     <div class="settings-group">
       <label class="settings-label">${members.length}/${cachedRoom.maxPlayers} người — mã phòng ${escapeHtml(cachedRoom.code)}</label>
       <div class="members-list">${rows || `<p class="settings-hint">Chưa có ai trong phòng.</p>`}</div>
@@ -373,7 +507,7 @@ async function handleMemberAction(action, payload) {
   }
 }
 
-// ---- Toast (transient notification inside the lobby) ----
+// ---- Toast ----
 let toastTimer = null;
 function showToast(text, tone = "info") {
   let el = document.querySelector("#lobby-toast");
@@ -415,7 +549,6 @@ async function refreshRoom() {
 
     renderSeats(room.members || [], session.playerId);
 
-    // If I'm no longer in the room (was kicked), bounce back to landing.
     if (!room.members?.some((m) => m.id === session.playerId)) {
       clearSession();
       window.location.replace(ROUTES.landing);
@@ -438,6 +571,7 @@ async function refreshRoom() {
 
 document.querySelector(".back-link")?.addEventListener("click", (e) => {
   e.preventDefault();
+  stopAnimation();
   audioManager.playSfx("playerLeave");
   setTimeout(() => {
     clearSession();

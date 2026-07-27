@@ -1,6 +1,7 @@
 using Arcana.Application.Abstractions;
 using Arcana.Application.Services;
 using Arcana.Domain.Repositories;
+using Arcana.Infrastructure.Cloudinary;
 using Arcana.Infrastructure.Firebase;
 using Arcana.Infrastructure.Repositories;
 using Google.Apis.Auth.OAuth2;
@@ -15,6 +16,7 @@ public static class DependencyInjection
     public static IServiceCollection AddArcanaInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         services.Configure<FirebaseOptions>(configuration.GetSection(FirebaseOptions.Section));
+        services.Configure<CloudinaryOptions>(configuration.GetSection(CloudinaryOptions.Section));
 
         services.AddSingleton<FirestoreDb>(sp =>
         {
@@ -54,6 +56,7 @@ public static class DependencyInjection
             return builder.Build();
         });
 
+        services.AddSingleton<ICloudinaryService, CloudinaryService>();
         services.AddSingleton<IInvitationCodeGenerator, InvitationCodeGenerator>();
         services.AddScoped<IRoomRepository, FirestoreRoomRepository>();
         services.AddScoped<IRoomService, RoomService>();

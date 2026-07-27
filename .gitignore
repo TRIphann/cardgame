@@ -24,3 +24,10 @@ Thumbs.db
 *.log
 backend/.api.err
 backend/.api.out
+.fake
+
+## Upload results
+card-upload-results.json
+
+## Card assets (designed via local SVG, not part of repo)
+frontend/src/assets/cards/
