@@ -66,7 +66,7 @@ public class CloudinaryService : ICloudinaryService
             UseFilenameAsDisplayName = true,
             UniqueFilename = true,
             Overwrite = false,
-            Tags = new[] { "arcana", $"deck-{deckId}", "card" },
+            Tags = string.Join(",", new[] { "arcana", $"deck-{deckId}", "card" }),
             Transformation = new Transformation()
                 .Quality("auto")
                 .FetchFormat("auto"),
@@ -140,7 +140,7 @@ public class CloudinaryService : ICloudinaryService
 
     public async Task DeleteCardAssetAsync(string publicId)
     {
-        var deleteParams = new DeleteResourcesParams { PublicIds = new[] { publicId } };
+        var deleteParams = new DelResParams { PublicIds = new List<string> { publicId } };
         await _cloudinary.DeleteResourcesAsync(deleteParams);
         _logger.LogInformation("Deleted {PublicId}", publicId);
     }
