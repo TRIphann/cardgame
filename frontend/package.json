@@ -1,0 +1,25 @@
+{
+  "name": "arcana-frontend",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Arcana — Card Battle. React SPA frontend.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 4173",
+    "lint": "eslint . --ext .js,.jsx --max-warnings 0"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.2"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^5.4.10"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
