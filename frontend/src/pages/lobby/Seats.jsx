@@ -38,15 +38,7 @@ export function Seats({ side, members, myId, onPickAvatar }) {
 
   return (
     <ul className={`seats-list seats-${side}-list`} role="list">
-      {Array.from({ length: SLOTS_PER_SIDE }).map((_, i) => {
-        const m = list[i];
-        if (!m) {
-          return (
-            <li key={`empty-${i}`} className="seat seat-empty" aria-label="Còn trống">
-              <span className="seat-name">—</span>
-            </li>
-          );
-        }
+      {list.map((m, i) => {
         const isMe = m.id === myId;
         const avatarBg = m.avatar?.color || "linear-gradient(135deg,#2a2f6a,#16193d)";
         const avatarIcon = m.avatar?.icon || "♟";
@@ -55,6 +47,7 @@ export function Seats({ side, members, myId, onPickAvatar }) {
             key={m.id}
             className={`seat ${isMe ? "seat-me" : ""} ${m.isHost ? "seat-host" : ""}`}
             aria-label={`${m.name}${m.isHost ? " (chủ phòng)" : ""}`}
+            style={{ animationDelay: `${i * 60}ms` }}
           >
             <button
               type="button"

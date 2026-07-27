@@ -3,7 +3,14 @@
 // context so any component can subscribe to changes.
 //
 // The session shape:
-//   { roomId, roomCode, playerId, playerName, isHost, stage }
+//   { roomId, roomCode, playerId, playerName, isHost, stage, avatar }
+//
+// Storage: sessionStorage, scoped to this tab. (See config/env.js for why.)
+//
+// Cross-component sync: the browser only fires the `storage` event on OTHER
+// tabs, not the current one. To make a session update from anywhere in the
+// same tab (e.g. useOptimisticRoom.run -> saveSession) visible to React, we
+// dispatch a custom `arcana:session` event that this provider listens for.
 
 import React, {
   createContext,
@@ -16,13 +23,22 @@ import React, {
 import { loadSession, saveSession, clearSession as clearStorage } from "@config/env.js";
 
 const SessionContext = createContext(null);
+const SESSION_EVENT = "arcana:session";
+
+function emitSessionChange(next) {
+  try {
+    window.dispatchEvent(new CustomEvent(SESSION_EVENT, { detail: next }));
+  } catch (_) { /* SSR / older browsers */ }
+}
 
 export function SessionProvider({ children }) {
   const [session, setSession] = useState(() => loadSession());
 
-  // Sync external changes (e.g. another tab calling saveSession via a non-
-  // React code path). Listen to the storage event to update.
+  // Listen for session changes from anywhere in this tab + other tabs.
   useEffect(() => {
+    function onCustom(e) {
+      setSession(e.detail === undefined ? loadSession() : e.detail);
+    }
     function onStorage(e) {
       if (e.key === "arcana.session.v1") {
         try {
@@ -32,20 +48,26 @@ export function SessionProvider({ children }) {
         }
       }
     }
+    window.addEventListener(SESSION_EVENT, onCustom);
     window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener(SESSION_EVENT, onCustom);
+      window.removeEventListener("storage", onStorage);
+    };
   }, []);
 
   const update = useCallback((next) => {
     setSession(next);
     if (next) saveSession(next);
     else clearStorage();
+    emitSessionChange(next);
   }, []);
 
   const patch = useCallback((partial) => {
     setSession((prev) => {
       const merged = prev ? { ...prev, ...partial } : partial;
       if (merged) saveSession(merged);
+      emitSessionChange(merged);
       return merged;
     });
   }, []);
@@ -53,6 +75,7 @@ export function SessionProvider({ children }) {
   const clear = useCallback(() => {
     setSession(null);
     clearStorage();
+    emitSessionChange(null);
   }, []);
 
   const value = useMemo(

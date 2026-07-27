@@ -3,7 +3,7 @@
 // game. Also lets the local player pick their avatar.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ROUTES, saveSession, loadSession } from "@config/env.js";
 import { useSession } from "../../app/session.jsx";
 import { useAudio } from "@shared/audio/AudioManager.jsx";
@@ -18,6 +18,21 @@ import { Seats } from "./Seats.jsx";
 import { AvatarPicker } from "./AvatarPicker.jsx";
 
 const CARD_URLS = Object.values(CARD_CLOUDINARY);
+
+// Read the roomId directly from sessionStorage. Used as a fallback when the
+// React session context hasn't re-rendered yet (e.g. right after
+// useOptimisticRoom.run -> navigate, before the in-tab session event has
+// been processed by the SessionProvider).
+function readSessionRoomId() {
+  try {
+    const raw = sessionStorage.getItem("arcana.session.v1");
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed?.roomId || null;
+  } catch (_) {
+    return null;
+  }
+}
 
 // Catalogue of game modes selectable from the lobby. Right now only the first
 // one is implemented; the rest show the animated "?" placeholder.
@@ -47,6 +62,7 @@ const GAME_MODES = [
 
 export default function LobbyPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const session = useSession();
   const audio = useAudio();
   const toast = useToast();
@@ -80,10 +96,17 @@ export default function LobbyPage() {
     return list.map((m) => (m.id === session.session?.playerId ? { ...m, avatar: localAvatar } : m));
   }, [room, localAvatar, session.session]);
 
-  // Redirect when session is missing.
+  // Redirect when session is missing. We read the raw session from storage as
+  // a fallback because `useSession()` may not have flushed its state yet on
+  // the very first paint after a create/join (the in-tab sessionStorage event
+  // fires synchronously, but React state updates are async and `navigate`
+  // races ahead of the re-render).
   useEffect(() => {
-    if (!session.session?.roomId) navigate(ROUTES.landing, { replace: true });
-  }, [session.session, navigate]);
+    const fromStorage = session.session?.roomId || readSessionRoomId();
+    if (!fromStorage && location.pathname.startsWith(ROUTES.lobby)) {
+      navigate(ROUTES.landing, { replace: true });
+    }
+  }, [session.session, location.pathname, navigate]);
 
   // Register settings tabs (members list if host, otherwise just defaults).
   useEffect(() => {
@@ -285,32 +308,40 @@ export default function LobbyPage() {
             ‹
           </button>
 
-          {mode.implemented ? (
-            <>
-              <div
-                className={`deck-pile ${deckAnimation.wiggleLevel ? `wiggle-${deckAnimation.wiggleLevel}` : "idle"}`}
-                style={{ display: deckAnimation.isFlying ? "none" : "" }}
-              >
-                <img src="/assets/cards/default/cards/back.svg" alt="" draggable="false" />
-              </div>
-              {deckAnimation.isFlying && (
+          <div className="deck-stage">
+            {mode.implemented ? (
+              <>
+                {/* The deck pile stays rendered all the time so flying cards
+                    look like they left the stack instead of replacing it. */}
+                <div
+                  className={`deck-pile ${deckAnimation.wiggleLevel ? `wiggle-${deckAnimation.wiggleLevel}` : "idle"}`}
+                  data-flying={deckAnimation.isFlying ? "1" : "0"}
+                >
+                  <div className="deck-stack">
+                    {/* Multiple offset layers give the illusion of a tilted stack. */}
+                    <span className="deck-stack__layer" style={{ "--i": 6 }} />
+                    <span className="deck-stack__layer" style={{ "--i": 5 }} />
+                    <span className="deck-stack__layer" style={{ "--i": 4 }} />
+                    <span className="deck-stack__layer" style={{ "--i": 3 }} />
+                    <span className="deck-stack__layer" style={{ "--i": 2 }} />
+                    <span className="deck-stack__layer" style={{ "--i": 1 }} />
+                    <span className="deck-stack__layer deck-stack__layer--top">
+                      <img src="/assets/cards/default/cards/back.svg" alt="" draggable="false" />
+                    </span>
+                  </div>
+                  <div className="deck-pile__glow" aria-hidden="true" />
+                </div>
                 <FlyingCards
                   refs={deckAnimation.flyingCardRefs}
                   faceUrls={deckAnimation.flyingCardUrls}
                 />
-              )}
-              <p className="deck-label">{mode.deckLabel}</p>
-              <p className="deck-subtitle">{mode.tagline}</p>
-            </>
-          ) : (
-            <>
+              </>
+            ) : (
               <div className="deck-coming-soon">
                 <span className="deck-coming-soon__qmark" aria-hidden="true">?</span>
               </div>
-              <p className="deck-label">{mode.deckLabel}</p>
-              <p className="deck-subtitle">{mode.tagline}</p>
-            </>
-          )}
+            )}
+          </div>
 
           <button
             type="button"
@@ -320,6 +351,11 @@ export default function LobbyPage() {
           >
             ›
           </button>
+
+          <div className="deck-caption">
+            <p className="deck-label">{mode.deckLabel}</p>
+            <p className="deck-subtitle">{mode.tagline}</p>
+          </div>
 
           {pickerOpen && (
             <AvatarPicker
