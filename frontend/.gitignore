@@ -1,0 +1,23 @@
+target/
+node_modules/
+# Netlify
+.netlify/
+# Logs
+*.log
+# Misc
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+# Python (test servers, etc.)
+.py.err
+.py.out
+.test.api.err
+.test.api.out
+backend/.api.err
+backend/.api.out
+# Card upload results
+card-upload-results.json
+# Frontend build output
+frontend/dist/
+# Lock files for netlify (npm ci without lock still fine, but be explicit)

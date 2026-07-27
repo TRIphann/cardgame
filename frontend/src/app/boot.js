@@ -1,0 +1,35 @@
+// Boot diagnostics — surfaces JS / module errors visibly even when the user
+// has DevTools closed. We attach handlers as early as possible so a failure
+// in main.jsx itself gets reported.
+export function bootDiagnostics() {
+  if (typeof window === "undefined") return;
+
+  const surface = (kind, payload) => {
+    try {
+      const existing = document.getElementById("__arcana-boot-error");
+      if (existing) return; // only show the first one
+      const box = document.createElement("div");
+      box.id = "__arcana-boot-error";
+      box.style.cssText = [
+        "position:fixed", "inset:0", "z-index:2147483647",
+        "background:rgba(8,8,24,0.92)", "color:#ffb4b4",
+        "padding:24px", "font-family:ui-monospace,monospace",
+        "font-size:14px", "white-space:pre-wrap", "overflow:auto",
+      ].join(";");
+      box.textContent = `[${kind}] ${payload}`;
+      document.body.appendChild(box);
+    } catch (_) { /* no-op */ }
+  };
+
+  window.addEventListener("error", (e) => {
+    const msg = (e.error && e.error.stack) || e.message || "unknown";
+    surface("error", msg);
+    console.error("[arcana] boot error:", e.error || e.message);
+  });
+
+  window.addEventListener("unhandledrejection", (e) => {
+    const reason = e.reason && (e.reason.stack || e.reason.message) || String(e.reason);
+    surface("unhandledrejection", reason);
+    console.error("[arcana] unhandled rejection:", e.reason);
+  });
+}

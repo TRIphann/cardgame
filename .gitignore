@@ -29,5 +29,5 @@ backend/.api.out
 ## Upload results
 card-upload-results.json
 
-## Card assets (designed via local SVG, not part of repo)
-frontend/src/assets/cards/
+## Card assets (designed via local SVG, part of repo)
+# (no longer ignored — card SVGs are committed so Netlify can serve them)

@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="140" height="200" viewBox="0 0 140 200">
+<defs>
+  <linearGradient id="bg_pirate1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#fdfdfd"/><stop offset="100%" stop-color="#ffe4cc"/></linearGradient>
+  <linearGradient id="ov_pirate1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="black" stop-opacity="0"/><stop offset="100%" stop-color="black" stop-opacity="0.18"/></linearGradient>
+  <filter id="sd_pirate1"><feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="black" flood-opacity="0.4"/></filter>
+  <radialGradient id="bgGlow_pirate1" cx="50%" cy="45%" r="55%"><stop offset="0%" stop-color="#cc6633" stop-opacity="0.22"/><stop offset="60%" stop-color="#cc6633" stop-opacity="0.06"/><stop offset="100%" stop-color="#cc6633" stop-opacity="0"/></radialGradient>
+</defs>
+<g filter="url(#sd_pirate1)"><rect width="140" height="200" rx="14" fill="url(#bg_pirate1)"/></g>
+<rect x="1.5" y="1.5" width="137" height="197" rx="13" fill="none" stroke="#553311" stroke-width="0.8" opacity="0.22"/>
+<rect width="140" height="200" rx="14" fill="url(#bgGlow_pirate1)"/>
+<rect x="0" y="146" width="140" height="54" fill="url(#ov_pirate1)"/>
+
+<g transform="translate(0,4)" opacity="0.97">
+<g transform="translate(0,4)">
+  <!-- Skull and crossbones behind -->
+  <g opacity="0.18" transform="translate(70,95)">
+    <line x1="-22" y1="-22" x2="22" y2="22" stroke="#553311" stroke-width="6" stroke-linecap="round"/>
+    <line x1="22" y1="-22" x2="-22" y2="22" stroke="#553311" stroke-width="6" stroke-linecap="round"/>
+  </g>
+
+  <!-- Pirate hat (tricorne) -->
+  <path d="M40 50 L46 36 L70 30 L94 36 L100 50 L88 44 L82 50 L70 46 L58 50 L52 44 Z" fill="#2a1a0a" stroke="#000" stroke-width="1.8"/>
+  <!-- Skull emblem on hat -->
+  <ellipse cx="70" cy="40" rx="6" ry="5" fill="#ffe9b3" stroke="#553311" stroke-width="0.8"/>
+  <circle cx="68" cy="39" r="1" fill="#000"/>
+  <circle cx="72" cy="39" r="1" fill="#000"/>
+  <line x1="68" y1="42" x2="72" y2="42" stroke="#553311" stroke-width="0.5"/>
+  <!-- Hat band -->
+  <rect x="44" y="46" width="52" height="4" fill="#aa2222" stroke="#771111" stroke-width="0.5"/>
+
+  <!-- Head -->
+  <ellipse cx="70" cy="74" rx="28" ry="30" fill="#d68850" stroke="#553311" stroke-width="2.2"/>
+  <!-- Beard -->
+  <path d="M48 86 Q48 110 70 116 Q92 110 92 86 Q86 96 70 94 Q54 96 48 86 Z" fill="#3a2010" stroke="#1a0a00" stroke-width="1.5"/>
+  <!-- Beard strands -->
+  <path d="M52 102 Q54 112 58 114" stroke="#1a0a00" stroke-width="0.8" fill="none"/>
+  <path d="M88 102 Q86 112 82 114" stroke="#1a0a00" stroke-width="0.8" fill="none"/>
+
+  <!-- Eye patch -->
+  <rect x="55" y="68" width="20" height="12" rx="2" fill="#1a1a1a" stroke="#000" stroke-width="1"/>
+  <line x1="50" y1="66" x2="44" y2="60" stroke="#1a1a1a" stroke-width="1.5"/>
+  <line x1="80" y1="66" x2="86" y2="60" stroke="#1a1a1a" stroke-width="1.5"/>
+  <!-- Visible eye -->
+  <ellipse cx="84" cy="72" rx="4" ry="3" fill="#ffe9b3"/>
+  <circle cx="84" cy="72" r="2" fill="#1a1000"/>
+  <circle cx="85" cy="71" r="0.8" fill="white"/>
+  <!-- Nose -->
+  <ellipse cx="70" cy="80" rx="3" ry="2.5" fill="#b87044"/>
+  <!-- Mouth (teeth) -->
+  <path d="M58 96 Q70 102 82 96" stroke="#553311" stroke-width="1.5" fill="#2a1000"/>
+  <line x1="62" y1="96" x2="62" y2="100" stroke="#ffe9b3" stroke-width="0.8"/>
+  <line x1="66" y1="97" x2="66" y2="101" stroke="#ffe9b3" stroke-width="0.8"/>
+  <line x1="70" y1="98" x2="70" y2="102" stroke="#ffe9b3" stroke-width="0.8"/>
+  <line x1="74" y1="97" x2="74" y2="101" stroke="#ffe9b3" stroke-width="0.8"/>
+  <line x1="78" y1="96" x2="78" y2="100" stroke="#ffe9b3" stroke-width="0.8"/>
+
+  <!-- Earring -->
+  <circle cx="42" cy="82" r="2" fill="#ffcc00" stroke="#aa7700" stroke-width="0.6"/>
+  <circle cx="98" cy="82" r="2" fill="#ffcc00" stroke="#aa7700" stroke-width="0.6"/>
+
+  <!-- Sword/hook hand hint -->
+  <path d="M30 110 L20 100 L18 102 L28 112 Z" fill="#aaaaaa" stroke="#553311" stroke-width="0.8"/>
+  <line x1="22" y1="98" x2="14" y2="90" stroke="#553311" stroke-width="2.5"/>
+  <line x1="14" y1="90" x2="10" y2="86" stroke="#aaaaaa" stroke-width="3" stroke-linecap="round"/>
+</g></g>
+
+<text x="70" y="180" text-anchor="middle" font-family="'Arial Black','Segoe UI Black',sans-serif" font-size="13" font-weight="900" fill="#553311" letter-spacing="1.5">HẢI TẶC</text>
+</svg>

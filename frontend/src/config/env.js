@@ -1,16 +1,43 @@
-// Auto-resolving environment module.
-// On localhost we use the dev config pointing at the local .NET API.
-// Anywhere else we use the production config pointing at the Render-hosted API.
+// Application config — kept tiny so the bundler can tree-shake unused branches.
+//
+// `import.meta.env.PROD` is true in production builds. We use that instead of
+// a hostname check so the same bundle works for preview deploys, local
+// production builds, and the live site without any environment wiring.
 
-import * as dev from "./local.js";
-import * as prod from "./production.js";
+export const API_BASE_URL =
+  (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_BASE_URL) ||
+  "https://cardgame-lwsk.onrender.com";
 
-const isLocal =
-  typeof window !== "undefined" &&
-  /^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname);
+// React Router paths. Anything you want to be deep-linkable lives here.
+export const ROUTES = {
+  landing: "/",
+  lobby: "/lobby",
+  game: (roomId) => `/game/${roomId}`,
+  settings: "/settings",
+};
 
-export const API_BASE_URL = isLocal ? dev.API_BASE_URL : prod.API_BASE_URL;
-export const ROUTES = isLocal ? dev.ROUTES : prod.ROUTES;
-export const saveSession = dev.saveSession;
-export const loadSession = dev.loadSession;
-export const clearSession = dev.clearSession;
+// localStorage-backed session. Single source of truth.
+const SESSION_KEY = "arcana.session.v1";
+
+export function saveSession(session) {
+  try {
+    localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  } catch (_) { /* private mode / quota */ }
+}
+
+export function loadSession() {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+export function clearSession() {
+  try {
+    localStorage.removeItem(SESSION_KEY);
+  } catch (_) { /* no-op */ }
+}
+
+export const SESSION_STORAGE_KEY = SESSION_KEY;

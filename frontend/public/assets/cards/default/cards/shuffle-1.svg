@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="140" height="200" viewBox="0 0 140 200">
+<defs>
+  <linearGradient id="bg_shuffle1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#2a1a08"/><stop offset="100%" stop-color="#110800"/></linearGradient>
+  <linearGradient id="ov_shuffle1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="black" stop-opacity="0"/><stop offset="100%" stop-color="black" stop-opacity="0.42"/></linearGradient>
+  <filter id="sd_shuffle1"><feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="black" flood-opacity="0.6"/></filter>
+  <radialGradient id="bgGlow_shuffle1" cx="50%" cy="45%" r="55%"><stop offset="0%" stop-color="#cc8833" stop-opacity="0.2"/><stop offset="60%" stop-color="#cc8833" stop-opacity="0.06"/><stop offset="100%" stop-color="#cc8833" stop-opacity="0"/></radialGradient>
+</defs>
+<g filter="url(#sd_shuffle1)"><rect width="140" height="200" rx="14" fill="url(#bg_shuffle1)"/></g>
+<rect x="1.5" y="1.5" width="137" height="197" rx="13" fill="none" stroke="white" stroke-width="0.8" opacity="0.13"/>
+<rect width="140" height="200" rx="14" fill="url(#bgGlow_shuffle1)"/>
+<rect x="0" y="146" width="140" height="54" fill="url(#ov_shuffle1)"/>
+<g transform="translate(0,4)" opacity="0.97">
+<g transform="translate(0,0)">
+  <!-- Background glow -->
+  <ellipse cx="70" cy="70" rx="58" ry="52" fill="#cc8833" opacity="0.06"/>
+
+  <!-- Top arrow -->
+  <path d="M20 28 Q70 4 120 26" stroke="#cc8833" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+  <g transform="translate(120,26) rotate(45)">
+    <polygon points="0,0 -13,-6 -13,6" fill="#cc8833"/>
+  </g>
+  <path d="M20 30 Q70 6 120 28" stroke="#ffaa44" stroke-width="1" fill="none" stroke-linecap="round" opacity="0.3"/>
+
+  <!-- 3 cards in middle -->
+  <g transform="translate(8,44) rotate(-12)"><rect width="42" height="60" rx="5" fill="#221100" stroke="#664422" stroke-width="1.8"/><rect x="3" y="3" width="36" height="54" rx="3" fill="none" stroke="#886633" stroke-width="0.7" opacity="0.35"/></g>
+  <g transform="translate(34,36) rotate(4)"><rect width="42" height="60" rx="5" fill="#331e00" stroke="#885533" stroke-width="1.8"/><rect x="3" y="3" width="36" height="54" rx="3" fill="none" stroke="#aa7744" stroke-width="0.7" opacity="0.35"/></g>
+  <g transform="translate(60,44)"><rect width="42" height="60" rx="5" fill="#442800" stroke="#aa7744" stroke-width="2.2"/><rect x="3" y="3" width="36" height="54" rx="3" fill="none" stroke="#cc9955" stroke-width="0.7" opacity="0.35"/><rect x="14" y="22" width="14" height="14" rx="2" fill="none" stroke="#886633" stroke-width="1.2" transform="rotate(45 21 29)" opacity="0.4"/></g>
+
+  <!-- Bottom arrow -->
+  <path d="M120 114 Q70 138 20 116" stroke="#cc8833" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+  <g transform="translate(20,116) rotate(-135)">
+    <polygon points="0,0 -13,-6 -13,6" fill="#cc8833"/>
+  </g>
+  <path d="M120 116 Q70 140 20 118" stroke="#ffaa44" stroke-width="1" fill="none" stroke-linecap="round" opacity="0.3"/>
+
+  <!-- Sparkles -->
+  <circle cx="20" cy="22" r="2.5" fill="#ffcc66" opacity="0.7"/>
+  <circle cx="120" cy="122" r="2.5" fill="#ffcc66" opacity="0.7"/>
+  <circle cx="122" cy="32" r="1.5" fill="white" opacity="0.4"/>
+  <circle cx="18" cy="122" r="1.5" fill="white" opacity="0.4"/>
+</g></g>
+<text x="70" y="180" text-anchor="middle" font-family="'Arial Black','Segoe UI Black',sans-serif" font-size="13" font-weight="900" fill="white" letter-spacing="1.5">XÀO XÁO</text>
+</svg>

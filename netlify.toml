@@ -1,41 +1,29 @@
 [build]
-  publish = "frontend/src"
-  command = "echo 'Static site, no build needed'"
+  publish = "frontend/dist"
+  command = "cd frontend && npm ci && npm run build"
 
+# SPA fallback — React Router handles client-side routes. Anything not under
+# /api, /assets, or a file extension falls back to /index.html.
 [[redirects]]
-  from = "/"
-  to = "/pages/landing/index.html"
-  status = 302
+  from = "/*"
+  to = "/index.html"
+  status = 200
 
-[[redirects]]
-  from = "/lobby"
-  to = "/pages/lobby/index.html"
-  status = 302
-
-# Cache busting — short TTL on HTML, long on assets
+# Cache busting — short TTL on the index, long on hashed asset bundles.
 [[headers]]
-  for = "/*.html"
+  for = "/index.html"
   [headers.values]
     Cache-Control = "public, max-age=0, must-revalidate"
     X-Content-Type-Options = "nosniff"
 
 [[headers]]
-  for = "/pages/*"
+  for = "/assets/*"
   [headers.values]
-    Cache-Control = "public, max-age=0, must-revalidate"
-
-[[headers]]
-  for = "/shared/*"
-  [headers.values]
-    Cache-Control = "public, max-age=0, must-revalidate"
-
-[[headers]]
-  for = "/games/*"
-  [headers.values]
-    Cache-Control = "public, max-age=0, must-revalidate"
+    Cache-Control = "public, max-age=31536000, immutable"
 
 [[headers]]
   for = "/*"
   [headers.values]
     X-Frame-Options = "SAMEORIGIN"
     Referrer-Policy = "strict-origin-when-cross-origin"
+    X-Content-Type-Options = "nosniff"
