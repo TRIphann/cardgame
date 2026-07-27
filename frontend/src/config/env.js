@@ -16,18 +16,26 @@ export const ROUTES = {
   settings: "/settings",
 };
 
-// localStorage-backed session. Single source of truth.
+// sessionStorage-backed session, scoped to this browser tab. Single source of truth.
+//
+// Why sessionStorage instead of localStorage?
+// - Two Chrome tabs on the same domain share localStorage, so a player in tab A
+//   would see their session overwritten by tab B (or vice versa). This caused
+//   the "I typed a code and got 'created room X' back" bug when testing across
+//   tabs. With sessionStorage each tab keeps its own join/create state.
+// - sessionStorage survives F5 inside the same tab, which is what we need.
+
 const SESSION_KEY = "arcana.session.v1";
 
 export function saveSession(session) {
   try {
-    localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
   } catch (_) { /* private mode / quota */ }
 }
 
 export function loadSession() {
   try {
-    const raw = localStorage.getItem(SESSION_KEY);
+    const raw = sessionStorage.getItem(SESSION_KEY);
     return raw ? JSON.parse(raw) : null;
   } catch (_) {
     return null;
@@ -36,8 +44,21 @@ export function loadSession() {
 
 export function clearSession() {
   try {
-    localStorage.removeItem(SESSION_KEY);
+    sessionStorage.removeItem(SESSION_KEY);
   } catch (_) { /* no-op */ }
+}
+
+// Some older code still imports "localStorage" by name for the last-used
+// display name; keep that on localStorage so the value persists across tabs.
+const LAST_NAME_KEY = "arcana.lastName.v1";
+export function saveLastName(name) {
+  try { localStorage.setItem(LAST_NAME_KEY, name); } catch (_) { /* noop */ }
+}
+export function loadLastName() {
+  try { return localStorage.getItem(LAST_NAME_KEY) || ""; } catch (_) { return ""; }
+}
+export function clearLastName() {
+  try { localStorage.removeItem(LAST_NAME_KEY); } catch (_) { /* noop */ }
 }
 
 export const SESSION_STORAGE_KEY = SESSION_KEY;

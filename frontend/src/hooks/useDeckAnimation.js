@@ -1,16 +1,21 @@
 // useDeckAnimation — drives the deck + 4 flying cards on the lobby page.
 //
-// State machine:
-//   idle (wiggle 5s → wiggle 4s → wiggle 2s) → flying (4 cards orbit around
-//   the deck via requestAnimationFrame; when each card's orbit-angle lands
-//   near the front of the camera it flips to reveal the card face, holds
-//   1.5s, then flips back) → return to deck → idle.
+// Spec (from user):
+//   • Deck sits idle, then wiggle 1 → wiggle 2 → wiggle 3 in cascade:
+//       5s after mount      → wiggle 1 (nhẹ)
+//       +4s                 → wiggle 2 (mạnh hơn)
+//       +2s                 → wiggle 3 (mạnh nhất)
+//       then flying phase begins.
+//   • Flying: 4 cards from the top of the deck fly out face-down and orbit
+//     around the deck. When a card is closest to the camera (front of the
+//     orbit) it flips to reveal a random card face — *once per cycle* per
+//     card. After flipping, it flips back so all 4 cards stay face-down
+//     while continuing to orbit.
+//   • Once all 4 cards have been revealed, return them to the deck.
+//   • Loop forever: 5s + 4s + 2s of idle cascade then flying again.
 //
-// `wiggleLevel` controls which CSS class the deck uses for its idle wiggle.
-// `flyingCards` is an array of refs the hook writes inline transforms into.
-//
-// The hook returns { wiggleLevel, isFlying, setWiggleLevel } so the React
-// component only needs to render the markup; all timing logic is here.
+// "Closest to the camera" = depth ≈ 1 in our orbit math (cos(angle) close
+// to 1). We trigger a reveal the first time each card crosses that band.
 
 import { useEffect, useRef, useState } from "react";
 import { useReducedMotion } from "./useReducedMotion.js";
@@ -18,22 +23,16 @@ import { useReducedMotion } from "./useReducedMotion.js";
 const N = 4;
 const PHASE_OFFSET = (Math.PI * 2) / N;
 const ORBIT_RADIUS = 95;
-const ORBIT_DURATION_MS = 9000;
-const REVEAL_HOLD_MS = 1500;
+const ORBIT_DURATION_MS = 9000;        // one full orbit
+const REVEAL_HOLD_MS = 1500;            // how long the card stays flipped
+const REVEAL_DEPTH_THRESHOLD = 0.85;    // when depth > threshold, flip
 
 const TIMINGS = {
   wiggle1Delay: 5000,
   wiggle2Delay: 4000,
   wiggle3Delay: 2000,
-  returnDelay: 480,
+  returnDurationMs: 480,
 };
-
-function placeholderCard() {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let s = "";
-  for (let i = 0; i < 6; i += 1) s += chars[Math.floor(Math.random() * chars.length)];
-  return s;
-}
 
 export function useDeckAnimation({ cardImageUrls }) {
   const reduced = useReducedMotion();
@@ -45,68 +44,75 @@ export function useDeckAnimation({ cardImageUrls }) {
   const rafRef = useRef(0);
   const startTimeRef = useRef(0);
 
+  // Refs that the FlyingCards component populates so we can mutate transforms
+  // without re-rendering. The hook owns these — the component just forwards.
+  const flyingCardRefs = useRef([]);
+  const flyingCardUrlsRef = useRef([]);
+
+  // Track per-card "has this card been revealed yet in this cycle?"
+  const revealedSetRef = useRef(new Set());
+  const flipTimerRef = useRef(null);
+
   const clearTimers = () => {
     for (const id of timeoutsRef.current) clearTimeout(id);
     timeoutsRef.current = [];
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
     rafRef.current = 0;
+    if (flipTimerRef.current) clearTimeout(flipTimerRef.current);
+    flipTimerRef.current = null;
   };
 
   useEffect(() => () => clearTimers(), []);
 
-  // Entry: start idle cycle.
+  // Reduced-motion fallback: still show the cycle, just with shorter phases
+  // and no transform-based animation. We toggle the "flying" flag so the
+  // CSS-based fallback in the component can take over.
   useEffect(() => {
+    if (!reduced) return undefined;
     setPhase("idle");
     setWiggleLevel(0);
-
-    if (reduced) {
-      // For motion-reduced users we still show the cycle but without
-      // transform-based motion; we just reveal cards sequentially instead.
-      const id = setInterval(() => {
-        setPhase("flying");
-        setTimeout(() => setPhase("idle"), 3000);
-      }, 12000);
-      timeoutsRef.current.push(id);
-      return () => {
-        for (const t of timeoutsRef.current) clearTimeout(t);
-        timeoutsRef.current = [];
-      };
-    }
-
-    const w1 = setTimeout(() => setWiggleLevel(1), TIMINGS.wiggle1Delay);
-    timeoutsRef.current.push(w1);
+    const id = setInterval(() => {
+      setPhase("flying");
+      setTimeout(() => setPhase("idle"), 3000);
+    }, 12000);
+    timeoutsRef.current.push(id);
     return () => clearTimers();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [reduced]);
 
-  // Idle cascade.
+  // Idle cascade: 0 → 1 (5s) → 2 (+4s) → 3 (+2s) → flying.
   useEffect(() => {
-    if (phase !== "idle") return;
-    if (wiggleLevel === 1) {
+    if (reduced) return undefined;
+    if (phase !== "idle") return undefined;
+
+    if (wiggleLevel === 0) {
+      const id = setTimeout(() => setWiggleLevel(1), TIMINGS.wiggle1Delay);
+      timeoutsRef.current.push(id);
+    } else if (wiggleLevel === 1) {
       const id = setTimeout(() => setWiggleLevel(2), TIMINGS.wiggle2Delay);
       timeoutsRef.current.push(id);
     } else if (wiggleLevel === 2) {
       const id = setTimeout(() => setWiggleLevel(3), TIMINGS.wiggle3Delay);
       timeoutsRef.current.push(id);
     } else if (wiggleLevel === 3) {
+      // Pick a fresh batch of face URLs for this cycle and reset the
+      // per-cycle "already revealed" set.
+      const pool = Array.isArray(cardImageUrls) && cardImageUrls.length > 0
+        ? cardImageUrls
+        : [];
+      flyingCardUrlsRef.current = Array.from({ length: N }, () =>
+        pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : "",
+      );
+      revealedSetRef.current = new Set();
       setPhase("flying");
     }
-  }, [phase, wiggleLevel]);
 
-  // rAF orbit while phase === "flying".
+    return () => clearTimers();
+  }, [phase, wiggleLevel, reduced, cardImageUrls]);
+
+  // rAF orbit + flip-on-front behaviour while phase === "flying".
   useEffect(() => {
-    if (phase !== "flying" || reduced) return;
-
-    // Pick random face images for each flying card.
-    const cards = [];
-    for (let i = 0; i < N; i += 1) {
-      const url = cardImageUrls[Math.floor(Math.random() * cardImageUrls.length)];
-      cards.push(url);
-    }
-
-    // Write to a global so the lobby component can read face URLs (it's
-    // mounted once but receives them via prop).
-    flyingCardUrlsRef.current = cards;
+    if (reduced) return undefined;
+    if (phase !== "flying") return undefined;
 
     startTimeRef.current = performance.now();
     setIsFlying(true);
@@ -123,15 +129,29 @@ export function useDeckAnimation({ cardImageUrls }) {
         const depth = Math.cos(angle);
         const scale = 0.9 + (0.2 * (depth + 1)) / 2;
 
-        const transform = `translate(calc(-50% + ${x.toFixed(1)}px), calc(-50% + ${y.toFixed(1)}px)) rotateZ(${tilt.toFixed(1)}deg) scale(${scale.toFixed(2)})`;
+        const transform =
+          `translate(calc(-50% + ${x.toFixed(1)}px), calc(-50% + ${y.toFixed(1)}px)) ` +
+          `rotateZ(${tilt.toFixed(1)}deg) scale(${scale.toFixed(2)})`;
         const zIndex = String(100 + Math.round(depth * 10));
-        const revealed = depth > 0.85;
 
         const node = flyingCardRefs.current[i];
         if (!node) continue;
         node.style.transform = transform;
         node.style.zIndex = zIndex;
-        node.classList.toggle("revealed", revealed);
+
+        // Reveal the card *once* per cycle when it's closest to the camera.
+        if (depth > REVEAL_DEPTH_THRESHOLD && !revealedSetRef.current.has(i)) {
+          revealedSetRef.current.add(i);
+          node.classList.add("revealed");
+          // Schedule the flip back to face-down after a short hold.
+          if (flipTimerRef.current) clearTimeout(flipTimerRef.current);
+          flipTimerRef.current = setTimeout(() => {
+            for (let j = 0; j < N; j += 1) {
+              const n = flyingCardRefs.current[j];
+              if (n) n.classList.remove("revealed");
+            }
+          }, REVEAL_HOLD_MS);
+        }
       }
 
       rafRef.current = requestAnimationFrame(tick);
@@ -139,30 +159,37 @@ export function useDeckAnimation({ cardImageUrls }) {
 
     rafRef.current = requestAnimationFrame(tick);
 
-    const cycleMs = ORBIT_DURATION_MS + REVEAL_HOLD_MS + 400;
-    const cycle = setTimeout(() => {
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = 0;
-      setPhase("returning");
-    }, cycleMs);
-
-    timeoutsRef.current.push(cycle);
-
     return () => {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = 0;
-      for (const id of timeoutsRef.current) clearTimeout(id);
-      timeoutsRef.current = [];
+      if (flipTimerRef.current) clearTimeout(flipTimerRef.current);
+      flipTimerRef.current = null;
     };
-  }, [phase, reduced, cardImageUrls]);
+  }, [phase, reduced]);
 
-  // Returning animation.
+  // After enough time, end the flying phase and return to deck. The user
+  // wants the cards to come back once they've all been revealed, but to
+  // keep things visually predictable we also hard-cap the flying duration
+  // in case some cards never crossed the reveal band (small orbit glitch).
   useEffect(() => {
-    if (phase !== "returning") return;
+    if (reduced) return undefined;
+    if (phase !== "flying") return undefined;
+
+    const cycleMs = ORBIT_DURATION_MS + REVEAL_HOLD_MS + 200;
+    const id = setTimeout(() => setPhase("returning"), cycleMs);
+    timeoutsRef.current.push(id);
+    return () => clearTimeout(id);
+  }, [phase, reduced]);
+
+  // Returning animation: shrink + fade all flying cards back to the deck.
+  useEffect(() => {
+    if (phase !== "returning") return undefined;
+
     for (let i = 0; i < N; i += 1) {
       const node = flyingCardRefs.current[i];
       if (!node) continue;
-      node.style.transition = "transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.4s ease";
+      node.style.transition =
+        "transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.4s ease";
       node.style.transform = "translate(-50%, -50%) scale(0.1) rotateZ(0deg)";
       node.style.opacity = "0";
       node.classList.remove("revealed");
@@ -180,14 +207,12 @@ export function useDeckAnimation({ cardImageUrls }) {
       }
       setIsFlying(false);
       setPhase("idle");
-      setWiggleLevel(0);
-    }, TIMINGS.returnDelay);
+      setWiggleLevel(0); // restart the idle cascade from level 0
+    }, TIMINGS.returnDurationMs);
 
     timeoutsRef.current.push(id);
+    return () => clearTimeout(id);
   }, [phase]);
-
-  const flyingCardRefs = useRef([]);
-  const flyingCardUrlsRef = useRef([]);
 
   return {
     wiggleLevel,
@@ -195,6 +220,5 @@ export function useDeckAnimation({ cardImageUrls }) {
     phase,
     flyingCardRefs,
     flyingCardUrls: flyingCardUrlsRef.current,
-    placeholderCode: placeholderCard,
   };
 }

@@ -68,6 +68,10 @@ export function useOptimisticRoom({ onNavigate } = {}) {
     const raced = await raceWithFallback(postPromise, FAST_NAV_TIMEOUT_MS);
 
     const finalize = (room, member) => {
+      // isHost is decided by the *action*, not by inspecting the server's
+      // members list. When joining we can't tell from the response alone
+      // whether the joining player is the original host or just an early
+      // member, so we trust the user-intent from the action.
       saveSession({
         roomId: room.id,
         roomCode: room.code,

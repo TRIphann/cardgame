@@ -11,6 +11,8 @@ backend/src/Arcana.Api/Secrets/
 *.json
 !backend/src/Arcana.Api/appsettings*.json
 !frontend/src/config/firebase.js
+!frontend/package-lock.json
+!frontend/package.json
 
 ## OS
 .DS_Store

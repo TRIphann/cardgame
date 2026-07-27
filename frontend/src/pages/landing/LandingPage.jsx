@@ -5,7 +5,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ROUTES } from "@config/env.js";
+import { ROUTES, saveLastName, loadLastName } from "@config/env.js";
 import { prewarmBackend } from "@shared/api/roomsApi.js";
 import { useAudio } from "@shared/audio/AudioManager.jsx";
 import { useToast } from "@shared/ui/toast.jsx";
@@ -22,26 +22,38 @@ export default function LandingPage() {
   const toast = useToast();
   const { t } = useI18n();
 
-  const [name, setName] = useState(() => {
-    try { return localStorage.getItem("arcana.lastName.v1") || ""; } catch (_) { return ""; }
-  });
+  const [name, setName] = useState(() => loadLastName());
   const [code, setCode] = useState("");
   const [stage, setStage] = useState("enter-code"); // for join button
   const [message, setMessage] = useState(null);
   const [shake, setShake] = useState(0);
   const formRef = useRef(null);
 
-  const { run, busy } = useOptimisticRoom({
-    onNavigate: (room) => {
+  // Two separate navigate handlers so create/join get their own toast copy.
+  const onCreateNavigate = useCallback(
+    (room) => {
       audio.playSfx(room.code && !String(room.code).startsWith("PENDING") ? "roomCodeReveal" : "buttonClick");
-      toast.success(`Đã tạo phòng ${room.code}`, { title: "Thành công", duration: 2000 });
+      toast.success(`Đã tạo phòng ${room.code}`, { title: "Tạo phòng thành công", duration: 2000 });
       navigate(ROUTES.lobby, { replace: true });
     },
-  });
+    [audio, toast, navigate],
+  );
+  const onJoinNavigate = useCallback(
+    (room) => {
+      audio.playSfx(room.code && !String(room.code).startsWith("PENDING") ? "roomCodeReveal" : "buttonClick");
+      toast.success(`Đã vào phòng ${room.code}`, { title: "Vào phòng thành công", duration: 2000 });
+      navigate(ROUTES.lobby, { replace: true });
+    },
+    [audio, toast, navigate],
+  );
+
+  const { run: runCreate, busy: busyCreate } = useOptimisticRoom({ onNavigate: onCreateNavigate });
+  const { run: runJoin, busy: busyJoin } = useOptimisticRoom({ onNavigate: onJoinNavigate });
+  const busy = busyCreate || busyJoin;
 
   useEffect(() => {
     // Persist last-used name so refresh on the landing page keeps it.
-    if (name) try { localStorage.setItem("arcana.lastName.v1", name); } catch (_) { /* noop */ }
+    if (name) saveLastName(name);
   }, [name]);
 
   const flash = useCallback((text, tone = "error") => {
@@ -50,39 +62,43 @@ export default function LandingPage() {
 
   const triggerShake = useCallback(() => setShake((n) => n + 1), []);
 
-  const submit = useCallback(async (action) => {
-    const trimmed = name.trim();
-    if (!trimmed) {
-      flash(t("common.nameRequired"));
-      triggerShake();
-      return;
-    }
-    if (action === "join" && !code.trim()) {
-      flash(t("common.codeRequired"));
-      triggerShake();
-      return;
-    }
+  const submit = useCallback(
+    async (action) => {
+      const trimmed = name.trim();
+      if (!trimmed) {
+        flash(t("common.nameRequired"));
+        triggerShake();
+        return;
+      }
+      if (action === "join" && !code.trim()) {
+        flash(t("common.codeRequired"));
+        triggerShake();
+        return;
+      }
 
-    audio.unlock();
-    audio.playSfx("buttonClick");
+      audio.unlock();
+      audio.playSfx("buttonClick");
 
-    const pending = toast.info(
-      action === "create" ? t("landing.creating") : t("landing.joining"),
-      { title: action === "create" ? "Tạo phòng" : "Vào phòng", duration: 0 },
-    );
+      const pending = toast.info(
+        action === "create" ? t("landing.creating") : t("landing.joining"),
+        { title: action === "create" ? "Tạo phòng" : "Vào phòng", duration: 0 },
+      );
 
-    const result = await run(action, { name: trimmed, code: code.trim().toUpperCase() });
-    pending?.dismiss?.();
+      const runner = action === "create" ? runCreate : runJoin;
+      const result = await runner(action, { name: trimmed, code: code.trim().toUpperCase() });
+      pending?.dismiss?.();
 
-    if (result.kind === "err") {
-      toast.error(result.error?.message || "Có lỗi xảy ra.", {
-        title: action === "create" ? "Tạo phòng thất bại" : "Vào phòng thất bại",
-      });
-      audio.playSfx("error");
-      triggerShake();
-      flash(humanize(result.error, action));
-    }
-  }, [name, code, audio, toast, run, flash, triggerShake, t]);
+      if (result.kind === "err") {
+        toast.error(result.error?.message || "Có lỗi xảy ra.", {
+          title: action === "create" ? "Tạo phòng thất bại" : "Vào phòng thất bại",
+        });
+        audio.playSfx("error");
+        triggerShake();
+        flash(humanize(result.error, action));
+      }
+    },
+    [name, code, audio, toast, runCreate, runJoin, flash, triggerShake, t],
+  );
 
   const handleJoinClick = useCallback(() => {
     if (stage === "enter-code") {
