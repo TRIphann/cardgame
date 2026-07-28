@@ -18,8 +18,8 @@ import { AvatarPicker } from "./AvatarPicker.jsx";
 import { CARD_CLOUDINARY } from "../../games/exploding-cats/cardCloudinary.js";
 
 // Cloudinary card URLs (basic exploding kittens deck).
-const CARD_URLS = Object.values(CARD_CLOUDINARY.cards || CARD_CLOUDINARY);
-const CARD_BACK_URL = CARD_CLOUDINARY.cards?.["card-back"] || CARD_CLOUDINARY.baseUrl + "/v1785145557/basic%20exploding%20kittens/card-back.svg";
+const CARD_URLS = Object.values(CARD_CLOUDINARY.cards || {});
+const CARD_BACK_URL = CARD_CLOUDINARY.cards?.back || CARD_CLOUDINARY.baseUrl + "/v1785156350/back_knmzmp.svg";
 
 // Read the roomId directly from sessionStorage. Used as a fallback when the
 // React session context hasn't re-rendered yet (e.g. right after

@@ -3,6 +3,33 @@
 
 import React from "react";
 
+// Fallback gradient for broken/missing card images
+const FALLBACK_GRADIENT = "linear-gradient(135deg, #1a1a4e, #0d0d2e)";
+const FALLBACK_BORDER   = "1.5px solid rgba(255,200,100,0.4)";
+
+// Guard against null parentElement when image fails to load
+function handleImgError(e) {
+  const parent = e.currentTarget?.parentElement;
+  if (!parent) return;
+  e.currentTarget.style.display = "none";
+  parent.style.background = FALLBACK_GRADIENT;
+  parent.style.border = FALLBACK_BORDER;
+}
+
+function handleFaceError(e) {
+  const parent = e.currentTarget?.parentElement;
+  if (!parent) return;
+  e.currentTarget.style.display = "none";
+  parent.style.background = "linear-gradient(135deg, #2d1a5e, #1a0d3e)";
+  parent.style.border = "1.5px solid rgba(168,85,247,0.5)";
+  parent.style.display = "flex";
+  parent.style.alignItems = "center";
+  parent.style.justifyContent = "center";
+  parent.style.fontSize = "48px";
+  parent.style.color = "rgba(168,85,247,0.6)";
+  parent.textContent = "★";
+}
+
 export function FlyingCards({ refs, faceUrls, backUrl }) {
   const items = [];
   for (let i = 0; i < 4; i += 1) {
@@ -16,15 +43,11 @@ export function FlyingCards({ refs, faceUrls, backUrl }) {
       >
         <div className="card-face card-back-face">
           <img
-            src={backUrl || "https://res.cloudinary.com/ssoic87m/image/upload/v1785145557/basic%20exploding%20kittens/card-back.svg"}
+            src={backUrl}
             alt=""
             className="card-back-img"
             draggable="false"
-            onError={(e) => {
-              e.currentTarget.style.display = "none";
-              e.currentTarget.parentElement.style.background = "linear-gradient(135deg, #1a1a4e, #0d0d2e)";
-              e.currentTarget.parentElement.style.border = "1.5px solid rgba(255,200,100,0.4)";
-            }}
+            onError={handleImgError}
           />
         </div>
         <div className="card-face card-front-face">
@@ -33,17 +56,7 @@ export function FlyingCards({ refs, faceUrls, backUrl }) {
             alt=""
             className="card-img"
             draggable="false"
-            onError={(e) => {
-              e.currentTarget.style.display = "none";
-              e.currentTarget.parentElement.style.background = "linear-gradient(135deg, #2d1a5e, #1a0d3e)";
-              e.currentTarget.parentElement.style.border = "1.5px solid rgba(168,85,247,0.5)";
-              e.currentTarget.parentElement.style.display = "flex";
-              e.currentTarget.parentElement.style.alignItems = "center";
-              e.currentTarget.parentElement.style.justifyContent = "center";
-              e.currentTarget.parentElement.style.fontSize = "48px";
-              e.currentTarget.parentElement.style.color = "rgba(168,85,247,0.6)";
-              e.currentTarget.parentElement.textContent = "★";
-            }}
+            onError={handleFaceError}
           />
         </div>
       </div>,
