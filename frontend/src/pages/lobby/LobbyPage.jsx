@@ -33,9 +33,8 @@ const LOCAL_CARDS = [
   "/assets/cards/default/cards/hải tặc.svg",
 ];
 
-// URL list for reveal randomisation: local SVGs + Cloudinary (if alive).
-const cloudinaryUrls = Object.values(CARD_CLOUDINARY.cards || CARD_CLOUDINARY);
-const CARD_URLS = cloudinaryUrls.length > 0 ? cloudinaryUrls : LOCAL_CARDS;
+// URL list for reveal randomisation: local SVGs.
+const CARD_URLS = LOCAL_CARDS;
 const CARD_BACK_URL = "/assets/cards/default/cards/back.svg";
 
 // Read the roomId directly from sessionStorage. Used as a fallback when the
