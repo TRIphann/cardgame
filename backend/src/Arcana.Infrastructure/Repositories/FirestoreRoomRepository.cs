@@ -108,8 +108,10 @@ public class FirestoreRoomRepository : IRoomRepository
             var membersSnap = await tx.GetSnapshotAsync(roomRef.Collection("members"));
             if (membersSnap.Count >= maxPlayers) return null;
 
+            // Add the new member first, then fetch updated members
             tx.Set(memberRef, BuildMemberDoc(candidate));
-            return await MapRoomAsync(snapshot, ct, membersSnapshot: membersSnap);
+            var updatedMembersSnap = await tx.GetSnapshotAsync(roomRef.Collection("members"));
+            return await MapRoomAsync(snapshot, ct, membersSnapshot: updatedMembersSnap);
         });
     }
 

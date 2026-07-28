@@ -11,11 +11,18 @@ export function useRoomPolling(roomId, { enabled = true } = {}) {
   const [room, setRoom] = useState(null);
   const [error, setError] = useState(null);
   const stoppedRef = useRef(false);
+  // Use ref to always get the latest roomId without causing re-renders
+  const roomIdRef = useRef(roomId);
+
+  useEffect(() => {
+    roomIdRef.current = roomId;
+  }, [roomId]);
 
   const refresh = useCallback(async () => {
-    if (!roomId || !enabled) return;
+    const currentRoomId = roomIdRef.current;
+    if (!currentRoomId || !enabled) return;
     try {
-      const body = await getRoom(roomId);
+      const body = await getRoom(currentRoomId);
       const next = body.room ?? body;
       setRoom(next);
       setError(null);
@@ -24,7 +31,7 @@ export function useRoomPolling(roomId, { enabled = true } = {}) {
     } catch (err) {
       setError(err);
     }
-  }, [roomId, enabled]);
+  }, [enabled]);
 
   useEffect(() => {
     stoppedRef.current = false;

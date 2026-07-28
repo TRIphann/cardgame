@@ -35,8 +35,8 @@ const LOCALES = {
     "lobby.notReady": "Chưa sẵn sàng",
     "lobby.shareHint": "Chia sẻ mã này cho tối đa 7 người bạn để cùng vào phòng.",
 
-    "landing.title": "Arcana",
-    "landing.tagline": "Số phận nằm trong tay bạn.",
+    "landing.title": "ĐỪNG RÚT LÁ ĐẤY",
+    "landing.tagline": "",
     "landing.eyebrow": "ĐẤU TRƯỜNG THẺ HUYỀN BÍ",
     "landing.playerName": "Tên người chơi",
     "landing.playerNamePlaceholder": "Nhập tên của bạn…",

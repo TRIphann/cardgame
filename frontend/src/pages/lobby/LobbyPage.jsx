@@ -96,12 +96,15 @@ export default function LobbyPage() {
   const { room, error: roomError, refresh } = useRoomPolling(isPending ? null : roomId);
 
   // NOTE: displayCode and showCode are defined AFTER room is declared.
+  // Prefer server code, fall back to session code
   const displayCode = room?.code || session.session?.roomCode || "";
-  const showCode   = codeVisible && displayCode.length > 0;
+  // Auto-reveal when we have a non-placeholder code (either from server or session)
+  const hasRealCode = displayCode && !displayCode.startsWith("pending") && displayCode.length === 6;
+  const showCode   = (codeVisible || hasRealCode) && displayCode.length > 0;
 
   // When server finally returns the room code, reveal it automatically.
   useEffect(() => {
-    if (displayCode && displayCode !== "------") {
+    if (displayCode && displayCode !== "------" && !displayCode.startsWith("pending")) {
       setCodeVisible(true);
     }
   }, [displayCode]);

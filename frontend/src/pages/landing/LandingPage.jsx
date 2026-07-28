@@ -139,7 +139,7 @@ export default function LandingPage() {
         <div className="brand-mark"><span></span><b>✦</b><span></span></div>
         <p className="eyebrow">{t("landing.eyebrow")}</p>
         <h1 id="game-title">{t("landing.title")}</h1>
-        <p className="tagline">{t("landing.tagline")}</p>
+        {t("landing.tagline") && <p className="tagline">{t("landing.tagline")}</p>}
         <div className="divider"><i></i><span>✧</span><i></i></div>
 
         <form

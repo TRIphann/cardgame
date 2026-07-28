@@ -24,9 +24,9 @@ const FANIN_STAGGER_MS  = 180;
 // ── Orbit geometry ──────────────────────────────────────────────────────
 // Orbit center is shifted DOWN (positive y) because deck pile is near bottom
 // Cards should orbit BELOW the deck pile center
-const ORBIT_RX = 180;
-const ORBIT_RY = 140;  // taller vertical to prevent clipping
-const ORBIT_Y_OFFSET = 60; // shift orbit center DOWN from deck center
+const ORBIT_RX = 200;
+const ORBIT_RY = 160;  // taller vertical to prevent clipping
+const ORBIT_Y_OFFSET = 80; // shift orbit center DOWN from deck center
 const ORBIT_MS = 12000;
 
 const PHASE_OFFSET = (Math.PI * 2) / N;
