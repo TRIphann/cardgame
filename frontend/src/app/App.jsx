@@ -7,10 +7,10 @@ import { SettingsModalRoot } from "../components/SettingsModalRoot.jsx";
 import { RouteAnnouncer } from "../components/RouteAnnouncer.jsx";
 import { AmbientBackdrop } from "../components/AmbientBackdrop.jsx";
 
-// Lazy-load heavy routes — Landing is the entry point and should be ready
-// immediately, but Lobby and Game can wait until the user navigates.
-const LandingPage = lazy(() => import("../pages/landing/LandingPage.jsx"));
-const LobbyPage = lazy(() => import("../pages/lobby/LobbyPage.jsx"));
+// Static imports for all routes — eliminates the lazy-loading chunk-404 problem
+// on Netlify where the fallback (index.html) may be served for stale chunks.
+import LandingPage from "../pages/landing/LandingPage.jsx";
+import LobbyPage from "../pages/lobby/LobbyPage.jsx";
 const GamePage = lazy(() => import("../pages/game/GamePage.jsx"));
 
 export default function App() {
