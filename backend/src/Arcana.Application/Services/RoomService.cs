@@ -11,10 +11,12 @@ public class RoomService : Abstractions.IRoomService
     // Code search space: 32^6 ≈ 1.07B. With 100k active rooms the collision probability
     // per attempt is ~9.3e-5. 16 attempts keeps the cumulative failure probability under 1.5e-3.
     private const int MaxCodeAttempts = 16;
-    // Heartbeat window: if no heartbeat in 20s, the member is marked offline.
-    // Heartbeat on the client fires every 8s, so 20s gives two missed beats
-    // before we declare the tab gone.
-    private static readonly TimeSpan OfflineAfter = TimeSpan.FromSeconds(20);
+    // Heartbeat window: if no heartbeat in 35s, the member is marked offline.
+    // Heartbeat on the client fires every 15s while the tab is visible, so
+    // 35s gives ~2 missed beats before we declare the tab gone — enough
+    // headroom to absorb one missed ping without false-positives when the
+    // user just briefly loses Wi-Fi.
+    private static readonly TimeSpan OfflineAfter = TimeSpan.FromSeconds(35);
 
     private readonly IRoomRepository _repository;
     private readonly Abstractions.IInvitationCodeGenerator _codeGenerator;

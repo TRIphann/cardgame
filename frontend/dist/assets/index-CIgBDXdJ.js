@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/GamePage-DUZ0VYMW.js","assets/react-BhVOh7S1.js","assets/router-CJAaEV1m.js","assets/react-dom-BqzW1rgF.js","assets/vendor-Bz22r_8Z.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/GamePage-BpRIIh7o.js","assets/react-BhVOh7S1.js","assets/router-CJAaEV1m.js","assets/react-dom-BqzW1rgF.js","assets/vendor-Bz22r_8Z.js"])))=>i.map(i=>d[i]);
 var __defProp = Object.defineProperty;
 var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
 var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
@@ -1835,6 +1835,7 @@ function LobbyPage() {
   const mode = GAME_MODES[modeIndex];
   const [pickerOpen, setPickerOpen] = reactExports.useState(false);
   const pickerAnchorRef = reactExports.useRef(null);
+  const [optimisticReady, setOptimisticReady] = reactExports.useState(null);
   const deckAnimation = useDeckAnimation({ cardImageUrls: CARD_URLS });
   const roomId = session.session?.roomId;
   const isPending = !roomId || typeof roomId === "string" && roomId.startsWith("pending-");
@@ -1851,7 +1852,8 @@ function LobbyPage() {
     const list = room?.members || [];
     const merged = list.map((m) => {
       if (m.id === myPlayerId) {
-        return { ...m, avatar: localAvatar, isHost: myIsHost };
+        const overlay = optimisticReady !== null ? { isReady: optimisticReady } : {};
+        return { ...m, avatar: localAvatar, isHost: myIsHost, ...overlay };
       }
       return m;
     });
@@ -1860,11 +1862,12 @@ function LobbyPage() {
         id: myPlayerId,
         name: session.session?.playerName || "Bạn",
         isHost: !!session.session?.isHost,
+        isReady: !!optimisticReady,
         joinedAt: (/* @__PURE__ */ new Date()).toISOString()
       });
     }
     return merged;
-  }, [room, localAvatar, myIsHost, myPlayerId, isPending, session.session?.playerName]);
+  }, [room, localAvatar, myIsHost, myPlayerId, isPending, session.session?.playerName, optimisticReady]);
   reactExports.useEffect(() => {
     const fromStorage = session.session?.roomId || readSessionRoomId();
     if (!fromStorage && location.pathname.startsWith(ROUTES.lobby)) {
@@ -1878,13 +1881,14 @@ function LobbyPage() {
     let cancelled = false;
     const ping = async () => {
       if (cancelled) return;
+      if (document.visibilityState !== "visible") return;
       try {
         await roomsApi.heartbeat(pollRoomId, myId);
       } catch (_) {
       }
     };
     ping();
-    const id = setInterval(ping, 8e3);
+    const id = setInterval(ping, 15e3);
     return () => {
       cancelled = true;
       clearInterval(id);
@@ -1895,7 +1899,10 @@ function LobbyPage() {
     const myId = session.session?.playerId;
     if (!myId) return void 0;
     const leaveUrl = `${API_BASE_URL}/api/rooms/${pollRoomId}/members/${myId}/leave`;
+    let sentLeave = false;
     const sendLeave = () => {
+      if (sentLeave) return;
+      sentLeave = true;
       try {
         const blob = new Blob([JSON.stringify({})], { type: "application/json" });
         if (navigator.sendBeacon) {
@@ -1907,18 +1914,21 @@ function LobbyPage() {
     const handleOnline = () => {
       refresh();
     };
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("beforeunload", sendLeave);
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "hidden") {
-        sendLeave();
-      } else if (document.visibilityState === "visible") {
-        refresh();
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        roomsApi.heartbeat(pollRoomId, myId).then(() => refresh()).catch(() => {
+        });
       }
-    });
+    };
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("pagehide", sendLeave);
+    window.addEventListener("beforeunload", sendLeave);
+    document.addEventListener("visibilitychange", handleVisibility);
     return () => {
       window.removeEventListener("online", handleOnline);
+      window.removeEventListener("pagehide", sendLeave);
       window.removeEventListener("beforeunload", sendLeave);
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, [pollRoomId, session.session?.playerId, refresh]);
   reactExports.useEffect(() => {
@@ -1973,6 +1983,16 @@ function LobbyPage() {
       navigate(ROUTES.game(roomId), { replace: true });
     }
   }, [room, navigate, roomId]);
+  reactExports.useEffect(() => {
+    if (optimisticReady === null) return;
+    const myId = session.session?.playerId;
+    if (!myId) return;
+    const me = room?.members?.find((m) => m.id === myId);
+    if (!me) return;
+    if (!!me.isReady === optimisticReady) {
+      setOptimisticReady(null);
+    }
+  }, [room?.members, session.session?.playerId, optimisticReady]);
   const offlineAtRef = reactExports.useRef(null);
   reactExports.useEffect(() => {
     if (!room || !session.session?.playerId) return;
@@ -2011,11 +2031,13 @@ function LobbyPage() {
     if (!myId || !roomId) return;
     const me = members.find((m) => m.id === myId);
     const nextIsReady = me ? !me.isReady : true;
+    setOptimisticReady(nextIsReady);
     audio.playSfx("buttonClick");
     try {
       await roomsApi.setReady(roomId, myId, nextIsReady);
       refresh();
     } catch (e) {
+      setOptimisticReady(me?.isReady ?? false);
       toast.error(e.message || "Không cập nhật được trạng thái sẵn sàng.");
     }
   }, [audio, roomId, session.session, members, refresh, toast]);
@@ -2264,7 +2286,7 @@ function LobbyPage() {
     roomError && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lobby-error", role: "alert", children: String(roomError.message || roomError) })
   ] });
 }
-const GamePage = reactExports.lazy(() => __vitePreload(() => import("./GamePage-DUZ0VYMW.js"), true ? __vite__mapDeps([0,1,2,3,4]) : void 0));
+const GamePage = reactExports.lazy(() => __vitePreload(() => import("./GamePage-BpRIIh7o.js"), true ? __vite__mapDeps([0,1,2,3,4]) : void 0));
 function App() {
   const location = useLocation();
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(ErrorBoundary, { children: [

@@ -89,6 +89,12 @@ export default function LobbyPage() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const pickerAnchorRef = useRef(null);
 
+  // Optimistic override for the local player's ready state. The polling
+  // loop refreshes room.members every 2.5s which is too slow for an
+  // instant UI response. We patch the merge above with this value and let
+  // the next poll confirm it.
+  const [optimisticReady, setOptimisticReady] = useState(null);
+
   const deckAnimation = useDeckAnimation({ cardImageUrls: CARD_URLS });
 
   const roomId = session.session?.roomId;
@@ -118,7 +124,11 @@ export default function LobbyPage() {
     const list = room?.members || [];
     const merged = list.map((m) => {
       if (m.id === myPlayerId) {
-        return { ...m, avatar: localAvatar, isHost: myIsHost };
+        // Optimistic ready overlay — when the user clicks "Sẵn sàng" we
+        // patch the merged member immediately. The next poll will overwrite
+        // this with the server-truthy value.
+        const overlay = optimisticReady !== null ? { isReady: optimisticReady } : {};
+        return { ...m, avatar: localAvatar, isHost: myIsHost, ...overlay };
       }
       return m;
     });
@@ -128,11 +138,12 @@ export default function LobbyPage() {
         id: myPlayerId,
         name: session.session?.playerName || "Bạn",
         isHost: !!session.session?.isHost,
+        isReady: !!optimisticReady,
         joinedAt: new Date().toISOString(),
       });
     }
     return merged;
-  }, [room, localAvatar, myIsHost, myPlayerId, isPending, session.session?.playerName]);
+  }, [room, localAvatar, myIsHost, myPlayerId, isPending, session.session?.playerName, optimisticReady]);
 
   // Redirect when session is missing. We read the raw session from storage as
   // a fallback because `useSession()` may not have flushed its state yet on
@@ -147,9 +158,12 @@ export default function LobbyPage() {
   }, [session.session, location.pathname, navigate]);
 
   // ---------------------------------------------------------------------
-  // Heartbeat — every 8s ping /api/rooms/{id}/heartbeat so the server knows
-  // this tab is alive. Two missed beats (server offline window = 20s) flips
-  // us to IsOnline=false and the polling loop will then stop returning us.
+  // Heartbeat — every 15s ping /api/rooms/{id}/heartbeat so the server knows
+  // this tab is alive. The server's offline window is 35s (more than 2 missed
+  // beats) so a brief tab switch can't kick the player out. We also pause
+  // heartbeat while the tab is hidden (Page Visibility API) to cut bandwidth
+  // when the user is looking at another tab — a clear win because most
+  // players will have Discord/Spotify in the background.
   // ---------------------------------------------------------------------
   useEffect(() => {
     if (!pollRoomId) return undefined;
@@ -159,6 +173,7 @@ export default function LobbyPage() {
     let cancelled = false;
     const ping = async () => {
       if (cancelled) return;
+      if (document.visibilityState !== "visible") return; // skip while hidden
       try {
         await roomsApi.heartbeat(pollRoomId, myId);
       } catch (_) {
@@ -169,7 +184,7 @@ export default function LobbyPage() {
     // Fire one immediately so the server flips us back to IsOnline=true
     // when we re-open the tab.
     ping();
-    const id = setInterval(ping, 8000);
+    const id = setInterval(ping, 15000);
     return () => {
       cancelled = true;
       clearInterval(id);
@@ -177,24 +192,30 @@ export default function LobbyPage() {
   }, [pollRoomId, session.session?.playerId]);
 
   // ---------------------------------------------------------------------
-  // Online guard — if the user closes the tab, loses network, or backgrounds
-  // the window long enough, both:
-  //   - navigator.onLine === false
-  //   - document.visibilityState === "hidden"
-  // …will fire. We post one explicit leave so the seat is freed instantly
-  // instead of waiting for the 20s server-side prune.
+  // Online guard — differentiate "user switched tab" from "user closed tab".
+  //
+  //   visibilitychange → "hidden": the user *might* still be on the site,
+  //     just looking at another tab. We DO NOT leave. Heartbeat (see above)
+  //     self-pauses while hidden, so the server will still see us as online
+  //     for the duration they're actively on our tab.
+  //
+  //   pagehide / beforeunload: the browser is tearing the page down. We
+  //     fire one sendBeacon so the seat is freed instantly instead of waiting
+  //     for the 35s server-side prune. sendBeacon is the only reliable request
+  //     during unload — fetch with keepalive also works but is less reliable
+  //     on mobile.
   // ---------------------------------------------------------------------
   useEffect(() => {
     if (!pollRoomId) return undefined;
     const myId = session.session?.playerId;
     if (!myId) return undefined;
     const leaveUrl = `${API_BASE_URL}/api/rooms/${pollRoomId}/members/${myId}/leave`;
+    let sentLeave = false;
     const sendLeave = () => {
+      if (sentLeave) return;
+      sentLeave = true;
       try {
         const blob = new Blob([JSON.stringify({})], { type: "application/json" });
-        // navigator.sendBeacon is the only reliable way to fire a request on
-        // unload — fetch() with keepalive also works but is less universally
-        // supported on mobile browsers.
         if (navigator.sendBeacon) {
           navigator.sendBeacon(leaveUrl, blob);
         }
@@ -204,18 +225,26 @@ export default function LobbyPage() {
       // Came back online — refresh immediately so we reappear in the list.
       refresh();
     };
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("beforeunload", sendLeave);
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "hidden") {
-        sendLeave();
-      } else if (document.visibilityState === "visible") {
-        refresh();
+    const handleVisibility = () => {
+      // No leave on hidden — heartbeat pauses and resumes on its own.
+      // Re-ping immediately when we come back so the server doesn't time us out.
+      if (document.visibilityState === "visible") {
+        roomsApi
+          .heartbeat(pollRoomId, myId)
+          .then(() => refresh())
+          .catch(() => {});
       }
-    });
+    };
+    window.addEventListener("online", handleOnline);
+    // pagehide fires more reliably than beforeunload on mobile (Safari especially).
+    window.addEventListener("pagehide", sendLeave);
+    window.addEventListener("beforeunload", sendLeave);
+    document.addEventListener("visibilitychange", handleVisibility);
     return () => {
       window.removeEventListener("online", handleOnline);
+      window.removeEventListener("pagehide", sendLeave);
       window.removeEventListener("beforeunload", sendLeave);
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, [pollRoomId, session.session?.playerId, refresh]);
 
@@ -276,6 +305,21 @@ export default function LobbyPage() {
     }
   }, [room, navigate, roomId]);
 
+  // Clear the optimistic overlay once the server snapshot agrees. This way
+  // we get an immediate UI response when the user clicks, but we don't keep
+  // patching the merged member forever if the response was lost — the next
+  // successful poll will reconcile.
+  useEffect(() => {
+    if (optimisticReady === null) return;
+    const myId = session.session?.playerId;
+    if (!myId) return;
+    const me = room?.members?.find((m) => m.id === myId);
+    if (!me) return;
+    if (!!me.isReady === optimisticReady) {
+      setOptimisticReady(null);
+    }
+  }, [room?.members, session.session?.playerId, optimisticReady]);
+
   // ---------------------------------------------------------------------
   // Auto-leave — if the server snapshot no longer contains our player id
   // (either because we were kicked, the room was deleted, or our tab was
@@ -328,11 +372,16 @@ export default function LobbyPage() {
     if (!myId || !roomId) return;
     const me = members.find((m) => m.id === myId);
     const nextIsReady = me ? !me.isReady : true;
+    // Optimistic UI: flip immediately so the seat re-renders without waiting
+    // for the 2.5s polling refresh.
+    setOptimisticReady(nextIsReady);
     audio.playSfx("buttonClick");
     try {
       await roomsApi.setReady(roomId, myId, nextIsReady);
       refresh();
     } catch (e) {
+      // Revert on error.
+      setOptimisticReady(me?.isReady ?? false);
       toast.error(e.message || "Không cập nhật được trạng thái sẵn sàng.");
     }
   }, [audio, roomId, session.session, members, refresh, toast]);
