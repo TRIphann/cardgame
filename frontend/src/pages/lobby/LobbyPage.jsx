@@ -91,7 +91,8 @@ export default function LobbyPage() {
   const deckAnimation = useDeckAnimation({ cardImageUrls: CARD_URLS });
 
   const roomId = session.session?.roomId;
-  const isPending = roomId?.startsWith?.("pending-");
+  // Only poll for real room IDs, not pending placeholders
+  const isPending = roomId && typeof roomId === "string" && roomId.startsWith("pending-");
   const { room, error: roomError, refresh } = useRoomPolling(isPending ? null : roomId);
 
   // NOTE: displayCode and showCode are defined AFTER room is declared.

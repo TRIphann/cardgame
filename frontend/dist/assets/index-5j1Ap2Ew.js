@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/GamePage-A0ySWtId.js","assets/react-BhVOh7S1.js","assets/router-CJAaEV1m.js","assets/react-dom-BqzW1rgF.js","assets/vendor-Bz22r_8Z.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/GamePage-BUbjVIt0.js","assets/react-BhVOh7S1.js","assets/router-CJAaEV1m.js","assets/react-dom-BqzW1rgF.js","assets/vendor-Bz22r_8Z.js"])))=>i.map(i=>d[i]);
 var __defProp = Object.defineProperty;
 var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
 var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
@@ -1260,15 +1260,16 @@ const N = 4;
 const FANOUT_ORDER = [3, 2, 1, 0];
 const FANOUT_STAGGER_MS = 180;
 const FANIN_STAGGER_MS = 180;
-const ORBIT_RX = 200;
-const ORBIT_RY = 100;
+const ORBIT_RX = 180;
+const ORBIT_RY = 140;
+const ORBIT_Y_OFFSET = 60;
 const ORBIT_MS = 12e3;
 const PHASE_OFFSET = Math.PI * 2 / N;
 const WIGGLE_DELAYS = [5e3, 4e3, 2e3];
 const FLIGHT_OUT_MS = 1e3;
 const FLIGHT_BACK_MS = 1e3;
 const REVEAL_HOLD_MS = 2e3;
-const REVEAL_THRESH = 0.6;
+const REVEAL_THRESH = 0.55;
 function easeOutCubic(t) {
   return 1 - Math.pow(1 - t, 3);
 }
@@ -1278,6 +1279,8 @@ function easeInOutCubic(t) {
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
 }
+const FLAT_RX = 58;
+const FLAT_RZ = -9;
 function makeTick({
   flyingCardRefs,
   revealedSetRef,
@@ -1292,7 +1295,7 @@ function makeTick({
   const FANIN_ORDER = [0, 1, 2, 3];
   const tickFanIn = (now) => {
     const el = now - startMs;
-    const totalDuration = flightBackMs + (N - 1) * FANIN_STAGGER_MS + 200;
+    const totalDuration = flightBackMs + (N - 1) * FANIN_STAGGER_MS + 300;
     if (el >= totalDuration) {
       cancelAnimationFrame(rafId);
       for (let k = 0; k < N; k += 1) {
@@ -1323,18 +1326,17 @@ function makeTick({
       const rx = ORBIT_RX * (1 - ek);
       const ry = ORBIT_RY * (1 - ek);
       const fx = Math.sin(ta) * rx;
-      const fy = -Math.cos(ta) * ry;
+      const fy = -Math.cos(ta) * ry + ORBIT_Y_OFFSET * (1 - ek);
       const fsc = 1;
-      const rxAngle = ek * 58;
-      const ryAngle = ta * 15;
-      const rzAngle = -9 + ta * 10;
-      nd.style.transform = `translate(calc(-50% + ${fx.toFixed(1)}px), calc(-50% + ${fy.toFixed(1)}px)) rotateX(${rxAngle.toFixed(1)}deg) rotateY(${ryAngle.toFixed(1)}deg) rotateZ(${rzAngle.toFixed(1)}deg) scale(${fsc.toFixed(3)})`;
+      const rxAngle = FLAT_RX * ek;
+      const rzAngle = FLAT_RZ + ta * 8 * ek;
+      nd.style.transform = `translate(calc(-50% + ${fx.toFixed(1)}px), calc(-50% + ${fy.toFixed(1)}px)) rotateX(${rxAngle.toFixed(1)}deg) rotateZ(${rzAngle.toFixed(1)}deg) scale(${fsc.toFixed(3)})`;
       let opacity = 1;
-      if (prog > 0.6) {
-        opacity = 1 - (prog - 0.6) / 0.4;
+      if (prog > 0.85) {
+        opacity = 1 - (prog - 0.85) / 0.15;
       }
       nd.style.opacity = String(Math.max(0, opacity));
-      nd.style.zIndex = String(Math.round(100 - prog * 15));
+      nd.style.zIndex = String(Math.round(100 - (1 - prog) * 10));
     }
     rafId = requestAnimationFrame(tickFanIn);
   };
@@ -1348,10 +1350,7 @@ function makeTick({
       const delay = slot * FANOUT_STAGGER_MS;
       const cardEl = el - delay;
       if (cardEl < 0) {
-        const ta2 = k * PHASE_OFFSET;
-        const ryAngle2 = ta2 * 15;
-        const rzAngle2 = -9 + ta2 * 10;
-        nd.style.transform = `translate(calc(-50% + 0px), calc(-50% + 0px)) rotateX(58deg) rotateY(${ryAngle2.toFixed(1)}deg) rotateZ(${rzAngle2.toFixed(1)}deg) scale(0.3)`;
+        nd.style.transform = `translate(calc(-50% + 0px), calc(-50% + ${ORBIT_Y_OFFSET.toFixed(1)}px)) rotateX(${FLAT_RX}deg) rotateZ(${FLAT_RZ}deg) scale(0.3)`;
         nd.style.opacity = "0";
         nd.style.zIndex = String(80 + k);
         continue;
@@ -1363,12 +1362,11 @@ function makeTick({
       const rx = 20 + ek * (ORBIT_RX - 20);
       const ry = 15 + ek * (ORBIT_RY - 15);
       const fx = Math.sin(sa + (ta - sa) * ek) * rx;
-      const fy = -Math.cos(sa + (ta - sa) * ek) * ry;
+      const fy = -Math.cos(sa + (ta - sa) * ek) * ry + ORBIT_Y_OFFSET * ek;
       const fsc = 0.3 + ek * 0.7;
-      const rxAngle = 58 * (1 - ek);
-      const ryAngle = ta * 15 * (1 - ek);
-      const rzAngle = (-9 + ta * 10) * (1 - ek);
-      nd.style.transform = `translate(calc(-50% + ${fx.toFixed(1)}px), calc(-50% + ${fy.toFixed(1)}px)) rotateX(${rxAngle.toFixed(1)}deg) rotateY(${ryAngle.toFixed(1)}deg) rotateZ(${rzAngle.toFixed(1)}deg) scale(${fsc.toFixed(3)})`;
+      const rxAngle = FLAT_RX * (1 - ek);
+      const rzAngle = FLAT_RZ * (1 - ek) + ta * 8 * (1 - ek);
+      nd.style.transform = `translate(calc(-50% + ${fx.toFixed(1)}px), calc(-50% + ${fy.toFixed(1)}px)) rotateX(${rxAngle.toFixed(1)}deg) rotateZ(${rzAngle.toFixed(1)}deg) scale(${fsc.toFixed(3)})`;
       nd.style.opacity = String(Math.min(1, 0.1 + ek * 0.9));
       nd.style.zIndex = String(80 + k);
     }
@@ -1392,13 +1390,12 @@ function makeTick({
       const ba = el / orbitMs * Math.PI * 2;
       const a = ba + k * PHASE_OFFSET;
       const ox = Math.sin(a) * ORBIT_RX;
-      const oy = -Math.cos(a) * ORBIT_RY;
+      const oy = -Math.cos(a) * ORBIT_RY + ORBIT_Y_OFFSET;
       const dp = Math.cos(a);
       const osc = 0.92 + 0.18 * (dp + 1) / 2;
-      const tX = dp * 5;
-      const tY = Math.sin(a) * 8;
-      const tZ = Math.sin(a) * 6;
-      nd.style.transform = `translate(calc(-50% + ${ox.toFixed(1)}px), calc(-50% + ${oy.toFixed(1)}px)) rotateX(${tX.toFixed(1)}deg) rotateY(${tY.toFixed(1)}deg) rotateZ(${tZ.toFixed(1)}deg) scale(${osc.toFixed(3)})`;
+      const tX = dp * 4;
+      const tZ = Math.sin(a) * 5;
+      nd.style.transform = `translate(calc(-50% + ${ox.toFixed(1)}px), calc(-50% + ${oy.toFixed(1)}px)) rotateX(${tX.toFixed(1)}deg) rotateZ(${tZ.toFixed(1)}deg) scale(${osc.toFixed(3)})`;
       nd.style.zIndex = String(100 + Math.round(dp * 10));
       nd.style.opacity = "1";
       if (dp > REVEAL_THRESH && !revealedSetRef.current.has(k)) {
@@ -1796,7 +1793,7 @@ function LobbyPage() {
   const pickerAnchorRef = reactExports.useRef(null);
   const deckAnimation = useDeckAnimation({ cardImageUrls: CARD_URLS });
   const roomId = session.session?.roomId;
-  const isPending = roomId?.startsWith?.("pending-");
+  const isPending = roomId && typeof roomId === "string" && roomId.startsWith("pending-");
   const { room, error: roomError, refresh } = useRoomPolling(isPending ? null : roomId);
   const displayCode = room?.code || session.session?.roomCode || "";
   const showCode = codeVisible && displayCode.length > 0;
@@ -2124,7 +2121,7 @@ function LobbyPage() {
     roomError && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lobby-error", role: "alert", children: String(roomError.message || roomError) })
   ] });
 }
-const GamePage = reactExports.lazy(() => __vitePreload(() => import("./GamePage-A0ySWtId.js"), true ? __vite__mapDeps([0,1,2,3,4]) : void 0));
+const GamePage = reactExports.lazy(() => __vitePreload(() => import("./GamePage-BUbjVIt0.js"), true ? __vite__mapDeps([0,1,2,3,4]) : void 0));
 function App() {
   const location = useLocation();
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(ErrorBoundary, { children: [
