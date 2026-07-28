@@ -104,10 +104,30 @@ export const roomsApi = {
   get(roomId) {
     return jsonRequest(`/api/rooms/${roomId}`);
   },
+  // Snapshot endpoint also prunes stale members server-side. Used by the
+  // polling loop instead of /api/rooms/{id} so we get fresh IsOnline flags.
+  snapshot(roomId) {
+    return jsonRequest(`/api/rooms/${roomId}/snapshot`);
+  },
   kick(roomId, hostId, targetMemberId) {
     return jsonRequest(`/api/rooms/${roomId}/kick`, {
       method: "POST",
       body: JSON.stringify({ hostId, targetMemberId }),
+    });
+  },
+  setReady(roomId, memberId, isReady) {
+    return jsonRequest(`/api/rooms/${roomId}/ready`, {
+      method: "POST",
+      body: JSON.stringify({ memberId, isReady }),
+    });
+  },
+  heartbeat(roomId, memberId) {
+    // Fire-and-forget on the caller side; we still wrap it in jsonRequest
+    // so the abort/timeout logic is reused. The promise resolves with
+    // { memberId, isOnline } on success and rejects with an Error otherwise.
+    return jsonRequest(`/api/rooms/${roomId}/heartbeat`, {
+      method: "POST",
+      body: JSON.stringify({ memberId }),
     });
   },
 };

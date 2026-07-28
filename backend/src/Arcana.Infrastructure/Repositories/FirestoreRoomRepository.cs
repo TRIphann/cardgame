@@ -141,6 +141,78 @@ public class FirestoreRoomRepository : IRoomRepository
         });
     }
 
+    public async Task<RoomMember?> UpdateMemberFieldAsync(
+        string roomId,
+        string memberId,
+        bool? isReady,
+        DateTime? lastSeenAt,
+        CancellationToken ct = default)
+    {
+        var roomRef = _db.Collection(RoomsCollection).Document(roomId);
+        var memberRef = roomRef.Collection("members").Document(memberId);
+
+        // Read inside a transaction so we don't clobber concurrent writes
+        // (heartbeat + ready toggle racing on the same member).
+        return await _db.RunTransactionAsync(async tx =>
+        {
+            // Reads first.
+            var memberSnap = await tx.GetSnapshotAsync(memberRef);
+            if (!memberSnap.Exists) return null;
+
+            var current = memberSnap.ToDictionary();
+            var updated = new Dictionary<string, object>(current);
+            if (isReady.HasValue) updated["isReady"] = isReady.Value;
+            // Every call updates lastSeenAt to "now" by default — that is the
+            // heartbeat signal. Callers pass an explicit value (or null) for
+            // transitions like "explicitly went offline".
+            updated["lastSeenAt"] = Timestamp.FromDateTime((lastSeenAt ?? DateTime.UtcNow).ToUniversalTime());
+            updated["isOnline"] = true;
+
+            // Write after reads.
+            tx.Set(memberRef, updated);
+            return new RoomMember
+            {
+                Id = memberId,
+                Name = updated.TryGetValue("name", out var n) ? n as string ?? string.Empty : string.Empty,
+                IsHost = updated.TryGetValue("isHost", out var ih) && ih is bool ihb && ihb,
+                IsReady = updated.TryGetValue("isReady", out var ir) && ir is bool irb && irb,
+                JoinedAt = updated.TryGetValue("joinedAt", out var ja) && ja is Timestamp jts ? jts.ToDateTime().ToUniversalTime() : DateTime.UtcNow,
+                LastSeenAt = updated.TryGetValue("lastSeenAt", out var ls) && ls is Timestamp lts ? lts.ToDateTime().ToUniversalTime() : DateTime.UtcNow,
+                IsOnline = true,
+            };
+        });
+    }
+
+    public async Task<int> MarkStaleMembersOfflineAsync(string roomId, TimeSpan offlineAfter, CancellationToken ct = default)
+    {
+        var roomRef = _db.Collection(RoomsCollection).Document(roomId);
+        var membersRef = roomRef.Collection("members");
+
+        var snapshot = await membersRef.GetSnapshotAsync(ct);
+        var cutoff = DateTime.UtcNow - offlineAfter;
+        var batch = _db.StartBatch();
+        var touched = 0;
+        foreach (var doc in snapshot.Documents)
+        {
+            var data = doc.ToDictionary();
+            var isOnline = data.TryGetValue("isOnline", out var io) && io is bool iob && iob;
+            if (!isOnline) continue;
+            var lastSeen = data.TryGetValue("lastSeenAt", out var ls) && ls is Timestamp lts
+                ? lts.ToDateTime().ToUniversalTime()
+                : DateTime.UtcNow;
+            if (lastSeen >= cutoff) continue;
+
+            var updated = new Dictionary<string, object>(data) { ["isOnline"] = false };
+            batch.Update(doc.Reference, updated);
+            touched += 1;
+        }
+        if (touched > 0)
+        {
+            await batch.CommitAsync(ct);
+        }
+        return touched;
+    }
+
     private static Dictionary<string, object> BuildRoomDoc(Room room) => new()
     {
         ["code"] = room.Code,
@@ -157,6 +229,8 @@ public class FirestoreRoomRepository : IRoomRepository
         ["isHost"] = member.IsHost,
         ["isReady"] = member.IsReady,
         ["joinedAt"] = Timestamp.FromDateTime(member.JoinedAt.ToUniversalTime()),
+        ["lastSeenAt"] = Timestamp.FromDateTime(member.LastSeenAt.ToUniversalTime()),
+        ["isOnline"] = member.IsOnline,
     };
 
     private static async Task<Room> MapRoomAsync(DocumentSnapshot snapshot, CancellationToken ct, QuerySnapshot? membersSnapshot = null)
@@ -185,6 +259,8 @@ public class FirestoreRoomRepository : IRoomRepository
                 IsHost = md.TryGetValue("isHost", out var ih) && ih is bool ihb && ihb,
                 IsReady = md.TryGetValue("isReady", out var ir) && ir is bool irb && irb,
                 JoinedAt = md.TryGetValue("joinedAt", out var ja) && ja is Timestamp jts ? jts.ToDateTime().ToUniversalTime() : DateTime.UtcNow,
+                LastSeenAt = md.TryGetValue("lastSeenAt", out var ls) && ls is Timestamp lts ? lts.ToDateTime().ToUniversalTime() : DateTime.UtcNow,
+                IsOnline = md.TryGetValue("isOnline", out var io) && io is bool iob && iob,
             });
         }
         return room;

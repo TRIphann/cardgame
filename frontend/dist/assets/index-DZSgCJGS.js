@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/GamePage-Ca8smGKj.js","assets/react-BhVOh7S1.js","assets/router-CJAaEV1m.js","assets/react-dom-BqzW1rgF.js","assets/vendor-Bz22r_8Z.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/GamePage-DUZ0VYMW.js","assets/react-BhVOh7S1.js","assets/router-CJAaEV1m.js","assets/react-dom-BqzW1rgF.js","assets/vendor-Bz22r_8Z.js"])))=>i.map(i=>d[i]);
 var __defProp = Object.defineProperty;
 var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
 var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
@@ -792,14 +792,30 @@ const roomsApi = {
   get(roomId) {
     return jsonRequest(`/api/rooms/${roomId}`);
   },
+  // Snapshot endpoint also prunes stale members server-side. Used by the
+  // polling loop instead of /api/rooms/{id} so we get fresh IsOnline flags.
+  snapshot(roomId) {
+    return jsonRequest(`/api/rooms/${roomId}/snapshot`);
+  },
   kick(roomId, hostId, targetMemberId) {
     return jsonRequest(`/api/rooms/${roomId}/kick`, {
       method: "POST",
       body: JSON.stringify({ hostId, targetMemberId })
     });
+  },
+  setReady(roomId, memberId, isReady) {
+    return jsonRequest(`/api/rooms/${roomId}/ready`, {
+      method: "POST",
+      body: JSON.stringify({ memberId, isReady })
+    });
+  },
+  heartbeat(roomId, memberId) {
+    return jsonRequest(`/api/rooms/${roomId}/heartbeat`, {
+      method: "POST",
+      body: JSON.stringify({ memberId })
+    });
   }
 };
-const getRoom = roomsApi.get;
 const FAST_NAV_TIMEOUT_MS = 900;
 const PLACEHOLDER_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 function placeholderCode() {
@@ -1241,7 +1257,7 @@ function useRoomPolling(roomId, { enabled = true } = {}) {
     const currentRoomId = roomIdRef.current;
     if (!currentRoomId || !enabledRef.current) return;
     try {
-      const body = await getRoom(currentRoomId);
+      const body = await roomsApi.snapshot(currentRoomId);
       const next = body.room ?? body;
       setRoom(next);
       setError(null);
@@ -1598,33 +1614,30 @@ function FlyingCards({ refs, faceUrls, backUrl }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flying-cards-container", children: items });
 }
 const SLOTS_PER_SIDE = 4;
-function Seats({ side, members, myId, onPickAvatar }) {
+function Seats({ side, members, myId, onPickAvatar, onToggleReady }) {
   const all = Array.isArray(members) ? members : [];
+  const host = all.find((m) => m.isHost) || null;
+  const others = all.filter((m) => !m.isHost);
   const leftMembers = [];
   const rightMembers = [];
-  for (let i = 0; i < all.length; i += 1) {
-    const m = all[i];
-    if (m.isHost) {
-      leftMembers.push(m);
-    } else {
-      const idx = i - (leftMembers.length > 0 ? 1 : 0);
-      if (idx % 2 === 0) leftMembers.push(m);
-      else rightMembers.push(m);
-    }
+  for (let i = 0; i < others.length; i += 1) {
+    if (i % 2 === 0) leftMembers.push(others[i]);
+    else rightMembers.push(others[i]);
   }
-  const list = side === "left" ? leftMembers.slice(0, SLOTS_PER_SIDE) : rightMembers.slice(0, SLOTS_PER_SIDE);
+  const list = side === "left" ? [host, ...leftMembers].filter(Boolean).slice(0, SLOTS_PER_SIDE) : rightMembers.slice(0, SLOTS_PER_SIDE);
   return /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: `seats-list seats-${side}-list`, role: "list", children: list.map((m, i) => {
     const isMe = m.id === myId;
     const avatarBg = m.avatar?.color || "linear-gradient(135deg,#2a2f6a,#16193d)";
     const avatarIcon = m.avatar?.icon || "♟";
+    const isReady = m.status === "ready";
     return /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "li",
       {
-        className: `seat ${isMe ? "seat-me" : ""} ${m.isHost ? "seat-host" : ""}`,
-        "aria-label": `${m.name}${m.isHost ? " (chủ phòng)" : ""}`,
+        className: `seat ${isMe ? "seat-me" : ""} ${m.isHost ? "seat-host" : ""} ${isReady ? "seat-ready" : ""}`,
+        "aria-label": `${m.name}${m.isHost ? " (chủ phòng)" : ""}${isReady ? " - sẵn sàng" : ""}`,
         style: { animationDelay: `${i * 60}ms` },
         children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(
             "button",
             {
               type: "button",
@@ -1634,7 +1647,10 @@ function Seats({ side, members, myId, onPickAvatar }) {
               disabled: !isMe,
               "aria-label": isMe ? "Đổi avatar của bạn" : `Avatar của ${m.name}`,
               title: isMe ? "Đổi avatar" : void 0,
-              children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "seat-avatar__icon", "aria-hidden": "true", children: avatarIcon })
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "seat-avatar__icon", "aria-hidden": "true", children: avatarIcon }),
+                isReady && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "seat-ready-badge", "aria-hidden": "true", children: "✓" })
+              ]
             }
           ),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "seat-info", children: [
@@ -1642,8 +1658,18 @@ function Seats({ side, members, myId, onPickAvatar }) {
               m.name,
               isMe ? " (bạn)" : ""
             ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "seat-tag", children: m.isHost ? "Chủ phòng" : m.status === "ready" ? "Sẵn sàng" : "Đang chờ" })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "seat-tag", children: m.isHost ? "Chủ phòng" : isReady ? "Sẵn sàng" : "Đang chờ" })
           ] }),
+          !m.isHost && isMe && onToggleReady && /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              className: `seat-ready-btn ${isReady ? "is-ready" : ""}`,
+              onClick: () => onToggleReady(m.id),
+              "aria-pressed": isReady,
+              children: isReady ? "Hủy sẵn sàng" : "Sẵn sàng"
+            }
+          ),
           m.isHost && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "seat-crown", "aria-hidden": "true", children: "👑" })
         ]
       },
@@ -1846,6 +1872,56 @@ function LobbyPage() {
     }
   }, [session.session, location.pathname, navigate]);
   reactExports.useEffect(() => {
+    if (!pollRoomId) return void 0;
+    const myId = session.session?.playerId;
+    if (!myId) return void 0;
+    let cancelled = false;
+    const ping = async () => {
+      if (cancelled) return;
+      try {
+        await roomsApi.heartbeat(pollRoomId, myId);
+      } catch (_) {
+      }
+    };
+    ping();
+    const id = setInterval(ping, 8e3);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [pollRoomId, session.session?.playerId]);
+  reactExports.useEffect(() => {
+    if (!pollRoomId) return void 0;
+    const myId = session.session?.playerId;
+    if (!myId) return void 0;
+    const leaveUrl = `${API_BASE_URL}/api/rooms/${pollRoomId}/members/${myId}/leave`;
+    const sendLeave = () => {
+      try {
+        const blob = new Blob([JSON.stringify({})], { type: "application/json" });
+        if (navigator.sendBeacon) {
+          navigator.sendBeacon(leaveUrl, blob);
+        }
+      } catch (_) {
+      }
+    };
+    const handleOnline = () => {
+      refresh();
+    };
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("beforeunload", sendLeave);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") {
+        sendLeave();
+      } else if (document.visibilityState === "visible") {
+        refresh();
+      }
+    });
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("beforeunload", sendLeave);
+    };
+  }, [pollRoomId, session.session?.playerId, refresh]);
+  reactExports.useEffect(() => {
     const myMember2 = members?.find((m) => m.id === session.session?.playerId);
     const isHost2 = session.session?.isHost && myMember2?.isHost;
     if (!room || !isHost2) {
@@ -1897,6 +1973,21 @@ function LobbyPage() {
       navigate(ROUTES.game(roomId), { replace: true });
     }
   }, [room, navigate, roomId]);
+  const offlineAtRef = reactExports.useRef(null);
+  reactExports.useEffect(() => {
+    if (!room || !session.session?.playerId) return;
+    const me = room.members.find((m) => m.id === session.session.playerId);
+    if (me) {
+      offlineAtRef.current = null;
+      return;
+    }
+    if (!offlineAtRef.current) offlineAtRef.current = Date.now();
+    const stillOfflineAfter = Date.now() - offlineAtRef.current > 3e3;
+    if (stillOfflineAfter) {
+      session.clear();
+      navigate(ROUTES.landing, { replace: true });
+    }
+  }, [room, session.session, session, navigate]);
   const handleCopy = reactExports.useCallback(async () => {
     const code = room?.code || session.session?.roomCode;
     if (!code) return;
@@ -1915,8 +2006,31 @@ function LobbyPage() {
     session.clear();
     navigate(ROUTES.landing);
   }, [audio, session, navigate]);
+  const handleToggleReady = reactExports.useCallback(async () => {
+    const myId = session.session?.playerId;
+    if (!myId || !roomId) return;
+    const me = members.find((m) => m.id === myId);
+    const nextIsReady = me ? !me.isReady : true;
+    audio.playSfx("buttonClick");
+    try {
+      await roomsApi.setReady(roomId, myId, nextIsReady);
+      refresh();
+    } catch (e) {
+      toast.error(e.message || "Không cập nhật được trạng thái sẵn sàng.");
+    }
+  }, [audio, roomId, session.session, members, refresh, toast]);
+  const allOtherPlayersReady = reactExports.useMemo(() => {
+    if (!members || members.length <= 1) return false;
+    const nonHost = members.filter((m) => !m.isHost);
+    if (nonHost.length === 0) return false;
+    return nonHost.every((m) => m.isReady);
+  }, [members]);
   const handleStart = reactExports.useCallback(async () => {
     audio.playSfx("buttonClick");
+    if (!allOtherPlayersReady) {
+      toast.error("Tất cả người chơi phải sẵn sàng trước khi bắt đầu.");
+      return;
+    }
     try {
       const res = await fetch(`/api/rooms/${roomId}/start`, {
         method: "POST",
@@ -1928,7 +2042,7 @@ function LobbyPage() {
     } catch (e) {
       toast.error(e.message || "Không bắt đầu được ván.");
     }
-  }, [audio, roomId, session.session, refresh, toast]);
+  }, [audio, roomId, session.session, refresh, toast, allOtherPlayersReady]);
   const handlePrevMode = reactExports.useCallback(() => {
     audio.playSfx("buttonClick");
     setModeIndex((i) => (i - 1 + GAME_MODES.length) % GAME_MODES.length);
@@ -1954,7 +2068,7 @@ function LobbyPage() {
     [members, session.session]
   );
   const isHost = myMember?.isHost || isPending && session.session?.isHost;
-  const canStart = isHost && room && members?.length >= 2 && room.status === "waiting";
+  const canStart = isHost && room && room.status === "waiting" && allOtherPlayersReady;
   const playerCount = Math.max(members?.length ?? 0, 1);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("main", { className: "lobby-page", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lobby-backdrop", "aria-hidden": "true", children: [
@@ -2049,7 +2163,8 @@ function LobbyPage() {
           side: "left",
           members,
           myId: session.session?.playerId,
-          onPickAvatar: () => setPickerOpen(true)
+          onPickAvatar: () => setPickerOpen(true),
+          onToggleReady: handleToggleReady
         }
       ) }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "deck-area", ref: pickerAnchorRef, children: [
@@ -2127,7 +2242,8 @@ function LobbyPage() {
           side: "right",
           members,
           myId: session.session?.playerId,
-          onPickAvatar: () => setPickerOpen(true)
+          onPickAvatar: () => setPickerOpen(true),
+          onToggleReady: handleToggleReady
         }
       ) })
     ] }),
@@ -2148,7 +2264,7 @@ function LobbyPage() {
     roomError && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lobby-error", role: "alert", children: String(roomError.message || roomError) })
   ] });
 }
-const GamePage = reactExports.lazy(() => __vitePreload(() => import("./GamePage-Ca8smGKj.js"), true ? __vite__mapDeps([0,1,2,3,4]) : void 0));
+const GamePage = reactExports.lazy(() => __vitePreload(() => import("./GamePage-DUZ0VYMW.js"), true ? __vite__mapDeps([0,1,2,3,4]) : void 0));
 function App() {
   const location = useLocation();
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(ErrorBoundary, { children: [

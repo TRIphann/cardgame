@@ -9,32 +9,32 @@
 //   members:   array of all room members
 //   myId:      current player id (so we can highlight "bạn")
 //   onPickAvatar(memberId): callback when the local player clicks their own avatar
+//   onToggleReady(memberId): callback when a non-host player presses "Sẵn sàng"
 
 import React from "react";
 
 const SLOTS_PER_SIDE = 4;
 
-export function Seats({ side, members, myId, onPickAvatar }) {
+export function Seats({ side, members, myId, onPickAvatar, onToggleReady }) {
   const all = Array.isArray(members) ? members : [];
-  // Host always lands on the left at slot 0. Other members are split by
-  // arrival order so we don't shuffle the UI every time someone joins.
+  // 1. Pull the host out first so they always own left slot 0.
+  // 2. Split remaining players round-robin into left/right so the count is
+  //    as balanced as possible (diff ≤ 1 between the two columns). With
+  //    ≤4 non-hosts we get 2/2, with 5 we get 3/2, with 6 we get 3/3, etc.
+  const host = all.find((m) => m.isHost) || null;
+  const others = all.filter((m) => !m.isHost);
+
   const leftMembers = [];
   const rightMembers = [];
-
-  for (let i = 0; i < all.length; i += 1) {
-    const m = all[i];
-    if (m.isHost) {
-      leftMembers.push(m);
-    } else {
-      // Alternate after the host: 1st non-host → left, 2nd → right, 3rd → left, …
-      const idx = i - (leftMembers.length > 0 ? 1 : 0);
-      if (idx % 2 === 0) leftMembers.push(m);
-      else rightMembers.push(m);
-    }
+  for (let i = 0; i < others.length; i += 1) {
+    if (i % 2 === 0) leftMembers.push(others[i]);
+    else rightMembers.push(others[i]);
   }
 
-  // Cap each side at 4. If the room ever exceeds 8 we keep the first 4 per side.
-  const list = side === "left" ? leftMembers.slice(0, SLOTS_PER_SIDE) : rightMembers.slice(0, SLOTS_PER_SIDE);
+  const list =
+    side === "left"
+      ? [host, ...leftMembers].filter(Boolean).slice(0, SLOTS_PER_SIDE)
+      : rightMembers.slice(0, SLOTS_PER_SIDE);
 
   return (
     <ul className={`seats-list seats-${side}-list`} role="list">
@@ -42,11 +42,12 @@ export function Seats({ side, members, myId, onPickAvatar }) {
         const isMe = m.id === myId;
         const avatarBg = m.avatar?.color || "linear-gradient(135deg,#2a2f6a,#16193d)";
         const avatarIcon = m.avatar?.icon || "♟";
+        const isReady = m.status === "ready";
         return (
           <li
             key={m.id}
-            className={`seat ${isMe ? "seat-me" : ""} ${m.isHost ? "seat-host" : ""}`}
-            aria-label={`${m.name}${m.isHost ? " (chủ phòng)" : ""}`}
+            className={`seat ${isMe ? "seat-me" : ""} ${m.isHost ? "seat-host" : ""} ${isReady ? "seat-ready" : ""}`}
+            aria-label={`${m.name}${m.isHost ? " (chủ phòng)" : ""}${isReady ? " - sẵn sàng" : ""}`}
             style={{ animationDelay: `${i * 60}ms` }}
           >
             <button
@@ -59,15 +60,27 @@ export function Seats({ side, members, myId, onPickAvatar }) {
               title={isMe ? "Đổi avatar" : undefined}
             >
               <span className="seat-avatar__icon" aria-hidden="true">{avatarIcon}</span>
+              {isReady && <span className="seat-ready-badge" aria-hidden="true">✓</span>}
             </button>
             <div className="seat-info">
               <span className="seat-name">
                 {m.name}{isMe ? " (bạn)" : ""}
               </span>
               <span className="seat-tag">
-                {m.isHost ? "Chủ phòng" : (m.status === "ready" ? "Sẵn sàng" : "Đang chờ")}
+                {m.isHost ? "Chủ phòng" : (isReady ? "Sẵn sàng" : "Đang chờ")}
               </span>
             </div>
+            {/* Only non-host players see the ready button */}
+            {!m.isHost && isMe && onToggleReady && (
+              <button
+                type="button"
+                className={`seat-ready-btn ${isReady ? "is-ready" : ""}`}
+                onClick={() => onToggleReady(m.id)}
+                aria-pressed={isReady}
+              >
+                {isReady ? "Hủy sẵn sàng" : "Sẵn sàng"}
+              </button>
+            )}
             {m.isHost && <span className="seat-crown" aria-hidden="true">👑</span>}
           </li>
         );

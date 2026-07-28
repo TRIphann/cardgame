@@ -11,6 +11,10 @@ public class RoomService : Abstractions.IRoomService
     // Code search space: 32^6 ≈ 1.07B. With 100k active rooms the collision probability
     // per attempt is ~9.3e-5. 16 attempts keeps the cumulative failure probability under 1.5e-3.
     private const int MaxCodeAttempts = 16;
+    // Heartbeat window: if no heartbeat in 20s, the member is marked offline.
+    // Heartbeat on the client fires every 8s, so 20s gives two missed beats
+    // before we declare the tab gone.
+    private static readonly TimeSpan OfflineAfter = TimeSpan.FromSeconds(20);
 
     private readonly IRoomRepository _repository;
     private readonly Abstractions.IInvitationCodeGenerator _codeGenerator;
@@ -111,6 +115,41 @@ public class RoomService : Abstractions.IRoomService
             throw new DomainException("member_not_found", "Thành viên không còn trong phòng.");
 
         return updated;
+    }
+
+    public async Task<RoomMember?> SetReadyAsync(string roomId, string memberId, bool isReady, CancellationToken ct = default)
+    {
+        var room = await _repository.GetByIdAsync(roomId, ct)
+            ?? throw new DomainException("room_not_found", "Phòng không tồn tại.");
+
+        var member = room.Members.FirstOrDefault(m => m.Id == memberId);
+        if (member is null)
+            throw new DomainException("member_not_found", "Bạn không còn trong phòng.");
+
+        // Host doesn't toggle ready — they start the game.
+        if (member.IsHost)
+            throw new DomainException("not_host", "Chủ phòng không cần xác nhận sẵn sàng.");
+
+        return await _repository.UpdateMemberFieldAsync(roomId, memberId, isReady, DateTime.UtcNow, ct);
+    }
+
+    public async Task<RoomMember?> HeartbeatAsync(string roomId, string memberId, CancellationToken ct = default)
+    {
+        // UpdateMemberFieldAsync also flips IsOnline=true as a side-effect of
+        // receiving a heartbeat, so a tab that briefly disconnected will be
+        // re-marked online as soon as it pings again.
+        return await _repository.UpdateMemberFieldAsync(roomId, memberId, null, DateTime.UtcNow, ct);
+    }
+
+    public async Task<int> PruneStaleMembersAsync(string roomId, CancellationToken ct = default)
+    {
+        return await _repository.MarkStaleMembersOfflineAsync(roomId, OfflineAfter, ct);
+    }
+
+    public async Task<Room?> GetRoomWithPruneAsync(string roomId, CancellationToken ct = default)
+    {
+        await _repository.MarkStaleMembersOfflineAsync(roomId, OfflineAfter, ct);
+        return await _repository.GetByIdAsync(roomId, ct);
     }
 
     private async Task<string> ClaimUniqueCodeAsync(string roomId, CancellationToken ct)

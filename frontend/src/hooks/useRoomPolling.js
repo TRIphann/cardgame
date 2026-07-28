@@ -3,7 +3,7 @@
 // refresh } and exposes a manual refresh function for "host starts game".
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getRoom } from "@shared/api/roomsApi.js";
+import { roomsApi } from "@shared/api/roomsApi.js";
 
 const POLL_INTERVAL_MS = 2500;
 
@@ -27,7 +27,9 @@ export function useRoomPolling(roomId, { enabled = true } = {}) {
     const currentRoomId = roomIdRef.current;
     if (!currentRoomId || !enabledRef.current) return;
     try {
-      const body = await getRoom(currentRoomId);
+      // /snapshot also marks stale (offline) members on the server, so this
+      // single call drives both UI freshness and the "ghost player" cleanup.
+      const body = await roomsApi.snapshot(currentRoomId);
       const next = body.room ?? body;
       setRoom(next);
       setError(null);
