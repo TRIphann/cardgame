@@ -61,154 +61,160 @@ function makeTick({ phase, flyingCardRefs, revealedSetRef, flipTimersRef,
   let rafId  = 0;
   let startMs = 0;
 
+  // ── Return phase: cards spiral back into the deck pile ─────────────
   const tickReturning = (now) => {
-    const t = clamp((now - startMs) / flightBackMs, 0, 1);
-    const eased = easeInOut(t);
+    const prog = clamp((now - startMs) / flightBackMs, 0, 1);
+    const ek = easeInOut(prog);
 
-    for (let i = 0; i < N; i += 1) {
-      const node = flyingCardRefs.current[i];
-      if (!node) continue;
+    for (let k = 0; k < N; k += 1) {
+      const nd = flyingCardRefs.current[k];
+      if (!nd) continue;
 
-      const spiralDir  = i % 2 === 0 ? 1 : -1;
-      const spiralAng  = eased * Math.PI * 2 * spiralDir;
-      const spiralRX   = eased * ORBIT_RX;
-      const spiralRY   = eased * ORBIT_RY;
-      const offsetX    = Math.sin(spiralAng) * spiralRX * 0.15;
-      const offsetY    = -Math.cos(spiralAng) * spiralRY * 0.15;
+      const sdir  = k % 2 === 0 ? 1 : -1;
+      const sang  = ek * Math.PI * 2 * sdir;
+      const srx   = ek * ORBIT_RX;
+      const sry   = ek * ORBIT_RY;
+      const ox    = Math.sin(sang) * srx * 0.15;
+      const oy    = -Math.cos(sang) * sry * 0.15;
 
-      const scale    = 1 - eased * 0.92;
-      const rotZ     = eased * 10 * spiralDir;
-      const orbitAng = i * PHASE_OFFSET;
-      const orbitDep = Math.cos(orbitAng);
-      const rotYVal  = -orbitDep * 22 * (1 - eased);
-      const rotXVal  = eased * 5 * spiralDir;
+      const sc    = 1 - ek * 0.92;
+      const rz    = ek * 10 * sdir;
+      const oang  = k * PHASE_OFFSET;
+      const odep  = Math.cos(oang);
+      const ryv   = -odep * 22 * (1 - ek);
+      const rxv   = ek * 5 * sdir;
 
-      node.style.transform =
-        `translate(calc(-50% + ${offsetX.toFixed(1)}px), calc(-50% + ${offsetY.toFixed(1)}px)) ` +
-        `rotateZ(${rotZ.toFixed(1)}deg) ` +
-        `rotateY(${rotYVal.toFixed(1)}deg) ` +
-        `rotateX(${rotXVal.toFixed(1)}deg) ` +
-        `scale(${Math.max(0.01, scale).toFixed(3)})`;
-      node.style.opacity = String(Math.max(0, 1 - eased * 0.95));
-      node.style.zIndex = String(120 - Math.round(eased * 30));
+      nd.style.transform =
+        `translate(calc(-50% + ${ox.toFixed(1)}px), calc(-50% + ${oy.toFixed(1)}px)) ` +
+        `rotateZ(${rz.toFixed(1)}deg) ` +
+        `rotateY(${ryv.toFixed(1)}deg) ` +
+        `rotateX(${rxv.toFixed(1)}deg) ` +
+        `scale(${Math.max(0.01, sc).toFixed(3)})`;
+      nd.style.opacity = String(Math.max(0, 1 - ek * 0.95));
+      nd.style.zIndex = String(120 - Math.round(ek * 30));
     }
-    if (t < 1) {
+    if (prog < 1) {
       rafId = requestAnimationFrame(tickReturning);
     } else {
       cancelAnimationFrame(rafId);
-      for (let i = 0; i < N; i += 1) {
-        const node = flyingCardRefs.current[i];
-        if (!node) continue;
-        node.style.transform = "";
-        node.style.opacity = "";
-        node.style.zIndex = "";
-        node.classList.remove("revealed");
+      for (let k = 0; k < N; k += 1) {
+        const nd = flyingCardRefs.current[k];
+        if (!nd) continue;
+        nd.style.transform = "";
+        nd.style.opacity = "";
+        nd.style.zIndex = "";
+        nd.classList.remove("revealed");
       }
       onEnd();
     }
   };
 
-  const tick = (now) => {
-    if (phase === "returning") {
-      tickReturning(now);
-      return;
-    }
+  // ── Fan-out phase: cards launch from deck to orbit positions ───────
+  const tickFanOut = (now) => {
+    const totalMs = flightOutMs + (N - 1) * FANOUT_STAGGER_MS + orbitMs;
+    const el = now - startMs;
 
-    // flying phase
-    const totalFlyingMs = flightOutMs + (N - 1) * FANOUT_STAGGER_MS + orbitMs;
-    const elapsed = now - startMs;
+    for (let k = 0; k < N; k += 1) {
+      const nd = flyingCardRefs.current[k];
+      if (!nd) continue;
 
-    for (let i = 0; i < N; i += 1) {
-      const node = flyingCardRefs.current[i];
-      if (!node) continue;
+      const slot  = FANOUT_ORDER.indexOf(k);
+      const stMs  = slot * FANOUT_STAGGER_MS;
+      const cEl   = el - stMs;
 
-      if (elapsed < flightOutMs + FANOUT_STAGGER_MS * (N - 1)) {
-        // ─── FAN-OUT: cards launch from bottom of stage to orbit positions ─
-        // Cards launch in reverse index order (3→2→1→0) with stagger.
-        // When a card hasn't launched yet it stays hidden at deck centre.
-        const cardSlot = FANOUT_ORDER.indexOf(i);
-        const cardStartMs = cardSlot * FANOUT_STAGGER_MS;
-        const cardElapsed = elapsed - cardStartMs;
-
-        if (cardElapsed < 0) {
-          // Hasn't launched yet — hide at centre
-          node.style.opacity = "0";
-          node.style.zIndex  = String(80 + i);
-          continue;
-        }
-
-        const t    = clamp(cardElapsed / FLIGHT_OUT_MS, 0, 1);
-        const ease = easeOutCubic(t);
-        const targetAngle = i * PHASE_OFFSET;
-        // Start from bottom (6 o'clock) so card-0 (rightmost) starts far right,
-        // cos<0 → no premature reveal. After a full orbit it reaches front.
-        const startAngle  = Math.PI / 2;
-        const angle        = startAngle + (targetAngle - startAngle) * ease;
-        const r  = 20 + ease * ORBIT_RX;
-        const ry = 15 + ease * ORBIT_RY;
-        const x  = Math.sin(angle) * r;
-        const y  = -Math.cos(angle) * ry;
-        const scale = 0.3 + ease * 0.7;
-        // Launch from "below" — slight tilt that unwinds during flight
-        const initRot = (1 - ease) * -90;
-        node.style.transform =
-          `translate(calc(-50% + ${x.toFixed(1)}px), calc(-50% + ${y.toFixed(1)}px)) ` +
-          `rotateZ(${(initRot + ease * 5 * (i % 2 === 0 ? 1 : -1)).toFixed(1)}deg) ` +
-          `scale(${scale.toFixed(3)})`;
-        node.style.opacity = String(Math.min(1, 0.15 + ease * 0.85));
-        node.style.zIndex  = String(80 + i);
-      } else {
-        // ─── ORBIT: elliptical loop with bob ──────────────────────────
-        const fanOutDuration = flightOutMs + (N - 1) * FANOUT_STAGGER_MS;
-        const orbitEl = elapsed - fanOutDuration;
-        const baseAngle = (orbitEl / orbitMs) * Math.PI * 2;
-        const angle     = baseAngle + i * PHASE_OFFSET;
-
-        const ox = Math.sin(angle) * ORBIT_RX;
-        const oy = -Math.cos(angle) * ORBIT_RY;
-
-        // Perpendicular bob: ±12px toward/away from camera, 2× per orbit
-        const bob      = Math.sin((orbitEl / orbitMs) * Math.PI * 2 * 2 + i * (Math.PI / 3)) * 12;
-        const cosA     = Math.cos(angle);
-        const depth    = cosA; // 1 = closest (right), -1 = farthest (left)
-        const scale    = 0.92 + 0.18 * (depth + 1) / 2;
-        const tiltY    = depth * 22; // lean toward viewer at front
-        const tiltZ    = Math.sin(angle) * 7; // gentle rock
-
-        node.style.transform =
-          `translate(calc(-50% + ${ox.toFixed(1)}px), calc(-50% + ${oy.toFixed(1)}px)) ` +
-          `rotateZ(${tiltZ.toFixed(1)}deg) ` +
-          `rotateY(${tiltY.toFixed(1)}deg) ` +
-          `scale(${scale.toFixed(3)})`;
-        node.style.zIndex  = String(100 + Math.round(depth * 10));
-        node.style.opacity = "1";
-
-        // ─── REVEAL: first time card crosses the front AFTER fan-out finishes
-        if (elapsed > fanOutDuration && depth > REVEAL_THRESH && !revealedSetRef.current.has(i)) {
-          revealedSetRef.current.add(i);
-          node.classList.add("revealed");
-          if (flipTimersRef.current[i]) clearTimeout(flipTimersRef.current[i]);
-          flipTimersRef.current[i] = setTimeout(() => {
-            const n = flyingCardRefs.current[i];
-            if (n) n.classList.remove("revealed");
-            flipTimersRef.current[i] = 0;
-          }, REVEAL_HOLD_MS);
-        }
+      if (cEl < 0) {
+        nd.style.opacity = "0";
+        nd.style.zIndex  = String(80 + k);
+        continue;
       }
-    }
 
-    if (elapsed < totalFlyingMs) {
-      rafId = requestAnimationFrame(tick);
+      const p1   = clamp(cEl / FLIGHT_OUT_MS, 0, 1);
+      const ek1  = easeOutCubic(p1);
+      const ta   = k * PHASE_OFFSET;
+      const sa   = Math.PI / 2;
+      const fa   = sa + (ta - sa) * ek1;
+      const fr   = 20 + ek1 * ORBIT_RX;
+      const fry  = 15 + ek1 * ORBIT_RY;
+      const fx   = Math.sin(fa) * fr;
+      const fy   = -Math.cos(fa) * fry;
+      const fsc  = 0.3 + ek1 * 0.7;
+      const ir   = (1 - ek1) * -90;
+      nd.style.transform =
+        `translate(calc(-50% + ${fx.toFixed(1)}px), calc(-50% + ${fy.toFixed(1)}px)) ` +
+        `rotateZ(${(ir + ek1 * 5 * (k % 2 === 0 ? 1 : -1)).toFixed(1)}deg) ` +
+        `scale(${fsc.toFixed(3)})`;
+      nd.style.opacity = String(Math.min(1, 0.15 + ek1 * 0.85));
+      nd.style.zIndex  = String(80 + k);
+    }
+    if (el < totalMs) {
+      rafId = requestAnimationFrame(tickFanOut);
     } else {
-      // Switch to return phase
       startMs = performance.now();
-      rafId = requestAnimationFrame(tickReturning);
+      rafId = requestAnimationFrame(tickOrbit);
     }
   };
 
+  // ── Orbit phase: cards circle the deck in an ellipse ───────────────
+  const tickOrbit = (now) => {
+    const el = now - startMs;
+    const fanDur = flightOutMs + (N - 1) * FANOUT_STAGGER_MS;
+    const orbitEl = el - fanDur;
+
+    // Switch to return phase when orbit completes
+    if (orbitEl >= orbitMs) {
+      startMs = performance.now();
+      rafId = requestAnimationFrame(tickReturning);
+      return;
+    }
+
+    for (let k = 0; k < N; k += 1) {
+      const nd = flyingCardRefs.current[k];
+      if (!nd) continue;
+
+      const ba  = (orbitEl / orbitMs) * Math.PI * 2;
+      const a   = ba + k * PHASE_OFFSET;
+
+      const ox  = Math.sin(a) * ORBIT_RX;
+      const oy  = -Math.cos(a) * ORBIT_RY;
+
+      const ca   = Math.cos(a);
+      const dp   = ca;
+      const osc  = 0.92 + 0.18 * (dp + 1) / 2;
+      const tY   = dp * 22;
+      const tZ   = Math.sin(a) * 7;
+
+      nd.style.transform =
+        `translate(calc(-50% + ${ox.toFixed(1)}px), calc(-50% + ${oy.toFixed(1)}px)) ` +
+        `rotateZ(${tZ.toFixed(1)}deg) ` +
+        `rotateY(${tY.toFixed(1)}deg) ` +
+        `scale(${osc.toFixed(3)})`;
+      nd.style.zIndex  = String(100 + Math.round(dp * 10));
+      nd.style.opacity = "1";
+
+      if (dp > REVEAL_THRESH && !revealedSetRef.current.has(k)) {
+        revealedSetRef.current.add(k);
+        nd.classList.add("revealed");
+        if (flipTimersRef.current[k]) clearTimeout(flipTimersRef.current[k]);
+        flipTimersRef.current[k] = setTimeout(() => {
+          const n = flyingCardRefs.current[k];
+          if (n) n.classList.remove("revealed");
+          flipTimersRef.current[k] = 0;
+        }, REVEAL_HOLD_MS);
+      }
+    }
+    rafId = requestAnimationFrame(tickOrbit);
+  };
+
   return {
-    start(ms) { startMs = ms; rafId = requestAnimationFrame(tick); },
-    cancel()  { cancelAnimationFrame(rafId); },
+    start(ms) {
+      startMs = ms;
+      if (phase === "returning") {
+        rafId = requestAnimationFrame(tickReturning);
+      } else {
+        rafId = requestAnimationFrame(tickFanOut);
+      }
+    },
+    cancel() { cancelAnimationFrame(rafId); },
   };
 }
 
