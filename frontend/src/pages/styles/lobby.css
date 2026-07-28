@@ -527,10 +527,8 @@ body { }
   transform-style: preserve-3d;
 }
 
-/* Each layer is a full card back image. They are stacked with translateY
-   (vertical offset in screen-space) and translateZ (depth into the screen)
-   so the top card covers most of the layer below it, leaving only the top
-   edge of the lower card visible — the classic overlapping-card look. */
+/* Each layer is a full card back image. Pure depth stacking — no translateY.
+   Cards appear stacked "into" the screen with only the top edge visible. */
 .deck-stack__layer {
   position: absolute;
   inset: 0;
@@ -538,19 +536,15 @@ body { }
   background: var(--c-card-back) center / cover no-repeat;
   border: 1.5px solid rgba(255, 200, 100, 0.45);
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.5);
-  /* translateZ creates depth (cards appear stacked "into" the screen);
-     translateY adds a small vertical offset so the card below peeks out
-     from the top edge. */
-  transform:
-    translateY(calc(var(--i, 0) * 4px))
-    translateZ(calc(var(--i, 0) * -9px));
-  /* Layer 3 (i=3, bottom) is darkest; layer 0 (i=0, top) is brightest */
-  filter: brightness(calc(0.4 + 0.15 * (var(--i, 0))));
+  /* Pure depth: only translateZ creates stacking */
+  transform: translateZ(calc(var(--i, 0) * -7px));
+  /* Layer 5 (i=5, bottom) is darkest; layer 0 (i=0, top) is brightest */
+  filter: brightness(calc(0.3 + 0.12 * (var(--i, 0))));
   pointer-events: none;
 }
 
 .deck-stack__layer {
-  --c-card-back: url("/assets/cards/default/cards/back.svg");
+  --c-card-back: url("https://res.cloudinary.com/ssoic87m/image/upload/v1785145557/basic%20exploding%20kittens/card-back.svg");
 }
 
 .deck-stack__layer--top {

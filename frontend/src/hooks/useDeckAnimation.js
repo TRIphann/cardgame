@@ -46,7 +46,7 @@ const PHASE_OFFSET = (Math.PI * 2) / N;
 // ── Timing constants ─────────────────────────────────────────────────────
 const WIGGLE_DELAYS   = [5000, 4000, 2000]; // idle→w1, w1→w2, w2→w3
 const FLIGHT_OUT_MS   = 1200;  // fan-out from deck to orbit start
-const FLIGHT_BACK_MS  = 900;   // return spiral to deck centre
+const FLIGHT_BACK_MS  = 1400;   // return spiral to deck centre (longer for drama)
 const REVEAL_HOLD_MS  = 1800; // milliseconds front face stays visible
 const REVEAL_THRESH   = 0.65;  // cos(angle) value at which reveal fires
 
@@ -63,17 +63,30 @@ function makeTick({ phase, flyingCardRefs, revealedSetRef, flipTimersRef,
 
   const tickReturning = (now) => {
     const t = clamp((now - startMs) / flightBackMs, 0, 1);
-    const e = easeInOut(t);
+    // Dramatic ease-out with overshoot feel
+    const eased = t < 0.7 ? easeOutCubic(t / 0.7) : 1;
     for (let i = 0; i < N; i += 1) {
       const node = flyingCardRefs.current[i];
       if (!node) continue;
-      const squeeze = t > 0.88 ? (t - 0.88) / 0.12 : 0;
-      const scale  = (1 - e) * 1.0 + e * 0.05 - squeeze * 0.06;
-      const rotZ   = (1 - t) * 12 * (i % 2 === 0 ? 1 : -1);
+
+      // Spiral angle - each card spirals with a unique phase
+      const spiralAngle = (1 - eased) * (Math.PI * 2.5) * (i % 2 === 0 ? 1 : -1);
+      // Outward then inward radius
+      const midT = Math.sin(eased * Math.PI); // peaks at 0.5
+      const spiralR = 40 * midT; // expand then contract
+      // Spiral offset
+      const spiralX = Math.cos(spiralAngle) * spiralR;
+      const spiralY = Math.sin(spiralAngle) * spiralR * 0.5;
+
+      const finalScale = (1 - eased) * 1.0 + eased * 0.05;
+      const rotZ = (1 - t) * 25 * (i % 2 === 0 ? 1 : -1) + eased * 180 * (i % 2 === 0 ? 1 : -1);
+
       node.style.transform =
-        `translate(-50%, -50%) scale(${Math.max(0.01, scale).toFixed(3)}) rotateZ(${rotZ.toFixed(1)}deg)`;
-      node.style.opacity = String(Math.max(0, 1 - t * 1.1));
-      node.style.zIndex   = String(120 + i);
+        `translate(calc(-50% + ${spiralX.toFixed(1)}px), calc(-50% + ${spiralY.toFixed(1)}px)) ` +
+        `rotateZ(${rotZ.toFixed(1)}deg) ` +
+        `scale(${Math.max(0.01, finalScale).toFixed(3)})`;
+      node.style.opacity = String(Math.max(0, 1 - t * 1.05));
+      node.style.zIndex = String(120 + Math.round((1 - t) * 20));
     }
     if (t < 1) {
       rafId = requestAnimationFrame(tickReturning);
@@ -84,7 +97,7 @@ function makeTick({ phase, flyingCardRefs, revealedSetRef, flipTimersRef,
         if (!node) continue;
         node.style.transform = "";
         node.style.opacity = "";
-        node.style.zIndex  = "";
+        node.style.zIndex = "";
         node.classList.remove("revealed");
       }
       onEnd();

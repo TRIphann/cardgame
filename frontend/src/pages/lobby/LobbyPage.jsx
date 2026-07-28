@@ -15,27 +15,11 @@ import { useDeckAnimation } from "../../hooks/useDeckAnimation.js";
 import { FlyingCards } from "./FlyingCards.jsx";
 import { Seats } from "./Seats.jsx";
 import { AvatarPicker } from "./AvatarPicker.jsx";
+import { CARD_CLOUDINARY } from "../../games/exploding-cats/cardCloudinary.js";
 
-// Local SVG card assets (Cloudinary was deleted; using local fallback).
-const LOCAL_CARDS = [
-  "/assets/cards/default/cards/attack-1.svg",
-  "/assets/cards/default/cards/bomb-1.svg",
-  "/assets/cards/default/cards/defuse-1.svg",
-  "/assets/cards/default/cards/favor-1.svg",
-  "/assets/cards/default/cards/future-1.svg",
-  "/assets/cards/default/cards/nope-1.svg",
-  "/assets/cards/default/cards/shuffle-1.svg",
-  "/assets/cards/default/cards/skip-1.svg",
-  "/assets/cards/default/cards/ninja.svg",
-  "/assets/cards/default/cards/robot.svg",
-  "/assets/cards/default/cards/zombie.svg",
-  "/assets/cards/default/cards/superman.svg",
-  "/assets/cards/default/cards/hải tặc.svg",
-];
-
-// URL list for reveal randomisation: local SVGs.
-const CARD_URLS = LOCAL_CARDS;
-const CARD_BACK_URL = "/assets/cards/default/cards/back.svg";
+// Cloudinary card URLs (basic exploding kittens deck).
+const CARD_URLS = Object.values(CARD_CLOUDINARY.cards || CARD_CLOUDINARY);
+const CARD_BACK_URL = CARD_CLOUDINARY.cards?.["card-back"] || CARD_CLOUDINARY.baseUrl + "/v1785145557/basic%20exploding%20kittens/card-back.svg";
 
 // Read the roomId directly from sessionStorage. Used as a fallback when the
 // React session context hasn't re-rendered yet (e.g. right after
@@ -348,11 +332,10 @@ export default function LobbyPage() {
                   data-flying={deckAnimation.isFlying ? "1" : "0"}
                 >
                   <div className="deck-stack">
-                    {/* 4 stacked layer surfaces. Each layer is the actual
-                        cloudinary back.svg so the stack reads as a real
-                        stack of cards, not placeholder text. Lower layers
-                        are dimmer — only their curved top edge is visible
-                        underneath the top card (no fake duplicates). */}
+                    {/* 6 stacked layer surfaces for a thicker, more impressive deck.
+                        Pure depth stacking (translateZ only) — no translateY offset. */}
+                    <span className="deck-stack__layer" style={{ "--i": 5 }} />
+                    <span className="deck-stack__layer" style={{ "--i": 4 }} />
                     <span className="deck-stack__layer" style={{ "--i": 3 }} />
                     <span className="deck-stack__layer" style={{ "--i": 2 }} />
                     <span className="deck-stack__layer" style={{ "--i": 1 }} />

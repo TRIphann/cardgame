@@ -16,7 +16,7 @@ export function FlyingCards({ refs, faceUrls, backUrl }) {
       >
         <div className="card-face card-back-face">
           <img
-            src={backUrl || "/assets/cards/default/cards/back.svg"}
+            src={backUrl || "https://res.cloudinary.com/ssoic87m/image/upload/v1785145557/basic%20exploding%20kittens/card-back.svg"}
             alt=""
             className="card-back-img"
             draggable="false"
