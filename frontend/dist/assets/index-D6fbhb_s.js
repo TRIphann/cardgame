@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/GamePage-BzrLSM_p.js","assets/react-BhVOh7S1.js","assets/router-CJAaEV1m.js","assets/react-dom-BqzW1rgF.js","assets/vendor-Bz22r_8Z.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/GamePage-A0ySWtId.js","assets/react-BhVOh7S1.js","assets/router-CJAaEV1m.js","assets/react-dom-BqzW1rgF.js","assets/vendor-Bz22r_8Z.js"])))=>i.map(i=>d[i]);
 var __defProp = Object.defineProperty;
 var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
 var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
@@ -1261,7 +1261,7 @@ const FANOUT_ORDER = [3, 2, 1, 0];
 const FANOUT_STAGGER_MS = 180;
 const FANIN_STAGGER_MS = 180;
 const ORBIT_RX = 200;
-const ORBIT_RY = 70;
+const ORBIT_RY = 100;
 const ORBIT_MS = 12e3;
 const PHASE_OFFSET = Math.PI * 2 / N;
 const WIGGLE_DELAYS = [5e3, 4e3, 2e3];
@@ -1324,7 +1324,7 @@ function makeTick({
       const ry = ORBIT_RY * (1 - ek);
       const fx = Math.sin(ta) * rx;
       const fy = -Math.cos(ta) * ry;
-      const fsc = 1 - ek * 0.5;
+      const fsc = 1;
       const rxAngle = ek * 58;
       const ryAngle = ta * 15;
       const rzAngle = -9 + ta * 10;
@@ -1518,14 +1518,12 @@ function useDeckAnimation({ cardImageUrls }) {
     flyingCardUrls
   };
 }
-const FALLBACK_GRADIENT = "linear-gradient(135deg, #1a1a4e, #0d0d2e)";
-const FALLBACK_BORDER = "1.5px solid rgba(255,200,100,0.4)";
 function handleImgError(e) {
   const parent = e.currentTarget?.parentElement;
   if (!parent) return;
   e.currentTarget.style.display = "none";
-  parent.style.background = FALLBACK_GRADIENT;
-  parent.style.border = FALLBACK_BORDER;
+  parent.style.background = "linear-gradient(135deg, #1a1a4e, #0d0d2e)";
+  parent.style.border = "1.5px solid rgba(255,200,100,0.4)";
 }
 function handleFaceError(e) {
   const parent = e.currentTarget?.parentElement;
@@ -1543,6 +1541,8 @@ function handleFaceError(e) {
 function FlyingCards({ refs, faceUrls, backUrl }) {
   const items = [];
   for (let i = 0; i < 4; i += 1) {
+    const faceUrl = faceUrls[i];
+    const hasValidUrl = faceUrl && faceUrl.length > 0 && faceUrl.startsWith("http");
     items.push(
       /* @__PURE__ */ jsxRuntimeExports.jsxs(
         "div",
@@ -1564,16 +1564,16 @@ function FlyingCards({ refs, faceUrls, backUrl }) {
                 onError: handleImgError
               }
             ) }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "card-face card-front-face", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "card-face card-front-face", children: hasValidUrl ? /* @__PURE__ */ jsxRuntimeExports.jsx(
               "img",
               {
-                src: faceUrls[i] || "",
+                src: faceUrl,
                 alt: "",
                 className: "card-img",
                 draggable: "false",
                 onError: handleFaceError
               }
-            ) })
+            ) : null })
           ]
         },
         i
@@ -1806,11 +1806,16 @@ function LobbyPage() {
     }
   }, [displayCode]);
   const localAvatar = session.session?.avatar;
+  const myIsHost = session.session?.isHost;
   const members = reactExports.useMemo(() => {
     const list = room?.members || [];
-    if (!localAvatar) return list;
-    return list.map((m) => m.id === session.session?.playerId ? { ...m, avatar: localAvatar } : m);
-  }, [room, localAvatar, session.session]);
+    return list.map((m) => {
+      if (m.id === session.session?.playerId) {
+        return { ...m, avatar: localAvatar, isHost: myIsHost };
+      }
+      return m;
+    });
+  }, [room, localAvatar, myIsHost, session.session?.playerId]);
   reactExports.useEffect(() => {
     const fromStorage = session.session?.roomId || readSessionRoomId();
     if (!fromStorage && location.pathname.startsWith(ROUTES.lobby)) {
@@ -2119,7 +2124,7 @@ function LobbyPage() {
     roomError && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lobby-error", role: "alert", children: String(roomError.message || roomError) })
   ] });
 }
-const GamePage = reactExports.lazy(() => __vitePreload(() => import("./GamePage-BzrLSM_p.js"), true ? __vite__mapDeps([0,1,2,3,4]) : void 0));
+const GamePage = reactExports.lazy(() => __vitePreload(() => import("./GamePage-A0ySWtId.js"), true ? __vite__mapDeps([0,1,2,3,4]) : void 0));
 function App() {
   const location = useLocation();
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(ErrorBoundary, { children: [

@@ -26,9 +26,8 @@ const FANOUT_STAGGER_MS = 180;
 const FANIN_STAGGER_MS  = 180;
 
 // ── Orbit geometry ──────────────────────────────────────────────────────
-// Orbit is adjusted to stay fully within viewport (no clipping)
 const ORBIT_RX = 200;  // horizontal radius
-const ORBIT_RY = 70;   // vertical radius (tightened to prevent bottom clip)
+const ORBIT_RY = 100;   // vertical radius (increased to prevent bottom clipping)
 const ORBIT_MS = 12000; // slower orbit for better visibility
 
 // ── Per-card phase offsets ────────────────────────────────────────────────
@@ -105,8 +104,8 @@ function makeTick({ flyingCardRefs, revealedSetRef, flipTimersRef,
       const fx   = Math.sin(ta) * rx;
       const fy   = -Math.cos(ta) * ry;
 
-      // Scale: shrink slightly as it approaches deck
-      const fsc  = 1.0 - ek * 0.5;
+      // Scale: keep full size, no shrinking
+      const fsc  = 1.0;
 
       // Rotation: from upright (0deg) back to flat (90deg around X)
       // This mimics the deck pile's perspective angle

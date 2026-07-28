@@ -3,23 +3,20 @@
 
 import React from "react";
 
-// Fallback gradient for broken/missing card images
-const FALLBACK_GRADIENT = "linear-gradient(135deg, #1a1a4e, #0d0d2e)";
-const FALLBACK_BORDER   = "1.5px solid rgba(255,200,100,0.4)";
-
 // Guard against null parentElement when image fails to load
 function handleImgError(e) {
   const parent = e.currentTarget?.parentElement;
   if (!parent) return;
   e.currentTarget.style.display = "none";
-  parent.style.background = FALLBACK_GRADIENT;
-  parent.style.border = FALLBACK_BORDER;
+  parent.style.background = "linear-gradient(135deg, #1a1a4e, #0d0d2e)";
+  parent.style.border = "1.5px solid rgba(255,200,100,0.4)";
 }
 
 function handleFaceError(e) {
   const parent = e.currentTarget?.parentElement;
   if (!parent) return;
   e.currentTarget.style.display = "none";
+  // Show purple gradient with star when image fails
   parent.style.background = "linear-gradient(135deg, #2d1a5e, #1a0d3e)";
   parent.style.border = "1.5px solid rgba(168,85,247,0.5)";
   parent.style.display = "flex";
@@ -33,6 +30,9 @@ function handleFaceError(e) {
 export function FlyingCards({ refs, faceUrls, backUrl }) {
   const items = [];
   for (let i = 0; i < 4; i += 1) {
+    const faceUrl = faceUrls[i];
+    // Don't render img if no valid URL (empty string triggers error immediately)
+    const hasValidUrl = faceUrl && faceUrl.length > 0 && faceUrl.startsWith("http");
     items.push(
       <div
         key={i}
@@ -51,13 +51,15 @@ export function FlyingCards({ refs, faceUrls, backUrl }) {
           />
         </div>
         <div className="card-face card-front-face">
-          <img
-            src={faceUrls[i] || ""}
-            alt=""
-            className="card-img"
-            draggable="false"
-            onError={handleFaceError}
-          />
+          {hasValidUrl ? (
+            <img
+              src={faceUrl}
+              alt=""
+              className="card-img"
+              draggable="false"
+              onError={handleFaceError}
+            />
+          ) : null}
         </div>
       </div>,
     );

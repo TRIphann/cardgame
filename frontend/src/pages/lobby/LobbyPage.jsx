@@ -105,14 +105,18 @@ export default function LobbyPage() {
     }
   }, [displayCode]);
 
-  // Merge local-only avatar choice (from sessionStorage) into the live
-  // member list so the seat shows it without a backend round-trip.
+  // Merge local-only avatar choice and isHost status from session.
   const localAvatar = session.session?.avatar;
+  const myIsHost = session.session?.isHost;
   const members = useMemo(() => {
     const list = room?.members || [];
-    if (!localAvatar) return list;
-    return list.map((m) => (m.id === session.session?.playerId ? { ...m, avatar: localAvatar } : m));
-  }, [room, localAvatar, session.session]);
+    return list.map((m) => {
+      if (m.id === session.session?.playerId) {
+        return { ...m, avatar: localAvatar, isHost: myIsHost };
+      }
+      return m;
+    });
+  }, [room, localAvatar, myIsHost, session.session?.playerId]);
 
   // Redirect when session is missing. We read the raw session from storage as
   // a fallback because `useSession()` may not have flushed its state yet on
