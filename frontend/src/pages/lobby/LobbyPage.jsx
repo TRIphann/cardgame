@@ -45,21 +45,21 @@ const GAME_MODES = [
   {
     id: "exploding-cats",
     title: "Đừng rút lá đó",
-    tagline: "Đặt bài, rút bài, đừng để con mèo nổ!",
-    deckLabel: "EXPLODING CATS",
+    tagline: "",
+    deckLabel: "ĐỪNG RÚT LÁ NÀY!",
     implemented: true,
   },
   {
     id: "coming-soon-1",
     title: "Trò chơi đang phát triển",
-    tagline: "Sắp ra mắt — theo dõi nhé!",
+    tagline: "",
     deckLabel: "COMING SOON",
     implemented: false,
   },
   {
     id: "coming-soon-2",
     title: "Trò chơi đang phát triển",
-    tagline: "Sắp ra mắt — theo dõi nhé!",
+    tagline: "",
     deckLabel: "COMING SOON",
     implemented: false,
   },
@@ -102,14 +102,10 @@ export default function LobbyPage() {
   // Real code = 6-character A-Z/0-9 string, NOT a placeholder
   const isPlaceholderCode = displayCode && (displayCode.startsWith("pending") || displayCode.length !== 6);
   const hasRealCode = displayCode && displayCode.length === 6 && !displayCode.startsWith("pending");
-  const showCode   = (codeVisible || hasRealCode) && displayCode.length > 0;
-
-  // When server finally returns the room code, reveal it automatically.
-  useEffect(() => {
-    if (hasRealCode) {
-      setCodeVisible(true);
-    }
-  }, [displayCode, hasRealCode]);
+  // Show code ONLY when the user has clicked the eye-toggle. The code is
+  // persistent for the lifetime of this room session — once revealed it stays
+  // revealed, but it never auto-reveals.
+  const showCode = codeVisible && hasRealCode;
 
   // Merge local-only avatar choice and isHost status from session.
   const localAvatar = session.session?.avatar;
@@ -416,7 +412,7 @@ export default function LobbyPage() {
 
           <div className="deck-caption">
             <p className="deck-label">{mode.deckLabel}</p>
-            <p className="deck-subtitle">{mode.tagline}</p>
+            {mode.tagline && <p className="deck-subtitle">{mode.tagline}</p>}
           </div>
 
           {pickerOpen && (

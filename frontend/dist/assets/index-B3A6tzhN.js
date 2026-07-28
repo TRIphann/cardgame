@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/GamePage-B5W4HUGe.js","assets/react-BhVOh7S1.js","assets/router-CJAaEV1m.js","assets/react-dom-BqzW1rgF.js","assets/vendor-Bz22r_8Z.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/GamePage-Ca8smGKj.js","assets/react-BhVOh7S1.js","assets/router-CJAaEV1m.js","assets/react-dom-BqzW1rgF.js","assets/vendor-Bz22r_8Z.js"])))=>i.map(i=>d[i]);
 var __defProp = Object.defineProperty;
 var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
 var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
@@ -1776,21 +1776,21 @@ const GAME_MODES = [
   {
     id: "exploding-cats",
     title: "Đừng rút lá đó",
-    tagline: "Đặt bài, rút bài, đừng để con mèo nổ!",
-    deckLabel: "EXPLODING CATS",
+    tagline: "",
+    deckLabel: "ĐỪNG RÚT LÁ NÀY!",
     implemented: true
   },
   {
     id: "coming-soon-1",
     title: "Trò chơi đang phát triển",
-    tagline: "Sắp ra mắt — theo dõi nhé!",
+    tagline: "",
     deckLabel: "COMING SOON",
     implemented: false
   },
   {
     id: "coming-soon-2",
     title: "Trò chơi đang phát triển",
-    tagline: "Sắp ra mắt — theo dõi nhé!",
+    tagline: "",
     deckLabel: "COMING SOON",
     implemented: false
   }
@@ -1817,12 +1817,7 @@ function LobbyPage() {
   const displayCode = room?.code || session.session?.roomCode || "";
   displayCode && (displayCode.startsWith("pending") || displayCode.length !== 6);
   const hasRealCode = displayCode && displayCode.length === 6 && !displayCode.startsWith("pending");
-  const showCode = (codeVisible || hasRealCode) && displayCode.length > 0;
-  reactExports.useEffect(() => {
-    if (hasRealCode) {
-      setCodeVisible(true);
-    }
-  }, [displayCode, hasRealCode]);
+  const showCode = codeVisible && hasRealCode;
   const localAvatar = session.session?.avatar;
   const myIsHost = session.session?.isHost;
   const myPlayerId = session.session?.playerId;
@@ -2115,7 +2110,7 @@ function LobbyPage() {
         ),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "deck-caption", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "deck-label", children: mode.deckLabel }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "deck-subtitle", children: mode.tagline })
+          mode.tagline && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "deck-subtitle", children: mode.tagline })
         ] }),
         pickerOpen && /* @__PURE__ */ jsxRuntimeExports.jsx(
           AvatarPicker,
@@ -2153,7 +2148,7 @@ function LobbyPage() {
     roomError && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lobby-error", role: "alert", children: String(roomError.message || roomError) })
   ] });
 }
-const GamePage = reactExports.lazy(() => __vitePreload(() => import("./GamePage-B5W4HUGe.js"), true ? __vite__mapDeps([0,1,2,3,4]) : void 0));
+const GamePage = reactExports.lazy(() => __vitePreload(() => import("./GamePage-Ca8smGKj.js"), true ? __vite__mapDeps([0,1,2,3,4]) : void 0));
 function App() {
   const location = useLocation();
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(ErrorBoundary, { children: [
