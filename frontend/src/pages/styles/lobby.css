@@ -8,38 +8,34 @@ body { }
 .lobby-page {
   min-height: 100vh;
   overflow: hidden;
+  isolation: isolate;
   position: relative;
   z-index: 1;
   display: grid;
   grid-template-rows: auto 1fr auto;
   gap: 16px;
   padding: 56px 24px 28px;
-  background:
-    radial-gradient(circle at 50% 30%, rgba(77, 62, 161, 0.2), transparent 38%),
-    radial-gradient(circle at 88% 88%, rgba(168, 124, 245, 0.18), transparent 32%),
-    linear-gradient(135deg, #0d1029 0%, #090b1d 56%, #11102c 100%);
 }
 
 .lobby-page::before {
   content: "";
   position: absolute;
   inset: 0;
-  opacity: 0.2;
+  opacity: 0.06;
   background-image:
     linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
   background-size: 60px 60px;
-  mask-image: radial-gradient(ellipse at center, black, transparent 72%);
   z-index: -2;
+  pointer-events: none;
 }
 
-/* Ambient blobs + stars + floating cards */
+/* Ambient blobs */
 .ambient {
   position: absolute;
   border-radius: 50%;
   filter: blur(2px);
   pointer-events: none;
-  z-index: -1;
 }
 .ambient-one {
   width: 390px; height: 390px;
@@ -61,7 +57,6 @@ body { }
   background-image: radial-gradient(circle, rgba(221, 206, 255, 0.7) 0 1px, transparent 1.5px);
   background-size: 173px 149px;
   opacity: 0.3;
-  z-index: -1;
 }
 .stars::before { background-size: 239px 211px; background-position: 90px 32px; opacity: 0.45; }
 .stars::after { background-size: 307px 273px; background-position: 30px 117px; opacity: 0.3; }
@@ -71,7 +66,6 @@ body { }
   inset: 0;
   pointer-events: none;
   perspective: 1000px;
-  z-index: -1;
 }
 .floating-card {
   position: absolute;
@@ -531,31 +525,25 @@ body { }
   transform-style: preserve-3d;
 }
 
-/* Each "back edge" layer is just the top arc of a card image so the
-   user sees only the *curve of the cards below*, no second card body. */
+/* Each layer is a full card back image. They are stacked with translateY
+   (vertical offset in screen-space) and translateZ (depth into the screen)
+   so the top card covers most of the layer below it, leaving only the top
+   edge of the lower card visible — the classic overlapping-card look. */
 .deck-stack__layer {
   position: absolute;
   inset: 0;
-  border-radius: 10px;
-  /* Lower layers peek downward by `i * 3px` so only their bottom curve
-     is visible underneath the top card. */
-  clip-path: polygon(
-    0 calc(100% - (6px * var(--i, 0))),
-    100% calc(100% - (6px * var(--i, 0))),
-    100% 100%,
-    0 100%
-  );
-  /* Same back image so the stack reads as a real stack of cards. */
-  background: var(--c-card-back, transparent) center / cover no-repeat,
-    linear-gradient(180deg, rgba(255, 215, 0, 0.16), rgba(255, 215, 0, 0.04));
+  border-radius: 8px;
+  background: var(--c-card-back) center / cover no-repeat;
   border: 1.5px solid rgba(255, 200, 100, 0.45);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.55);
-  /* Lower layers are pushed physically DOWN with translateZ so they sit
-     underneath; only the small "lip" at the bottom shows. */
-  transform: translateZ(calc(-12px * var(--i, 0))) translateY(calc(2px * var(--i, 0)));
-  /* Each layer behind is slightly dimmer and offset down so the stack
-     reads as a sequence of back-edges. */
-  filter: brightness(calc(0.7 + 0.1 * (4 - var(--i, 0))));
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.5);
+  /* translateZ creates depth (cards appear stacked "into" the screen);
+     translateY adds a small vertical offset so the card below peeks out
+     from the top edge. */
+  transform:
+    translateY(calc(var(--i, 0) * 2px))
+    translateZ(calc(var(--i, 0) * -7px));
+  /* Layer 3 (i=3) is darkest, layer 0 (i=0, top) is full brightness */
+  filter: brightness(calc(0.55 + 0.15 * (4 - var(--i, 0))));
   pointer-events: none;
 }
 
@@ -564,11 +552,14 @@ body { }
 }
 
 .deck-stack__layer--top {
-  clip-path: none;
-  background: transparent;
-  border: 1.5px solid rgba(255, 215, 0, 0.55);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6), inset 0 0 20px rgba(255, 215, 0, 0.06);
-  transform: translateZ(0);
+  background: var(--c-card-back) center / cover no-repeat;
+  border: 1.5px solid rgba(255, 215, 0, 0.6);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.6),
+    0 0 20px rgba(255, 200, 80, 0.08),
+    inset 0 0 20px rgba(255, 215, 0, 0.06);
+  transform: none;
+  filter: none;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -579,7 +570,7 @@ body { }
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 8px;
+  border-radius: 7px;
   display: block;
 }
 
@@ -981,21 +972,23 @@ body { }
 .lobby-footer {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 12px;
   flex-wrap: wrap;
-  padding: 14px 22px;
-  border: 1px solid rgba(166, 144, 220, 0.22);
+  padding: 12px 16px;
+  border: 1px solid rgba(166, 144, 220, 0.18);
   border-radius: 4px;
-  background: linear-gradient(145deg, rgba(31, 29, 66, 0.5), rgba(11, 13, 34, 0.55));
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3), inset 0 1px rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(10px);
+  background: linear-gradient(145deg, rgba(31, 29, 66, 0.45), rgba(11, 13, 34, 0.5));
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(8px);
   z-index: 2;
 }
-.status-text {
+.player-count {
+  margin: 0;
+  margin-right: auto;
   color: var(--c-text-muted);
   font-size: 12px;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.04em;
 }
 .action-button {
   height: 46px;
@@ -1021,6 +1014,57 @@ body { }
   box-shadow: 0 8px 24px rgba(82, 45, 160, 0.35);
 }
 .action-button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* Lobby footer buttons */
+.start-button {
+  height: 46px;
+  padding: 0 24px;
+  cursor: pointer;
+  border: 1px solid rgba(181, 147, 244, 0.4);
+  border-radius: 4px;
+  color: #f0eaff;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  background: linear-gradient(105deg, #7b3fd4, #a855f7);
+  box-shadow: inset 0 1px rgba(255,255,255,0.15), 0 4px 14px rgba(90,40,180,0.35);
+  transition: transform 0.18s, box-shadow 0.18s, border-color 0.18s, filter 0.18s;
+  /* Pull toward the right edge */
+  margin-left: auto;
+}
+.start-button:hover:not(:disabled) {
+  transform: translateY(-2px) scale(1.02);
+  border-color: rgba(220, 190, 255, 0.7);
+  box-shadow: 0 8px 24px rgba(90, 40, 180, 0.5), 0 0 20px rgba(168, 85, 247, 0.25);
+  filter: brightness(1.08);
+}
+.start-button:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+}
+.start-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  filter: grayscale(0.3);
+}
+
+.leave-button {
+  height: 46px;
+  padding: 0 20px;
+  cursor: pointer;
+  border: 1px solid rgba(255, 79, 106, 0.35);
+  border-radius: 4px;
+  color: #ffc0cc;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  background: rgba(255, 79, 106, 0.08);
+  transition: transform 0.18s, border-color 0.18s, background 0.18s;
+}
+.leave-button:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 79, 106, 0.65);
+  background: rgba(255, 79, 106, 0.16);
+}
 
 /* Toast */
 .lobby-toast {

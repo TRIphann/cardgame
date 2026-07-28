@@ -1,13 +1,14 @@
-// Boot diagnostics — surfaces JS / module errors visibly even when the user
-// has DevTools closed. We attach handlers as early as possible so a failure
-// in main.jsx itself gets reported.
+// Boot diagnostics — DEV ONLY surface module errors. In production we let
+// the ErrorBoundary handle everything so we don't pollute the UI.
 export function bootDiagnostics() {
   if (typeof window === "undefined") return;
+  // Only run in development so production users don't see raw error overlays.
+  if (process.env.NODE_ENV !== "development") return;
 
   const surface = (kind, payload) => {
     try {
       const existing = document.getElementById("__arcana-boot-error");
-      if (existing) return; // only show the first one
+      if (existing) return;
       const box = document.createElement("div");
       box.id = "__arcana-boot-error";
       box.style.cssText = [

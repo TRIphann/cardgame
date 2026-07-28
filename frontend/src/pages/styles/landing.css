@@ -10,7 +10,6 @@ body { }
   border-radius: 50%;
   filter: blur(2px);
   pointer-events: none;
-  z-index: -1;
 }
 .ambient-one {
   width: 390px; height: 390px;
@@ -23,7 +22,7 @@ body { }
   background: rgba(72, 46, 180, 0.18);
 }
 
-/* Star field — pure CSS, multi-layered */
+/* Star field */
 .stars,
 .stars::before,
 .stars::after {
@@ -33,7 +32,6 @@ body { }
   background-image: radial-gradient(circle, rgba(221, 206, 255, 0.7) 0 1px, transparent 1.5px);
   background-size: 173px 149px;
   opacity: 0.3;
-  z-index: -1;
 }
 .stars::before {
   background-size: 239px 211px;
@@ -46,13 +44,12 @@ body { }
   opacity: 0.3;
 }
 
-/* Floating tarot cards — drift around the welcome panel */
+/* Floating tarot cards */
 .cards-scene {
   position: absolute;
   inset: 0;
   pointer-events: none;
   perspective: 1000px;
-  z-index: -1;
 }
 .floating-card {
   position: absolute;
@@ -101,22 +98,21 @@ body { }
   display: grid;
   place-items: center;
   padding: 40px 20px;
-  background:
-    radial-gradient(circle at 50% 42%, rgba(77, 62, 161, 0.22), transparent 34%),
-    radial-gradient(circle at 11% 85%, rgba(57, 32, 127, 0.25), transparent 30%),
-    linear-gradient(135deg, #0d1029 0%, #090b1d 56%, #11102c 100%);
+  background: rgba(7, 8, 26, 0.88);
+  backdrop-filter: blur(6px);
+  box-shadow: inset 0 0 80px rgba(77, 62, 161, 0.15);
 }
 .landing-page::before {
   content: "";
   position: absolute;
   inset: 0;
-  opacity: 0.22;
+  opacity: 0.06;
   background-image:
     linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
   background-size: 60px 60px;
-  mask-image: radial-gradient(ellipse at center, black, transparent 72%);
   z-index: -2;
+  pointer-events: none;
 }
 
 .welcome-panel {
