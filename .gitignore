@@ -33,3 +33,6 @@ card-upload-results.json
 
 ## Card assets (designed via local SVG, part of repo)
 # (no longer ignored — card SVGs are committed so Netlify can serve them)
+## Vite preview server junk
+.vite-preview*.err
+.vite-preview*.out
