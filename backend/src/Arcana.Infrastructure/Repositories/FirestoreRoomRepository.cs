@@ -97,6 +97,7 @@ public class FirestoreRoomRepository : IRoomRepository
 
         return await _db.RunTransactionAsync(async tx =>
         {
+            // All reads must happen BEFORE any writes inside a Firestore transaction.
             var snapshot = await tx.GetSnapshotAsync(roomRef);
             if (!snapshot.Exists) return null;
 
@@ -108,10 +109,11 @@ public class FirestoreRoomRepository : IRoomRepository
             var membersSnap = await tx.GetSnapshotAsync(roomRef.Collection("members"));
             if (membersSnap.Count >= maxPlayers) return null;
 
-            // Add the new member first, then fetch updated members
+            // Writes go after reads — Firestore enforces "reads before writes" inside tx.
             tx.Set(memberRef, BuildMemberDoc(candidate));
-            var updatedMembersSnap = await tx.GetSnapshotAsync(roomRef.Collection("members"));
-            return await MapRoomAsync(snapshot, ct, membersSnapshot: updatedMembersSnap);
+            // Reuse the already-fetched members snapshot; do NOT call GetSnapshotAsync
+            // again here because that would be a read after a write and throw.
+            return await MapRoomAsync(snapshot, ct, membersSnapshot: membersSnap);
         });
     }
 
@@ -122,14 +124,19 @@ public class FirestoreRoomRepository : IRoomRepository
 
         return await _db.RunTransactionAsync(async tx =>
         {
+            // Reads before writes: Firestore transactions require all reads to
+            // happen before any writes. We pre-fetch the members snapshot here so
+            // we can re-use it after the delete instead of calling GetSnapshotAsync
+            // again (which would throw "reads after writes").
             var roomSnap = await tx.GetSnapshotAsync(roomRef);
             if (!roomSnap.Exists) return null;
 
             var memberSnap = await tx.GetSnapshotAsync(memberRef);
             if (!memberSnap.Exists) return null;
 
-            tx.Delete(memberRef);
             var membersSnapshot = await tx.GetSnapshotAsync(roomRef.Collection("members"));
+
+            tx.Delete(memberRef);
             return await MapRoomAsync(roomSnap, ct, membersSnapshot: membersSnapshot);
         });
     }
