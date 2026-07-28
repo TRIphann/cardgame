@@ -1432,7 +1432,8 @@ body { }
 }
 
 /* Individual flying card. JS hook drives transform via inline style on every
-   RAF frame. CSS handles: (a) reveal 3D flip (class=revealed), (b) box shadow. */
+   RAF frame. CSS handles: (a) reveal 3D flip (class=revealed), (b) box shadow.
+   Cards are hidden (opacity:0) by default until JS makes them visible. */
 .flying-card {
   position: absolute;
   left: 50%;
@@ -1448,6 +1449,8 @@ body { }
   will-change: transform, opacity;
   pointer-events: none;
   filter: drop-shadow(0 8px 16px rgba(0,0,0,0.45));
+  /* Hidden by default until JS makes them visible */
+  opacity: 0;
 }
 
 /* Purple halo glow behind each card */
@@ -1495,11 +1498,10 @@ body { }
   pointer-events: none;
 }
 
-/* Front face (revealed) */
+/* Front face (revealed) - transform set via .revealed class for bidirectional flip */
 .flying-card .card-front-face {
   background: #0d0d1a;
   border: 1.5px solid rgba(255, 215, 0, 0.7);
-  transform: rotateY(180deg);
   box-shadow:
     0 0 20px rgba(255, 215, 0, 0.5),
     0 0 50px rgba(255, 200, 80, 0.2),

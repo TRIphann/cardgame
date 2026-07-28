@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/GamePage-fr8OdHpr.js","assets/react-BhVOh7S1.js","assets/router-CJAaEV1m.js","assets/react-dom-BqzW1rgF.js","assets/vendor-Bz22r_8Z.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/GamePage-OJbOfHj_.js","assets/react-BhVOh7S1.js","assets/router-CJAaEV1m.js","assets/react-dom-BqzW1rgF.js","assets/vendor-Bz22r_8Z.js"])))=>i.map(i=>d[i]);
 var __defProp = Object.defineProperty;
 var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
 var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
@@ -1259,6 +1259,7 @@ function useReducedMotion() {
 const N = 4;
 const FANOUT_ORDER = [3, 2, 1, 0];
 const FANOUT_STAGGER_MS = 220;
+const FANIN_STAGGER_MS = 220;
 const ORBIT_RX = 220;
 const ORBIT_RY = 85;
 const ORBIT_MS = 9e3;
@@ -1278,7 +1279,6 @@ function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
 }
 function makeTick({
-  phase,
   flyingCardRefs,
   revealedSetRef,
   flipTimersRef,
@@ -1290,16 +1290,26 @@ function makeTick({
   let rafId = 0;
   let startMs = 0;
   const tickFanIn = (now) => {
-    const totalMs = flightBackMs;
     const el = now - startMs;
-    if (el >= totalMs) {
+    let allDone = true;
+    for (let k = 0; k < N; k += 1) {
+      const nd = flyingCardRefs.current[k];
+      if (!nd) continue;
+      const slot = FANOUT_ORDER.indexOf(k);
+      const delay = slot * FANIN_STAGGER_MS;
+      const cardEl = el - delay;
+      if (cardEl < 0 || cardEl < flightBackMs) {
+        allDone = false;
+      }
+    }
+    if (allDone || el >= flightBackMs + (N - 1) * FANIN_STAGGER_MS + 100) {
       cancelAnimationFrame(rafId);
       for (let k = 0; k < N; k += 1) {
         const nd = flyingCardRefs.current[k];
         if (!nd) continue;
         nd.style.transform = "";
-        nd.style.opacity = "";
-        nd.style.zIndex = "";
+        nd.style.opacity = "0";
+        nd.style.zIndex = "80";
         nd.classList.remove("revealed");
       }
       onEnd();
@@ -1308,7 +1318,16 @@ function makeTick({
     for (let k = 0; k < N; k += 1) {
       const nd = flyingCardRefs.current[k];
       if (!nd) continue;
-      const prog = clamp(el / totalMs, 0, 1);
+      const slot = FANOUT_ORDER.indexOf(k);
+      const delay = slot * FANIN_STAGGER_MS;
+      const cardEl = el - delay;
+      if (cardEl < 0) {
+        nd.style.opacity = "1";
+        nd.style.zIndex = String(100 + k);
+        nd.style.transform = "";
+        continue;
+      }
+      const prog = clamp(cardEl / flightBackMs, 0, 1);
       const ek1 = easeInCubic(prog);
       const ta = k * PHASE_OFFSET;
       const sa = Math.PI / 2;
@@ -1321,14 +1340,14 @@ function makeTick({
       const fsc = osc - ek1 * (osc - 0.3);
       const ir = -90 + ek1 * 90;
       nd.style.transform = `translate(calc(-50% + ${fx.toFixed(1)}px), calc(-50% + ${fy.toFixed(1)}px)) rotateZ(${ir.toFixed(1)}deg) scale(${fsc.toFixed(3)})`;
-      const fadeStart = 0.4;
-      const fadeEnd = 0.85;
+      const fadeStart = 0.5;
+      const fadeEnd = 0.9;
       let opacity = 1;
       if (prog > fadeStart) {
         opacity = 1 - clamp((prog - fadeStart) / (fadeEnd - fadeStart), 0, 1);
       }
       nd.style.opacity = String(Math.max(0, opacity));
-      nd.style.zIndex = String(Math.round(120 - prog * 110));
+      nd.style.zIndex = String(Math.round(110 - prog * 20));
     }
     rafId = requestAnimationFrame(tickFanIn);
   };
@@ -1488,7 +1507,6 @@ function useDeckAnimation({ cardImageUrls }) {
       setWiggleLevel(0);
     };
     rafRunnerRef.current = makeTick({
-      phase,
       flyingCardRefs,
       revealedSetRef,
       flipTimersRef,
@@ -2112,7 +2130,7 @@ function LobbyPage() {
     roomError && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lobby-error", role: "alert", children: String(roomError.message || roomError) })
   ] });
 }
-const GamePage = reactExports.lazy(() => __vitePreload(() => import("./GamePage-fr8OdHpr.js"), true ? __vite__mapDeps([0,1,2,3,4]) : void 0));
+const GamePage = reactExports.lazy(() => __vitePreload(() => import("./GamePage-OJbOfHj_.js"), true ? __vite__mapDeps([0,1,2,3,4]) : void 0));
 function App() {
   const location = useLocation();
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(ErrorBoundary, { children: [

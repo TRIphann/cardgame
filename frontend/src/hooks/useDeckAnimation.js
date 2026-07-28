@@ -6,7 +6,7 @@
 // │  IDLE ────(5s)────► WIGGLE-1 ──(4s)──► WIGGLE-2            │
 // │                    ──(2s)──► WIGGLE-3 ──(fly)──►           │
 // │  FLYING:   fan-out → orbit (9s/rev) → reveal → fan-in       │
-// │                                          ──(1.4s)──►         │
+// │                                          ──(1.6s)──►         │
 // │  IDLE (restart)                                             │
 // └──────────────────────────────────────────────────────────────┘
 //
@@ -26,10 +26,9 @@ const N = 4;
 // the bottom of the orbit to its targetAngle position.
 const FANOUT_ORDER = [3, 2, 1, 0];
 const FANOUT_STAGGER_MS = 220;
+const FANIN_STAGGER_MS = 220;
 
 // ── Orbit geometry ──────────────────────────────────────────────────────
-// The ellipse is wide enough to clear left/right seat columns (~120px).
-// Vertical is tight so cards stay in the visible stage area.
 const ORBIT_RX = 220;
 const ORBIT_RY = 85;
 const ORBIT_MS = 9000;
@@ -40,7 +39,7 @@ const PHASE_OFFSET = (Math.PI * 2) / N;
 // ── Timing constants ─────────────────────────────────────────────────────
 const WIGGLE_DELAYS   = [5000, 4000, 2000]; // idle→w1, w1→w2, w2→w3
 const FLIGHT_OUT_MS   = 1200;  // fan-out from deck to orbit start
-const FLIGHT_BACK_MS  = 1600;  // fan-in from orbit back to deck (longer for drama)
+const FLIGHT_BACK_MS  = 1600;  // fan-in from orbit back to deck
 const REVEAL_HOLD_MS  = 1800;  // milliseconds front face stays visible
 const REVEAL_THRESH   = 0.65;   // cos(angle) value at which reveal fires
 
@@ -48,33 +47,39 @@ const REVEAL_THRESH   = 0.65;   // cos(angle) value at which reveal fires
 function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
 function easeInCubic(t)  { return t * t * t; }
 function easeInOut(t)    { return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t; }
-function easeOutBack(t)  {
-  const c1 = 1.70158;
-  const c3 = c1 + 1;
-  return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
-}
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 
 // ── RAF loop factory ─────────────────────────────────────────────────────
-function makeTick({ phase, flyingCardRefs, revealedSetRef, flipTimersRef,
+function makeTick({ flyingCardRefs, revealedSetRef, flipTimersRef,
                     orbitMs, flightOutMs, flightBackMs, onEnd }) {
   let rafId  = 0;
   let startMs = 0;
 
   // ── Fan-in phase: cards reverse from orbit back to deck ─────────────
-  // This is the exact REVERSE of the fan-out phase.
   const tickFanIn = (now) => {
-    const totalMs = flightBackMs;
     const el = now - startMs;
 
-    if (el >= totalMs) {
+    // Check if ALL cards have completed their fan-in
+    let allDone = true;
+    for (let k = 0; k < N; k += 1) {
+      const nd = flyingCardRefs.current[k];
+      if (!nd) continue;
+      const slot  = FANOUT_ORDER.indexOf(k);
+      const delay = slot * FANIN_STAGGER_MS;
+      const cardEl = el - delay;
+      if (cardEl < 0 || cardEl < flightBackMs) {
+        allDone = false;
+      }
+    }
+
+    if (allDone || el >= flightBackMs + (N - 1) * FANIN_STAGGER_MS + 100) {
       cancelAnimationFrame(rafId);
       for (let k = 0; k < N; k += 1) {
         const nd = flyingCardRefs.current[k];
         if (!nd) continue;
         nd.style.transform = "";
-        nd.style.opacity = "";
-        nd.style.zIndex = "";
+        nd.style.opacity = "0";
+        nd.style.zIndex = "80";
         nd.classList.remove("revealed");
       }
       onEnd();
@@ -85,44 +90,52 @@ function makeTick({ phase, flyingCardRefs, revealedSetRef, flipTimersRef,
       const nd = flyingCardRefs.current[k];
       if (!nd) continue;
 
-      const prog = clamp(el / totalMs, 0, 1);
-      // Reverse of fan-out: start at orbit, go to bottom
-      const p1   = 1 - easeOutCubic(1 - easeOutCubic(prog)); // decelerate as it approaches deck
-      const ek1  = easeInCubic(prog); // ease in as it goes toward deck
+      const slot  = FANOUT_ORDER.indexOf(k);
+      const delay = slot * FANIN_STAGGER_MS;
+      const cardEl = el - delay;
 
-      // Target angle at orbit = k * PHASE_OFFSET
-      // Start angle at bottom = π/2
+      // Card hasn't started yet
+      if (cardEl < 0) {
+        nd.style.opacity = "1";
+        nd.style.zIndex  = String(100 + k);
+        nd.style.transform = "";
+        continue;
+      }
+
+      const prog = clamp(cardEl / flightBackMs, 0, 1);
+      const ek1  = easeInCubic(prog);
+
+      // Reverse of fan-out: start at orbit, go to bottom
       const ta   = k * PHASE_OFFSET;
       const sa   = Math.PI / 2;
-      // Move from orbit angle back to start angle (reverse of fan-out)
       const fa   = ta + (sa - ta) * ek1;
       const fr   = ORBIT_RX - ek1 * (ORBIT_RX - 20);
       const fry  = ORBIT_RY - ek1 * (ORBIT_RY - 15);
       const fx   = Math.sin(fa) * fr;
       const fy   = -Math.cos(fa) * fry;
 
-      // Scale: start at orbit scale (~1.1), shrink to deck scale (0.3)
-      const osc  = 0.92 + 0.18 * (Math.cos(ta) + 1) / 2; // orbit scale for this card
+      // Scale: start at orbit scale, shrink to deck scale
+      const osc  = 0.92 + 0.18 * (Math.cos(ta) + 1) / 2;
       const fsc  = osc - ek1 * (osc - 0.3);
 
-      // Rotation: reverse of fan-out rotation
-      const ir   = -90 + ek1 * 90; // rotate back from -90deg toward 0deg
+      // Rotation: reverse of fan-out
+      const ir   = -90 + ek1 * 90;
 
       nd.style.transform =
         `translate(calc(-50% + ${fx.toFixed(1)}px), calc(-50% + ${fy.toFixed(1)}px)) ` +
         `rotateZ(${ir.toFixed(1)}deg) ` +
         `scale(${fsc.toFixed(3)})`;
 
-      // Fade out as it approaches deck, disappear before reaching deck
-      const fadeStart = 0.4;
-      const fadeEnd   = 0.85;
+      // Fade out as it approaches deck
+      const fadeStart = 0.5;
+      const fadeEnd   = 0.9;
       let opacity = 1;
       if (prog > fadeStart) {
         opacity = 1 - clamp((prog - fadeStart) / (fadeEnd - fadeStart), 0, 1);
       }
       nd.style.opacity = String(Math.max(0, opacity));
       // Keep above deck pile until fully faded
-      nd.style.zIndex  = String(Math.round(120 - prog * 110));
+      nd.style.zIndex  = String(Math.round(110 - prog * 20));
     }
     rafId = requestAnimationFrame(tickFanIn);
   };
@@ -324,7 +337,6 @@ export function useDeckAnimation({ cardImageUrls }) {
     };
 
     rafRunnerRef.current = makeTick({
-      phase,
       flyingCardRefs,
       revealedSetRef,
       flipTimersRef,
