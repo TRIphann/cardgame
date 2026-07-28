@@ -63,36 +63,31 @@ function makeTick({ phase, flyingCardRefs, revealedSetRef, flipTimersRef,
 
   const tickReturning = (now) => {
     const t = clamp((now - startMs) / flightBackMs, 0, 1);
-    // Ease-in for arriving, with gentle deceleration
     const eased = easeInOut(t);
 
     for (let i = 0; i < N; i += 1) {
       const node = flyingCardRefs.current[i];
       if (!node) continue;
 
-      // Spiral inward: each card has unique spiral direction
-      const spiralDir = i % 2 === 0 ? 1 : -1;
-      const spiralAngle = eased * Math.PI * 2 * spiralDir;
-      // Shrink radius from orbit size down to deck center
-      const spiralR = eased * ORBIT_RX;
-      const spiralRY = eased * ORBIT_RY;
+      const spiralDir  = i % 2 === 0 ? 1 : -1;
+      const spiralAng  = eased * Math.PI * 2 * spiralDir;
+      const spiralRX   = eased * ORBIT_RX;
+      const spiralRY   = eased * ORBIT_RY;
+      const offsetX    = Math.sin(spiralAng) * spiralRX * 0.15;
+      const offsetY    = -Math.cos(spiralAng) * spiralRY * 0.15;
 
-      // Spiral offset that decreases as cards approach deck
-      const spiralX = Math.sin(spiralAngle) * spiralR * 0.15;
-      const spiralY = -Math.cos(spiralAngle) * spiralRY * 0.15;
-
-      // Final position: at deck center, fully upright, scale down to card size
-      const scale = 1 - eased * 0.92; // 1 → 0.08 (small card merging into pile)
-      const rotZ = eased * 10 * spiralDir;
-      // Undo the tilt from orbit so card arrives flat
-      const rotY = -tiltY_at_orbit(i) * (1 - eased);
-      const rotX = eased * 5 * spiralDir;
+      const scale    = 1 - eased * 0.92;
+      const rotZ     = eased * 10 * spiralDir;
+      const orbitAng = i * PHASE_OFFSET;
+      const orbitDep = Math.cos(orbitAng);
+      const rotYVal  = -orbitDep * 22 * (1 - eased);
+      const rotXVal  = eased * 5 * spiralDir;
 
       node.style.transform =
-        `translate(calc(-50% + ${spiralX.toFixed(1)}px), calc(-50% + ${spiralY.toFixed(1)}px)) ` +
+        `translate(calc(-50% + ${offsetX.toFixed(1)}px), calc(-50% + ${offsetY.toFixed(1)}px)) ` +
         `rotateZ(${rotZ.toFixed(1)}deg) ` +
-        `rotateY(${rotY.toFixed(1)}deg) ` +
-        `rotateX(${rotX.toFixed(1)}deg) ` +
+        `rotateY(${rotYVal.toFixed(1)}deg) ` +
+        `rotateX(${rotXVal.toFixed(1)}deg) ` +
         `scale(${Math.max(0.01, scale).toFixed(3)})`;
       node.style.opacity = String(Math.max(0, 1 - eased * 0.95));
       node.style.zIndex = String(120 - Math.round(eased * 30));
@@ -112,13 +107,6 @@ function makeTick({ phase, flyingCardRefs, revealedSetRef, flipTimersRef,
       onEnd();
     }
   };
-
-  function tiltY_at_orbit(i) {
-    // Match the tiltY calculation from the orbit phase
-    const angle = i * PHASE_OFFSET;
-    const depth = Math.cos(angle);
-    return depth * 22;
-  }
 
   const tick = (now) => {
     if (phase === "returning") {
