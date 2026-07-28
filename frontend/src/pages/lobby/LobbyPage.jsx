@@ -101,7 +101,8 @@ export default function LobbyPage() {
   // Only poll for real room IDs, not pending placeholders
   const isPending = !roomId || (typeof roomId === "string" && roomId.startsWith("pending-"));
   const pollRoomId = isPending ? null : roomId;
-  const { room, error: roomError, refresh } = useRoomPolling(pollRoomId);
+  const myPlayerId = session.session?.playerId;
+  const { room, error: roomError, refresh } = useRoomPolling(pollRoomId, { memberId: myPlayerId });
 
   // NOTE: displayCode and showCode are defined AFTER room is declared.
   // Prefer server code, fall back to session code
@@ -117,7 +118,6 @@ export default function LobbyPage() {
   // Merge local-only avatar choice and isHost status from session.
   const localAvatar = session.session?.avatar;
   const myIsHost = session.session?.isHost;
-  const myPlayerId = session.session?.playerId;
   const members = useMemo(() => {
     // When pending (or before server response), make sure the local player
     // shows up in the member list so the count is at least 1.

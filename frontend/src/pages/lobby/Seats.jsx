@@ -42,7 +42,7 @@ export function Seats({ side, members, myId, onPickAvatar, onToggleReady }) {
         const isMe = m.id === myId;
         const avatarBg = m.avatar?.color || "linear-gradient(135deg,#2a2f6a,#16193d)";
         const avatarIcon = m.avatar?.icon || "♟";
-        const isReady = m.status === "ready";
+        const isReady = !!m.isReady;
         return (
           <li
             key={m.id}

@@ -4,16 +4,18 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { roomsApi } from "@shared/api/roomsApi.js";
+import { loadSession } from "@config/env.js";
 
 const POLL_INTERVAL_MS = 2500;
 
-export function useRoomPolling(roomId, { enabled = true } = {}) {
+export function useRoomPolling(roomId, { enabled = true, memberId = null } = {}) {
   const [room, setRoom] = useState(null);
   const [error, setError] = useState(null);
   const stoppedRef = useRef(false);
-  // Use refs to always get the latest roomId/enabled without causing re-renders
+  // Use refs to always get the latest roomId/enabled/memberId without causing re-renders.
   const roomIdRef = useRef(roomId);
   const enabledRef = useRef(enabled);
+  const memberIdRef = useRef(memberId);
 
   useEffect(() => {
     roomIdRef.current = roomId;
@@ -23,13 +25,21 @@ export function useRoomPolling(roomId, { enabled = true } = {}) {
     enabledRef.current = enabled;
   }, [enabled]);
 
+  useEffect(() => {
+    memberIdRef.current = memberId;
+  }, [memberId]);
+
   const refresh = useCallback(async () => {
     const currentRoomId = roomIdRef.current;
+    const currentMemberId = memberIdRef.current;
     if (!currentRoomId || !enabledRef.current) return;
     try {
       // /snapshot also marks stale (offline) members on the server, so this
       // single call drives both UI freshness and the "ghost player" cleanup.
-      const body = await roomsApi.snapshot(currentRoomId);
+      // Pass the local memberId so the server keeps us marked online and the
+      // snapshot is scoped to our viewer (avoids stale-member prune races).
+      const myId = currentMemberId || loadSession()?.playerId || null;
+      const body = await roomsApi.snapshot(currentRoomId, myId);
       const next = body.room ?? body;
       setRoom(next);
       setError(null);

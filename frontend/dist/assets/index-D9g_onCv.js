@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/GamePage-BRgeye31.js","assets/react-BhVOh7S1.js","assets/vendor-DcE7maHo.js","assets/router-DRJyKT9H.js","assets/react-dom-HPixZcWd.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/GamePage-D9FmLs_H.js","assets/react-BhVOh7S1.js","assets/vendor-DcE7maHo.js","assets/router-DRJyKT9H.js","assets/react-dom-HPixZcWd.js"])))=>i.map(i=>d[i]);
 var __defProp = Object.defineProperty;
 var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
 var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
@@ -746,6 +746,7 @@ async function request(path, options = {}) {
         signal: ctrl.signal,
         headers: {
           "Content-Type": "application/json",
+          "X-Requested-With": "XMLHttpRequest",
           ...options.headers || {}
         }
       });
@@ -794,8 +795,11 @@ const roomsApi = {
   },
   // Snapshot endpoint also prunes stale members server-side. Used by the
   // polling loop instead of /api/rooms/{id} so we get fresh IsOnline flags.
-  snapshot(roomId) {
-    return jsonRequest(`/api/rooms/${roomId}/snapshot`);
+  // Pass memberId so the server marks us online on each call (prevents
+  // the 35s offline prune from kicking us while we're actively polling).
+  snapshot(roomId, memberId) {
+    const qs = memberId ? `?memberId=${encodeURIComponent(memberId)}` : "";
+    return jsonRequest(`/api/rooms/${roomId}/snapshot${qs}`);
   },
   kick(roomId, hostId, targetMemberId) {
     return jsonRequest(`/api/rooms/${roomId}/kick`, {
@@ -1282,23 +1286,29 @@ function useSession() {
   return ctx;
 }
 const POLL_INTERVAL_MS = 2500;
-function useRoomPolling(roomId, { enabled = true } = {}) {
+function useRoomPolling(roomId, { enabled = true, memberId = null } = {}) {
   const [room, setRoom] = reactExports.useState(null);
   const [error, setError] = reactExports.useState(null);
   const stoppedRef = reactExports.useRef(false);
   const roomIdRef = reactExports.useRef(roomId);
   const enabledRef = reactExports.useRef(enabled);
+  const memberIdRef = reactExports.useRef(memberId);
   reactExports.useEffect(() => {
     roomIdRef.current = roomId;
   }, [roomId]);
   reactExports.useEffect(() => {
     enabledRef.current = enabled;
   }, [enabled]);
+  reactExports.useEffect(() => {
+    memberIdRef.current = memberId;
+  }, [memberId]);
   const refresh = reactExports.useCallback(async () => {
     const currentRoomId = roomIdRef.current;
+    const currentMemberId = memberIdRef.current;
     if (!currentRoomId || !enabledRef.current) return;
     try {
-      const body = await roomsApi.snapshot(currentRoomId);
+      const myId = currentMemberId || loadSession()?.playerId || null;
+      const body = await roomsApi.snapshot(currentRoomId, myId);
       const next = body.room ?? body;
       setRoom(next);
       setError(null);
@@ -1670,7 +1680,7 @@ function Seats({ side, members, myId, onPickAvatar, onToggleReady }) {
     const isMe = m.id === myId;
     const avatarBg = m.avatar?.color || "linear-gradient(135deg,#2a2f6a,#16193d)";
     const avatarIcon = m.avatar?.icon || "♟";
-    const isReady = m.status === "ready";
+    const isReady = !!m.isReady;
     return /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "li",
       {
@@ -1881,14 +1891,14 @@ function LobbyPage() {
   const roomId = session.session?.roomId;
   const isPending = !roomId || typeof roomId === "string" && roomId.startsWith("pending-");
   const pollRoomId = isPending ? null : roomId;
-  const { room, error: roomError, refresh } = useRoomPolling(pollRoomId);
+  const myPlayerId = session.session?.playerId;
+  const { room, error: roomError, refresh } = useRoomPolling(pollRoomId, { memberId: myPlayerId });
   const displayCode = room?.code || session.session?.roomCode || "";
   displayCode && (displayCode.startsWith("pending") || displayCode.length !== 6);
   const hasRealCode = displayCode && displayCode.length === 6 && !displayCode.startsWith("pending");
   const showCode = codeVisible && hasRealCode;
   const localAvatar = session.session?.avatar;
   const myIsHost = session.session?.isHost;
-  const myPlayerId = session.session?.playerId;
   const members = reactExports.useMemo(() => {
     const list = room?.members || [];
     const merged = list.map((m) => {
@@ -2333,7 +2343,7 @@ function LobbyPage() {
     roomError && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lobby-error", role: "alert", children: String(roomError.message || roomError) })
   ] });
 }
-const GamePage = reactExports.lazy(() => __vitePreload(() => import("./GamePage-BRgeye31.js"), true ? __vite__mapDeps([0,1,2,3,4]) : void 0));
+const GamePage = reactExports.lazy(() => __vitePreload(() => import("./GamePage-D9FmLs_H.js"), true ? __vite__mapDeps([0,1,2,3,4]) : void 0));
 function App() {
   const location = useLocation();
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(ErrorBoundary, { children: [
@@ -2350,6 +2360,14 @@ function App() {
 }
 function AppProviders({ children }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsx(I18nProvider, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(ToastProvider, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(SessionProvider, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(SettingsProvider, { children }) }) }) });
+}
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.getRegistrations().then((regs) => {
+    regs.forEach((reg) => {
+      reg.unregister().catch(() => {
+      });
+    });
+  });
 }
 const container = document.getElementById("root");
 if (!container) {

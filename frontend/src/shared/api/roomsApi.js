@@ -39,6 +39,7 @@ export async function request(path, options = {}) {
         signal: ctrl.signal,
         headers: {
           "Content-Type": "application/json",
+          "X-Requested-With": "XMLHttpRequest",
           ...(options.headers || {}),
         },
       });
@@ -106,8 +107,11 @@ export const roomsApi = {
   },
   // Snapshot endpoint also prunes stale members server-side. Used by the
   // polling loop instead of /api/rooms/{id} so we get fresh IsOnline flags.
-  snapshot(roomId) {
-    return jsonRequest(`/api/rooms/${roomId}/snapshot`);
+  // Pass memberId so the server marks us online on each call (prevents
+  // the 35s offline prune from kicking us while we're actively polling).
+  snapshot(roomId, memberId) {
+    const qs = memberId ? `?memberId=${encodeURIComponent(memberId)}` : "";
+    return jsonRequest(`/api/rooms/${roomId}/snapshot${qs}`);
   },
   kick(roomId, hostId, targetMemberId) {
     return jsonRequest(`/api/rooms/${roomId}/kick`, {
