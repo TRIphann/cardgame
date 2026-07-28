@@ -130,6 +130,47 @@ export const roomsApi = {
       body: JSON.stringify({ memberId }),
     });
   },
+  // Game endpoints
+  snapshotWithViewer(roomId, memberId) {
+    const qs = memberId ? `?memberId=${encodeURIComponent(memberId)}` : "";
+    return jsonRequest(`/api/rooms/${roomId}/snapshot${qs}`);
+  },
+  startGame(roomId, hostId) {
+    return jsonRequest(`/api/rooms/${roomId}/start`, {
+      method: "POST",
+      body: JSON.stringify({ hostId }),
+    });
+  },
+  rotateRoom(roomId, hostId) {
+    return jsonRequest(`/api/rooms/${roomId}/rotate`, {
+      method: "POST",
+      body: JSON.stringify({ hostId }),
+    });
+  },
+  playCard(roomId, payload) {
+    return jsonRequest(`/api/rooms/${roomId}/game/play-card`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+  drawCard(roomId, memberId) {
+    return jsonRequest(`/api/rooms/${roomId}/game/draw-card`, {
+      method: "POST",
+      body: JSON.stringify({ memberId }),
+    });
+  },
+  useDefuse(roomId, memberId, slotIndex) {
+    return jsonRequest(`/api/rooms/${roomId}/game/defuse`, {
+      method: "POST",
+      body: JSON.stringify({ memberId, slotIndex }),
+    });
+  },
+  nope(roomId, memberId) {
+    return jsonRequest(`/api/rooms/${roomId}/game/nope`, {
+      method: "POST",
+      body: JSON.stringify({ memberId }),
+    });
+  },
 };
 
 export const getRoom = roomsApi.get;

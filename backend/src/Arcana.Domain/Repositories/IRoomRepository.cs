@@ -45,4 +45,10 @@ public interface IRoomRepository
     /// Returns the number of members marked offline.
     /// </summary>
     Task<int> MarkStaleMembersOfflineAsync(string roomId, TimeSpan offlineAfter, CancellationToken ct = default);
+
+    /// <summary>
+    /// Replace the room's gameState field. Returns the updated room, or null
+    /// if the room no longer exists.
+    /// </summary>
+    Task<Room?> UpdateGameStateAsync(string roomId, Domain.Entities.GameState? gameState, Domain.Enums.RoomStatus? status, CancellationToken ct = default);
 }

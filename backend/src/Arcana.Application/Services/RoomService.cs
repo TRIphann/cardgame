@@ -1,3 +1,5 @@
+using Arcana.Application.Abstractions;
+using Arcana.Application.Game;
 using Arcana.Domain.Common;
 using Arcana.Domain.Entities;
 using Arcana.Domain.Enums;
@@ -7,24 +9,22 @@ namespace Arcana.Application.Services;
 
 public class RoomService : Abstractions.IRoomService
 {
-    private const int MaxPlayers = 8;
-    // Code search space: 32^6 ≈ 1.07B. With 100k active rooms the collision probability
-    // per attempt is ~9.3e-5. 16 attempts keeps the cumulative failure probability under 1.5e-3.
+    private const int MaxPlayers = 7;
     private const int MaxCodeAttempts = 16;
-    // Heartbeat window: if no heartbeat in 35s, the member is marked offline.
-    // Heartbeat on the client fires every 15s while the tab is visible, so
-    // 35s gives ~2 missed beats before we declare the tab gone — enough
-    // headroom to absorb one missed ping without false-positives when the
-    // user just briefly loses Wi-Fi.
     private static readonly TimeSpan OfflineAfter = TimeSpan.FromSeconds(35);
 
     private readonly IRoomRepository _repository;
     private readonly Abstractions.IInvitationCodeGenerator _codeGenerator;
+    private readonly GameService _gameService;
 
-    public RoomService(IRoomRepository repository, Abstractions.IInvitationCodeGenerator codeGenerator)
+    public RoomService(
+        IRoomRepository repository,
+        Abstractions.IInvitationCodeGenerator codeGenerator,
+        GameService gameService)
     {
         _repository = repository;
         _codeGenerator = codeGenerator;
+        _gameService = gameService;
     }
 
     public async Task<Room> CreateRoomAsync(string hostName, CancellationToken ct = default)
@@ -35,9 +35,6 @@ public class RoomService : Abstractions.IRoomService
         var hostId = Guid.NewGuid().ToString("N");
         var roomId = Guid.NewGuid().ToString("N");
 
-        // Atomically claim a unique invitation code. If two requests generate the same
-        // string at the same time, exactly one of them wins the Create on
-        // room_codes/{code}; the loser retries with a fresh code.
         var code = await ClaimUniqueCodeAsync(roomId, ct);
 
         var room = new Room
@@ -84,13 +81,10 @@ public class RoomService : Abstractions.IRoomService
             JoinedAt = DateTime.UtcNow,
         };
 
-        // Atomic capacity check + add. If 9 requests race when one slot is left, all but
-        // one get null back and surface a room_full error.
         var updated = await _repository.TryJoinRoomAsync(room.Id, member, ct);
         if (updated is null)
             throw new DomainException("room_full", "Phòng đã đủ người chơi hoặc đã bắt đầu.");
 
-        // Surface the added member inside the returned DTO.
         if (!updated.Members.Any(m => m.Id == member.Id))
             updated.Members.Add(member);
         return updated;
@@ -128,7 +122,6 @@ public class RoomService : Abstractions.IRoomService
         if (member is null)
             throw new DomainException("member_not_found", "Bạn không còn trong phòng.");
 
-        // Host doesn't toggle ready — they start the game.
         if (member.IsHost)
             throw new DomainException("not_host", "Chủ phòng không cần xác nhận sẵn sàng.");
 
@@ -137,9 +130,6 @@ public class RoomService : Abstractions.IRoomService
 
     public async Task<RoomMember?> HeartbeatAsync(string roomId, string memberId, CancellationToken ct = default)
     {
-        // UpdateMemberFieldAsync also flips IsOnline=true as a side-effect of
-        // receiving a heartbeat, so a tab that briefly disconnected will be
-        // re-marked online as soon as it pings again.
         return await _repository.UpdateMemberFieldAsync(roomId, memberId, null, DateTime.UtcNow, ct);
     }
 
@@ -153,6 +143,28 @@ public class RoomService : Abstractions.IRoomService
         await _repository.MarkStaleMembersOfflineAsync(roomId, OfflineAfter, ct);
         return await _repository.GetByIdAsync(roomId, ct);
     }
+
+    // ── Game lifecycle (delegate to GameService) ──────────────────────
+
+    public Task<Room> StartGameAsync(string roomId, string hostId, CancellationToken ct = default)
+        => _gameService.StartGameAsync(roomId, hostId, ct);
+
+    public Task<Room> RotateRoomAsync(string roomId, string hostId, CancellationToken ct = default)
+        => _gameService.RotateRoomAsync(roomId, hostId, ct);
+
+    // ── Game actions (delegate to GameService) ────────────────────────
+
+    public Task<GameActionResult> PlayCardAsync(string roomId, string memberId, string cardKey, string? targetMemberId, ComboKind? comboKind, string? discardPickKey, CancellationToken ct = default)
+        => _gameService.PlayCardAsync(roomId, memberId, cardKey, targetMemberId, comboKind, discardPickKey, ct);
+
+    public Task<GameActionResult> DrawCardAsync(string roomId, string memberId, CancellationToken ct = default)
+        => _gameService.DrawCardAsync(roomId, memberId, ct);
+
+    public Task<GameActionResult> UseDefuseAsync(string roomId, string memberId, int slotIndex, CancellationToken ct = default)
+        => _gameService.UseDefuseAsync(roomId, memberId, slotIndex, ct);
+
+    public Task<GameActionResult> ChainNopeAsync(string roomId, string memberId, CancellationToken ct = default)
+        => _gameService.ChainNopeAsync(roomId, memberId, ct);
 
     private async Task<string> ClaimUniqueCodeAsync(string roomId, CancellationToken ct)
     {

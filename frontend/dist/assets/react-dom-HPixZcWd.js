@@ -1,5 +1,5 @@
 import { r as reactExports } from "./react-BhVOh7S1.js";
-import { s as schedulerExports } from "./vendor-Bz22r_8Z.js";
+import { s as schedulerExports } from "./vendor-DcE7maHo.js";
 var reactDom = { exports: {} };
 var reactDom_production_min = {};
 /**

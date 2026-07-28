@@ -8,7 +8,6 @@ using Google.Apis.Auth.OAuth2;
 using Google.Cloud.Firestore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-
 namespace Arcana.Infrastructure;
 
 public static class DependencyInjection
@@ -60,6 +59,7 @@ public static class DependencyInjection
         services.AddSingleton<IInvitationCodeGenerator, InvitationCodeGenerator>();
         services.AddScoped<IRoomRepository, FirestoreRoomRepository>();
         services.AddScoped<IRoomService, RoomService>();
+        services.AddScoped<GameService>();
 
         return services;
     }

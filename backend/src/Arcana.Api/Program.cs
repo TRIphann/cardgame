@@ -1,4 +1,6 @@
+using Arcana.Api.Hubs;
 using Arcana.Api.Middleware;
+using Arcana.Application.Abstractions;
 using Arcana.Infrastructure;
 using Microsoft.OpenApi.Models;
 
@@ -19,6 +21,13 @@ builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "Arcana API", Version = "v1" });
 });
+
+// ── Realtime push (SignalR) ──────────────────────────────────
+// GameService broadcasts "room-updated" after each mutation so every
+// browser tab subscribed to the room receives the notification within
+// ~50ms instead of waiting up to POLL_MS for the next snapshot fetch.
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<IGameBroadcaster, SignalRGameBroadcaster>();
 
 builder.Services.AddArcanaInfrastructure(builder.Configuration);
 
@@ -59,6 +68,7 @@ if (app.Environment.IsDevelopment())
 app.UseCors();
 app.UseMiddleware<DomainExceptionMiddleware>();
 app.MapControllers();
+app.MapHub<GameHub>("/hubs/game");
 app.MapGet("/health", () => Results.Ok(new { status = "ok", time = DateTime.UtcNow }));
 
 app.Run();

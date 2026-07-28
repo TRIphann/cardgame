@@ -213,6 +213,74 @@ public class FirestoreRoomRepository : IRoomRepository
         return touched;
     }
 
+    public async Task<Room?> UpdateGameStateAsync(
+        string roomId,
+        Domain.Entities.GameState? gameState,
+        Domain.Enums.RoomStatus? status,
+        CancellationToken ct = default)
+    {
+        var docRef = _db.Collection(RoomsCollection).Document(roomId);
+        var updates = new Dictionary<string, object>();
+        if (status.HasValue)
+        {
+            updates["status"] = status.Value.ToString().ToLowerInvariant();
+        }
+        if (gameState is not null)
+        {
+            updates["gameState"] = BuildGameStateDoc(gameState);
+        }
+        else
+        {
+            updates["gameState"] = null;
+        }
+        await docRef.UpdateAsync(updates, cancellationToken: ct);
+        return await GetByIdAsync(roomId, ct);
+    }
+
+    private static Dictionary<string, object> BuildGameStateDoc(Domain.Entities.GameState gs)
+    {
+        var doc = new Dictionary<string, object>
+        {
+            ["deck"] = gs.Deck,
+            ["discardPile"] = gs.DiscardPile,
+            ["hands"] = gs.Hands.ToDictionary(kv => kv.Key, kv => (object)kv.Value),
+            ["currentTurnMemberId"] = gs.CurrentTurnMemberId,
+            ["attackCounter"] = gs.AttackCounter,
+            ["turnsTaken"] = gs.TurnsTaken.ToDictionary(kv => kv.Key, kv => (object)kv.Value),
+            ["cardsPlayed"] = gs.CardsPlayed.ToDictionary(kv => kv.Key, kv => (object)kv.Value),
+            ["alive"] = gs.Alive.ToDictionary(kv => kv.Key, kv => (object)kv.Value),
+            ["diedAt"] = gs.DiedAt.ToDictionary(
+                kv => kv.Key,
+                kv => kv.Value.HasValue
+                    ? (object)Timestamp.FromDateTime(kv.Value.Value.ToUniversalTime())
+                    : (object)null),
+            ["startedAt"] = gs.StartedAt.HasValue
+                ? Timestamp.FromDateTime(gs.StartedAt.Value.ToUniversalTime())
+                : (object)null,
+            ["endedAt"] = gs.EndedAt.HasValue
+                ? Timestamp.FromDateTime(gs.EndedAt.Value.ToUniversalTime())
+                : (object)null,
+            ["winnerId"] = gs.WinnerId ?? string.Empty,
+            ["pendingAction"] = gs.PendingAction is null
+                ? (object?)null
+                : BuildPendingActionDoc(gs.PendingAction),
+        };
+        return doc;
+    }
+
+    private static Dictionary<string, object> BuildPendingActionDoc(Domain.Entities.PendingAction pa)
+    {
+        return new Dictionary<string, object>
+        {
+            ["initiatorId"] = pa.InitiatorId,
+            ["cardKey"] = pa.CardKey,
+            ["targetMemberId"] = pa.TargetMemberId ?? string.Empty,
+            ["discardPickKey"] = pa.DiscardPickKey ?? string.Empty,
+            ["nopeChain"] = pa.NopeChain,
+            ["createdAt"] = Timestamp.FromDateTime(pa.CreatedAt.ToUniversalTime()),
+        };
+    }
+
     private static Dictionary<string, object> BuildRoomDoc(Room room) => new()
     {
         ["code"] = room.Code,
@@ -243,10 +311,15 @@ public class FirestoreRoomRepository : IRoomRepository
             HostId = data.TryGetValue("hostId", out var h) ? h as string ?? string.Empty : string.Empty,
             HostName = data.TryGetValue("hostName", out var hn) ? hn as string ?? string.Empty : string.Empty,
             Status = Enum.TryParse<RoomStatus>(data.TryGetValue("status", out var s) ? s as string : null, true, out var rs) ? rs : RoomStatus.Waiting,
-            MaxPlayers = data.TryGetValue("maxPlayers", out var mp) && mp is long mpL ? (int)mpL : 8,
+            MaxPlayers = data.TryGetValue("maxPlayers", out var mp) && mp is long mpL ? (int)mpL : 7,
             CreatedAt = data.TryGetValue("createdAt", out var ca) && ca is Timestamp ts ? ts.ToDateTime().ToUniversalTime() : DateTime.UtcNow,
             Members = new List<RoomMember>(),
         };
+
+        if (data.TryGetValue("gameState", out var gsRaw) && gsRaw is Dictionary<string, object> gsDoc && gsDoc.Count > 0)
+        {
+            room.GameState = MapGameStateDoc(gsDoc);
+        }
 
         membersSnapshot ??= await snapshot.Reference.Collection("members").GetSnapshotAsync(ct);
         foreach (var memberDoc in membersSnapshot.Documents)
@@ -264,5 +337,69 @@ public class FirestoreRoomRepository : IRoomRepository
             });
         }
         return room;
+    }
+
+    private static Domain.Entities.GameState MapGameStateDoc(Dictionary<string, object> doc)
+    {
+        var gs = new Domain.Entities.GameState();
+
+        if (doc.TryGetValue("deck", out var d) && d is IEnumerable<object> deckList)
+            gs.Deck = deckList.Select(x => x as string ?? string.Empty).Where(s => s.Length > 0).ToList();
+
+        if (doc.TryGetValue("discardPile", out var dp) && dp is IEnumerable<object> discardList)
+            gs.DiscardPile = discardList.Select(x => x as string ?? string.Empty).Where(s => s.Length > 0).ToList();
+
+        if (doc.TryGetValue("hands", out var h) && h is Dictionary<string, object> handsDict)
+        {
+            foreach (var kv in handsDict)
+            {
+                if (kv.Value is IEnumerable<object> cards)
+                    gs.Hands[kv.Key] = cards.Select(c => c as string ?? string.Empty).Where(s => s.Length > 0).ToList();
+            }
+        }
+
+        gs.CurrentTurnMemberId = doc.TryGetValue("currentTurnMemberId", out var ctm) ? ctm as string ?? string.Empty : string.Empty;
+        gs.AttackCounter = doc.TryGetValue("attackCounter", out var ac) && ac is long acl ? (int)acl : 0;
+
+        if (doc.TryGetValue("turnsTaken", out var tt) && tt is Dictionary<string, object> ttDict)
+            foreach (var kv in ttDict)
+                if (kv.Value is long l) gs.TurnsTaken[kv.Key] = (int)l;
+
+        if (doc.TryGetValue("cardsPlayed", out var cp) && cp is Dictionary<string, object> cpDict)
+            foreach (var kv in cpDict)
+                if (kv.Value is long l) gs.CardsPlayed[kv.Key] = (int)l;
+
+        if (doc.TryGetValue("alive", out var al) && al is Dictionary<string, object> alDict)
+            foreach (var kv in alDict)
+                if (kv.Value is bool b) gs.Alive[kv.Key] = b;
+
+        if (doc.TryGetValue("diedAt", out var da) && da is Dictionary<string, object> daDict)
+            foreach (var kv in daDict)
+                gs.DiedAt[kv.Key] = kv.Value is Timestamp ts ? ts.ToDateTime().ToUniversalTime() : (DateTime?)null;
+
+        gs.StartedAt = doc.TryGetValue("startedAt", out var sa) && sa is Timestamp sats ? sats.ToDateTime().ToUniversalTime() : (DateTime?)null;
+        gs.EndedAt = doc.TryGetValue("endedAt", out var ea) && ea is Timestamp eats ? eats.ToDateTime().ToUniversalTime() : (DateTime?)null;
+        gs.WinnerId = doc.TryGetValue("winnerId", out var wi) ? wi as string : null;
+        if (string.IsNullOrEmpty(gs.WinnerId)) gs.WinnerId = null;
+
+        if (doc.TryGetValue("pendingAction", out var pa) && pa is Dictionary<string, object> paDict)
+        {
+            gs.PendingAction = new Domain.Entities.PendingAction
+            {
+                InitiatorId = paDict.TryGetValue("initiatorId", out var pid) ? pid as string ?? string.Empty : string.Empty,
+                CardKey = paDict.TryGetValue("cardKey", out var pck) ? pck as string ?? string.Empty : string.Empty,
+                TargetMemberId = paDict.TryGetValue("targetMemberId", out var ptm) ? ptm as string : null,
+                DiscardPickKey = paDict.TryGetValue("discardPickKey", out var dpk) ? dpk as string : null,
+                CreatedAt = paDict.TryGetValue("createdAt", out var pca) && pca is Timestamp cats ? cats.ToDateTime().ToUniversalTime() : DateTime.UtcNow,
+                NopeChain = paDict.TryGetValue("nopeChain", out var nc) && nc is IEnumerable<object> ncList
+                    ? ncList.Select(n => n as string ?? string.Empty).Where(s => s.Length > 0).ToList()
+                    : new List<string>(),
+            };
+            // Clean empty strings to null
+            if (string.IsNullOrEmpty(gs.PendingAction.TargetMemberId)) gs.PendingAction.TargetMemberId = null;
+            if (string.IsNullOrEmpty(gs.PendingAction.DiscardPickKey)) gs.PendingAction.DiscardPickKey = null;
+        }
+
+        return gs;
     }
 }

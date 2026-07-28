@@ -402,7 +402,7 @@ export default function LobbyPage() {
       return;
     }
     try {
-      const res = await fetch(`/api/rooms/${roomId}/start`, {
+      const res = await fetch(`${API_BASE_URL}/api/rooms/${roomId}/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ hostId: session.session.playerId }),
@@ -557,8 +557,14 @@ export default function LobbyPage() {
                   data-flying={deckAnimation.isFlying ? "1" : "0"}
                 >
                   <div className="deck-stack">
-                    {/* 6 stacked layer surfaces for a thicker, more impressive deck.
-                        Pure depth stacking (translateZ only) — no translateY offset. */}
+                    {/* Thicker pile: 11 stacked layer surfaces. Pure depth
+                        stacking (translateZ only) — no translateY offset. */}
+                    <span className="deck-stack__layer" style={{ "--i": 11 }} />
+                    <span className="deck-stack__layer" style={{ "--i": 10 }} />
+                    <span className="deck-stack__layer" style={{ "--i": 9 }} />
+                    <span className="deck-stack__layer" style={{ "--i": 8 }} />
+                    <span className="deck-stack__layer" style={{ "--i": 7 }} />
+                    <span className="deck-stack__layer" style={{ "--i": 6 }} />
                     <span className="deck-stack__layer" style={{ "--i": 5 }} />
                     <span className="deck-stack__layer" style={{ "--i": 4 }} />
                     <span className="deck-stack__layer" style={{ "--i": 3 }} />

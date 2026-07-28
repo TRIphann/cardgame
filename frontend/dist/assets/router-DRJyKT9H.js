@@ -1,6 +1,6 @@
 import { r as reactExports, R as React } from "./react-BhVOh7S1.js";
-import "./react-dom-BqzW1rgF.js";
-import { i as invariant, j as joinPaths, g as getResolveToMatches, r as resolveTo, A as Action, p as parsePath, a as stripBasename, m as matchRoutes, b as isRouteErrorResponse, c as createPath, d as createBrowserHistory } from "./vendor-Bz22r_8Z.js";
+import "./react-dom-HPixZcWd.js";
+import { i as invariant, g as getResolveToMatches, r as resolveTo, j as joinPaths, A as Action, p as parsePath, a as stripBasename, m as matchRoutes, b as isRouteErrorResponse, c as createBrowserHistory, d as createPath } from "./vendor-DcE7maHo.js";
 /**
  * React Router v6.30.4
  *

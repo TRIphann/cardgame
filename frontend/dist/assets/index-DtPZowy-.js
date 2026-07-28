@@ -1,11 +1,11 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/GamePage-BpRIIh7o.js","assets/react-BhVOh7S1.js","assets/router-CJAaEV1m.js","assets/react-dom-BqzW1rgF.js","assets/vendor-Bz22r_8Z.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/GamePage-BRgeye31.js","assets/react-BhVOh7S1.js","assets/vendor-DcE7maHo.js","assets/router-DRJyKT9H.js","assets/react-dom-HPixZcWd.js"])))=>i.map(i=>d[i]);
 var __defProp = Object.defineProperty;
 var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
 var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
 import { a as React, j as jsxRuntimeExports, r as reactExports } from "./react-BhVOh7S1.js";
-import { r as reactDomExports, c as createRoot } from "./react-dom-BqzW1rgF.js";
-import { u as useLocation, a as useNavigate, L as Link, R as Routes, b as Route, N as Navigate, B as BrowserRouter } from "./router-CJAaEV1m.js";
-import "./vendor-Bz22r_8Z.js";
+import { r as reactDomExports, c as createRoot } from "./react-dom-HPixZcWd.js";
+import { u as useLocation, a as useNavigate, L as Link, R as Routes, b as Route, N as Navigate, B as BrowserRouter } from "./router-DRJyKT9H.js";
+import "./vendor-DcE7maHo.js";
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) {
@@ -811,6 +811,47 @@ const roomsApi = {
   },
   heartbeat(roomId, memberId) {
     return jsonRequest(`/api/rooms/${roomId}/heartbeat`, {
+      method: "POST",
+      body: JSON.stringify({ memberId })
+    });
+  },
+  // Game endpoints
+  snapshotWithViewer(roomId, memberId) {
+    const qs = memberId ? `?memberId=${encodeURIComponent(memberId)}` : "";
+    return jsonRequest(`/api/rooms/${roomId}/snapshot${qs}`);
+  },
+  startGame(roomId, hostId) {
+    return jsonRequest(`/api/rooms/${roomId}/start`, {
+      method: "POST",
+      body: JSON.stringify({ hostId })
+    });
+  },
+  rotateRoom(roomId, hostId) {
+    return jsonRequest(`/api/rooms/${roomId}/rotate`, {
+      method: "POST",
+      body: JSON.stringify({ hostId })
+    });
+  },
+  playCard(roomId, payload) {
+    return jsonRequest(`/api/rooms/${roomId}/game/play-card`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+  },
+  drawCard(roomId, memberId) {
+    return jsonRequest(`/api/rooms/${roomId}/game/draw-card`, {
+      method: "POST",
+      body: JSON.stringify({ memberId })
+    });
+  },
+  useDefuse(roomId, memberId, slotIndex) {
+    return jsonRequest(`/api/rooms/${roomId}/game/defuse`, {
+      method: "POST",
+      body: JSON.stringify({ memberId, slotIndex })
+    });
+  },
+  nope(roomId, memberId) {
+    return jsonRequest(`/api/rooms/${roomId}/game/nope`, {
       method: "POST",
       body: JSON.stringify({ memberId })
     });
@@ -2054,7 +2095,7 @@ function LobbyPage() {
       return;
     }
     try {
-      const res = await fetch(`/api/rooms/${roomId}/start`, {
+      const res = await fetch(`${API_BASE_URL}/api/rooms/${roomId}/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ hostId: session.session.playerId })
@@ -2208,6 +2249,12 @@ function LobbyPage() {
               "data-flying": deckAnimation.isFlying ? "1" : "0",
               children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "deck-stack", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "deck-stack__layer", style: { "--i": 11 } }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "deck-stack__layer", style: { "--i": 10 } }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "deck-stack__layer", style: { "--i": 9 } }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "deck-stack__layer", style: { "--i": 8 } }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "deck-stack__layer", style: { "--i": 7 } }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "deck-stack__layer", style: { "--i": 6 } }),
                   /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "deck-stack__layer", style: { "--i": 5 } }),
                   /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "deck-stack__layer", style: { "--i": 4 } }),
                   /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "deck-stack__layer", style: { "--i": 3 } }),
@@ -2286,7 +2333,7 @@ function LobbyPage() {
     roomError && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lobby-error", role: "alert", children: String(roomError.message || roomError) })
   ] });
 }
-const GamePage = reactExports.lazy(() => __vitePreload(() => import("./GamePage-BpRIIh7o.js"), true ? __vite__mapDeps([0,1,2,3,4]) : void 0));
+const GamePage = reactExports.lazy(() => __vitePreload(() => import("./GamePage-BRgeye31.js"), true ? __vite__mapDeps([0,1,2,3,4]) : void 0));
 function App() {
   const location = useLocation();
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(ErrorBoundary, { children: [
@@ -2312,5 +2359,11 @@ createRoot(container).render(
   /* @__PURE__ */ jsxRuntimeExports.jsx(React.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(BrowserRouter, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(AppProviders, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) }) }) })
 );
 export {
-  ROUTES as R
+  API_BASE_URL as A,
+  CARD_CLOUDINARY as C,
+  ROUTES as R,
+  useToast as a,
+  useAudio as b,
+  roomsApi as r,
+  useSession as u
 };
