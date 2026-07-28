@@ -92,35 +92,50 @@ export default function LobbyPage() {
 
   const roomId = session.session?.roomId;
   // Only poll for real room IDs, not pending placeholders
-  const isPending = roomId && typeof roomId === "string" && roomId.startsWith("pending-");
-  const { room, error: roomError, refresh } = useRoomPolling(isPending ? null : roomId);
+  const isPending = !roomId || (typeof roomId === "string" && roomId.startsWith("pending-"));
+  const pollRoomId = isPending ? null : roomId;
+  const { room, error: roomError, refresh } = useRoomPolling(pollRoomId);
 
   // NOTE: displayCode and showCode are defined AFTER room is declared.
   // Prefer server code, fall back to session code
   const displayCode = room?.code || session.session?.roomCode || "";
-  // Auto-reveal when we have a non-placeholder code (either from server or session)
-  const hasRealCode = displayCode && !displayCode.startsWith("pending") && displayCode.length === 6;
+  // Real code = 6-character A-Z/0-9 string, NOT a placeholder
+  const isPlaceholderCode = displayCode && (displayCode.startsWith("pending") || displayCode.length !== 6);
+  const hasRealCode = displayCode && displayCode.length === 6 && !displayCode.startsWith("pending");
   const showCode   = (codeVisible || hasRealCode) && displayCode.length > 0;
 
   // When server finally returns the room code, reveal it automatically.
   useEffect(() => {
-    if (displayCode && displayCode !== "------" && !displayCode.startsWith("pending")) {
+    if (hasRealCode) {
       setCodeVisible(true);
     }
-  }, [displayCode]);
+  }, [displayCode, hasRealCode]);
 
   // Merge local-only avatar choice and isHost status from session.
   const localAvatar = session.session?.avatar;
   const myIsHost = session.session?.isHost;
+  const myPlayerId = session.session?.playerId;
   const members = useMemo(() => {
+    // When pending (or before server response), make sure the local player
+    // shows up in the member list so the count is at least 1.
     const list = room?.members || [];
-    return list.map((m) => {
-      if (m.id === session.session?.playerId) {
+    const merged = list.map((m) => {
+      if (m.id === myPlayerId) {
         return { ...m, avatar: localAvatar, isHost: myIsHost };
       }
       return m;
     });
-  }, [room, localAvatar, myIsHost, session.session?.playerId]);
+    // Inject the local player if they're missing from the server snapshot
+    if (myPlayerId && !merged.some((m) => m.id === myPlayerId) && (isPending || merged.length === 0)) {
+      merged.push({
+        id: myPlayerId,
+        name: session.session?.playerName || "Bạn",
+        isHost: !!session.session?.isHost,
+        joinedAt: new Date().toISOString(),
+      });
+    }
+    return merged;
+  }, [room, localAvatar, myIsHost, myPlayerId, isPending, session.session?.playerName]);
 
   // Redirect when session is missing. We read the raw session from storage as
   // a fallback because `useSession()` may not have flushed its state yet on
@@ -256,6 +271,8 @@ export default function LobbyPage() {
   );
   const isHost = myMember?.isHost || (isPending && session.session?.isHost);
   const canStart = isHost && room && members?.length >= 2 && room.status === "waiting";
+
+  const playerCount = Math.max(members?.length ?? 0, 1);
 
   return (
     <main className="lobby-page">
@@ -423,7 +440,7 @@ export default function LobbyPage() {
 
       <footer className="lobby-footer">
         <p className="player-count">
-          {t("lobby.playerCount", { count: members?.length ?? 1 })}
+          {t("lobby.playerCount", { count: playerCount })}
         </p>
         {isHost && (
           <button

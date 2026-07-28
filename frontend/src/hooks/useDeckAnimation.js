@@ -22,11 +22,12 @@ const FANOUT_STAGGER_MS = 180;
 const FANIN_STAGGER_MS  = 180;
 
 // ── Orbit geometry ──────────────────────────────────────────────────────
-// Orbit center is shifted DOWN (positive y) because deck pile is near bottom
-// Cards should orbit BELOW the deck pile center
-const ORBIT_RX = 200;
-const ORBIT_RY = 160;  // taller vertical to prevent clipping
-const ORBIT_Y_OFFSET = 80; // shift orbit center DOWN from deck center
+// Orbit center is shifted DOWN and RIGHT (positive y and positive x) because deck pile is near bottom
+// Cards should orbit BELOW and slightly to the RIGHT of the deck pile center
+const ORBIT_RX = 160;
+const ORBIT_RY = 130;  // taller vertical to prevent clipping
+const ORBIT_Y_OFFSET = 70; // shift orbit center DOWN from deck center
+const ORBIT_X_OFFSET = 20; // shift orbit center RIGHT from deck center
 const ORBIT_MS = 12000;
 
 const PHASE_OFFSET = (Math.PI * 2) / N;
@@ -98,10 +99,10 @@ function makeTick({ flyingCardRefs, revealedSetRef, flipTimersRef,
 
       const ta = k * PHASE_OFFSET;
 
-      // Position: orbit → deck center
+      // Position: orbit → deck center (shifted right by ORBIT_X_OFFSET)
       const rx = ORBIT_RX * (1 - ek);
       const ry = ORBIT_RY * (1 - ek);
-      const fx = Math.sin(ta) * rx;
+      const fx = Math.sin(ta) * rx + ORBIT_X_OFFSET * (1 - ek);
       const fy = -Math.cos(ta) * ry + ORBIT_Y_OFFSET * (1 - ek);
 
       // Scale: keep full size
@@ -143,10 +144,10 @@ function makeTick({ flyingCardRefs, revealedSetRef, flipTimersRef,
       const delay = slot * FANOUT_STAGGER_MS;
       const cardEl = el - delay;
 
-      // Card hasn't started flying yet - start FLAT like deck pile
+      // Card hasn't started flying yet - start FLAT like deck pile (shifted right)
       if (cardEl < 0) {
         nd.style.transform =
-          `translate(calc(-50% + 0px), calc(-50% + ${ORBIT_Y_OFFSET.toFixed(1)}px)) ` +
+          `translate(calc(-50% + ${ORBIT_X_OFFSET}px), calc(-50% + ${ORBIT_Y_OFFSET.toFixed(1)}px)) ` +
           `rotateX(${FLAT_RX}deg) ` +
           `rotateZ(${FLAT_RZ}deg) ` +
           `scale(0.3)`;
@@ -161,10 +162,10 @@ function makeTick({ flyingCardRefs, revealedSetRef, flipTimersRef,
       const ta = k * PHASE_OFFSET;
       const sa = Math.PI / 2;
 
-      // Position: deck center → orbit
+      // Position: deck center → orbit (shifted right by ORBIT_X_OFFSET)
       const rx = 20 + ek * (ORBIT_RX - 20);
       const ry = 15 + ek * (ORBIT_RY - 15);
-      const fx = Math.sin(sa + (ta - sa) * ek) * rx;
+      const fx = Math.sin(sa + (ta - sa) * ek) * rx + ORBIT_X_OFFSET;
       const fy = -Math.cos(sa + (ta - sa) * ek) * ry + ORBIT_Y_OFFSET * ek;
 
       // Scale: grow from small to full
@@ -209,7 +210,7 @@ function makeTick({ flyingCardRefs, revealedSetRef, flipTimersRef,
       const ba = (el / orbitMs) * Math.PI * 2;
       const a  = ba + k * PHASE_OFFSET;
 
-      const ox = Math.sin(a) * ORBIT_RX;
+      const ox = Math.sin(a) * ORBIT_RX + ORBIT_X_OFFSET;
       const oy = -Math.cos(a) * ORBIT_RY + ORBIT_Y_OFFSET;
 
       const dp  = Math.cos(a);

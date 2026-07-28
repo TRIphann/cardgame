@@ -485,8 +485,6 @@ body { }
   align-items: center;
   justify-content: center;
   transform-style: preserve-3d;
-  /* Shift the entire animation to the right for better visual balance */
-  margin-left: 40px;
 }
 
 /* Caption sits below the stage on top of the layout — flying cards can't

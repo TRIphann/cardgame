@@ -26,10 +26,20 @@ export const ROUTES = {
 // - sessionStorage survives F5 inside the same tab, which is what we need.
 
 const SESSION_KEY = "arcana.session.v1";
+const SESSION_EVENT = "arcana:session";
+
+function emitSessionChange(next) {
+  try {
+    window.dispatchEvent(new CustomEvent(SESSION_EVENT, { detail: next }));
+  } catch (_) { /* SSR / older browsers */ }
+}
 
 export function saveSession(session) {
   try {
     sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    // Notify in-tab listeners (React SessionProvider) that the session changed,
+    // since `storage` events only fire across tabs.
+    emitSessionChange(session);
   } catch (_) { /* private mode / quota */ }
 }
 

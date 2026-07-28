@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/GamePage-BUbjVIt0.js","assets/react-BhVOh7S1.js","assets/router-CJAaEV1m.js","assets/react-dom-BqzW1rgF.js","assets/vendor-Bz22r_8Z.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/GamePage-B5W4HUGe.js","assets/react-BhVOh7S1.js","assets/router-CJAaEV1m.js","assets/react-dom-BqzW1rgF.js","assets/vendor-Bz22r_8Z.js"])))=>i.map(i=>d[i]);
 var __defProp = Object.defineProperty;
 var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
 var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
@@ -115,9 +115,17 @@ const ROUTES = {
   settings: "/settings"
 };
 const SESSION_KEY = "arcana.session.v1";
+const SESSION_EVENT$1 = "arcana:session";
+function emitSessionChange$1(next) {
+  try {
+    window.dispatchEvent(new CustomEvent(SESSION_EVENT$1, { detail: next }));
+  } catch (_) {
+  }
+}
 function saveSession(session) {
   try {
     sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    emitSessionChange$1(session);
   } catch (_) {
   }
 }
@@ -1037,7 +1045,7 @@ function LandingPage() {
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "eyebrow", children: t("landing.eyebrow") }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { id: "game-title", children: t("landing.title") }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "tagline", children: t("landing.tagline") }),
+      t("landing.tagline") && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "tagline", children: t("landing.tagline") }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "divider", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("i", {}),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "✧" }),
@@ -1221,10 +1229,19 @@ function useRoomPolling(roomId, { enabled = true } = {}) {
   const [room, setRoom] = reactExports.useState(null);
   const [error, setError] = reactExports.useState(null);
   const stoppedRef = reactExports.useRef(false);
+  const roomIdRef = reactExports.useRef(roomId);
+  const enabledRef = reactExports.useRef(enabled);
+  reactExports.useEffect(() => {
+    roomIdRef.current = roomId;
+  }, [roomId]);
+  reactExports.useEffect(() => {
+    enabledRef.current = enabled;
+  }, [enabled]);
   const refresh = reactExports.useCallback(async () => {
-    if (!roomId || !enabled) return;
+    const currentRoomId = roomIdRef.current;
+    if (!currentRoomId || !enabledRef.current) return;
     try {
-      const body = await getRoom(roomId);
+      const body = await getRoom(currentRoomId);
       const next = body.room ?? body;
       setRoom(next);
       setError(null);
@@ -1233,7 +1250,7 @@ function useRoomPolling(roomId, { enabled = true } = {}) {
     } catch (err) {
       setError(err);
     }
-  }, [roomId, enabled]);
+  }, []);
   reactExports.useEffect(() => {
     stoppedRef.current = false;
     if (!roomId || !enabled) return void 0;
@@ -1260,9 +1277,10 @@ const N = 4;
 const FANOUT_ORDER = [3, 2, 1, 0];
 const FANOUT_STAGGER_MS = 180;
 const FANIN_STAGGER_MS = 180;
-const ORBIT_RX = 180;
-const ORBIT_RY = 140;
-const ORBIT_Y_OFFSET = 60;
+const ORBIT_RX = 160;
+const ORBIT_RY = 130;
+const ORBIT_Y_OFFSET = 70;
+const ORBIT_X_OFFSET = 20;
 const ORBIT_MS = 12e3;
 const PHASE_OFFSET = Math.PI * 2 / N;
 const WIGGLE_DELAYS = [5e3, 4e3, 2e3];
@@ -1325,7 +1343,7 @@ function makeTick({
       const ta = k * PHASE_OFFSET;
       const rx = ORBIT_RX * (1 - ek);
       const ry = ORBIT_RY * (1 - ek);
-      const fx = Math.sin(ta) * rx;
+      const fx = Math.sin(ta) * rx + ORBIT_X_OFFSET * (1 - ek);
       const fy = -Math.cos(ta) * ry + ORBIT_Y_OFFSET * (1 - ek);
       const fsc = 1;
       const rxAngle = FLAT_RX * ek;
@@ -1350,7 +1368,7 @@ function makeTick({
       const delay = slot * FANOUT_STAGGER_MS;
       const cardEl = el - delay;
       if (cardEl < 0) {
-        nd.style.transform = `translate(calc(-50% + 0px), calc(-50% + ${ORBIT_Y_OFFSET.toFixed(1)}px)) rotateX(${FLAT_RX}deg) rotateZ(${FLAT_RZ}deg) scale(0.3)`;
+        nd.style.transform = `translate(calc(-50% + ${ORBIT_X_OFFSET}px), calc(-50% + ${ORBIT_Y_OFFSET.toFixed(1)}px)) rotateX(${FLAT_RX}deg) rotateZ(${FLAT_RZ}deg) scale(0.3)`;
         nd.style.opacity = "0";
         nd.style.zIndex = String(80 + k);
         continue;
@@ -1361,7 +1379,7 @@ function makeTick({
       const sa = Math.PI / 2;
       const rx = 20 + ek * (ORBIT_RX - 20);
       const ry = 15 + ek * (ORBIT_RY - 15);
-      const fx = Math.sin(sa + (ta - sa) * ek) * rx;
+      const fx = Math.sin(sa + (ta - sa) * ek) * rx + ORBIT_X_OFFSET;
       const fy = -Math.cos(sa + (ta - sa) * ek) * ry + ORBIT_Y_OFFSET * ek;
       const fsc = 0.3 + ek * 0.7;
       const rxAngle = FLAT_RX * (1 - ek);
@@ -1389,7 +1407,7 @@ function makeTick({
       if (!nd) continue;
       const ba = el / orbitMs * Math.PI * 2;
       const a = ba + k * PHASE_OFFSET;
-      const ox = Math.sin(a) * ORBIT_RX;
+      const ox = Math.sin(a) * ORBIT_RX + ORBIT_X_OFFSET;
       const oy = -Math.cos(a) * ORBIT_RY + ORBIT_Y_OFFSET;
       const dp = Math.cos(a);
       const osc = 0.92 + 0.18 * (dp + 1) / 2;
@@ -1793,26 +1811,39 @@ function LobbyPage() {
   const pickerAnchorRef = reactExports.useRef(null);
   const deckAnimation = useDeckAnimation({ cardImageUrls: CARD_URLS });
   const roomId = session.session?.roomId;
-  const isPending = roomId && typeof roomId === "string" && roomId.startsWith("pending-");
-  const { room, error: roomError, refresh } = useRoomPolling(isPending ? null : roomId);
+  const isPending = !roomId || typeof roomId === "string" && roomId.startsWith("pending-");
+  const pollRoomId = isPending ? null : roomId;
+  const { room, error: roomError, refresh } = useRoomPolling(pollRoomId);
   const displayCode = room?.code || session.session?.roomCode || "";
-  const showCode = codeVisible && displayCode.length > 0;
+  displayCode && (displayCode.startsWith("pending") || displayCode.length !== 6);
+  const hasRealCode = displayCode && displayCode.length === 6 && !displayCode.startsWith("pending");
+  const showCode = (codeVisible || hasRealCode) && displayCode.length > 0;
   reactExports.useEffect(() => {
-    if (displayCode && displayCode !== "------") {
+    if (hasRealCode) {
       setCodeVisible(true);
     }
-  }, [displayCode]);
+  }, [displayCode, hasRealCode]);
   const localAvatar = session.session?.avatar;
   const myIsHost = session.session?.isHost;
+  const myPlayerId = session.session?.playerId;
   const members = reactExports.useMemo(() => {
     const list = room?.members || [];
-    return list.map((m) => {
-      if (m.id === session.session?.playerId) {
+    const merged = list.map((m) => {
+      if (m.id === myPlayerId) {
         return { ...m, avatar: localAvatar, isHost: myIsHost };
       }
       return m;
     });
-  }, [room, localAvatar, myIsHost, session.session?.playerId]);
+    if (myPlayerId && !merged.some((m) => m.id === myPlayerId) && (isPending || merged.length === 0)) {
+      merged.push({
+        id: myPlayerId,
+        name: session.session?.playerName || "Bạn",
+        isHost: !!session.session?.isHost,
+        joinedAt: (/* @__PURE__ */ new Date()).toISOString()
+      });
+    }
+    return merged;
+  }, [room, localAvatar, myIsHost, myPlayerId, isPending, session.session?.playerName]);
   reactExports.useEffect(() => {
     const fromStorage = session.session?.roomId || readSessionRoomId();
     if (!fromStorage && location.pathname.startsWith(ROUTES.lobby)) {
@@ -1929,6 +1960,7 @@ function LobbyPage() {
   );
   const isHost = myMember?.isHost || isPending && session.session?.isHost;
   const canStart = isHost && room && members?.length >= 2 && room.status === "waiting";
+  const playerCount = Math.max(members?.length ?? 0, 1);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("main", { className: "lobby-page", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lobby-backdrop", "aria-hidden": "true", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "ambient ambient-one" }),
@@ -2105,7 +2137,7 @@ function LobbyPage() {
       ) })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("footer", { className: "lobby-footer", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "player-count", children: t("lobby.playerCount", { count: members?.length ?? 1 }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "player-count", children: t("lobby.playerCount", { count: playerCount }) }),
       isHost && /* @__PURE__ */ jsxRuntimeExports.jsx(
         "button",
         {
@@ -2121,7 +2153,7 @@ function LobbyPage() {
     roomError && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lobby-error", role: "alert", children: String(roomError.message || roomError) })
   ] });
 }
-const GamePage = reactExports.lazy(() => __vitePreload(() => import("./GamePage-BUbjVIt0.js"), true ? __vite__mapDeps([0,1,2,3,4]) : void 0));
+const GamePage = reactExports.lazy(() => __vitePreload(() => import("./GamePage-B5W4HUGe.js"), true ? __vite__mapDeps([0,1,2,3,4]) : void 0));
 function App() {
   const location = useLocation();
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(ErrorBoundary, { children: [

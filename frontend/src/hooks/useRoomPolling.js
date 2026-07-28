@@ -11,16 +11,21 @@ export function useRoomPolling(roomId, { enabled = true } = {}) {
   const [room, setRoom] = useState(null);
   const [error, setError] = useState(null);
   const stoppedRef = useRef(false);
-  // Use ref to always get the latest roomId without causing re-renders
+  // Use refs to always get the latest roomId/enabled without causing re-renders
   const roomIdRef = useRef(roomId);
+  const enabledRef = useRef(enabled);
 
   useEffect(() => {
     roomIdRef.current = roomId;
   }, [roomId]);
 
+  useEffect(() => {
+    enabledRef.current = enabled;
+  }, [enabled]);
+
   const refresh = useCallback(async () => {
     const currentRoomId = roomIdRef.current;
-    if (!currentRoomId || !enabled) return;
+    if (!currentRoomId || !enabledRef.current) return;
     try {
       const body = await getRoom(currentRoomId);
       const next = body.room ?? body;
@@ -31,11 +36,12 @@ export function useRoomPolling(roomId, { enabled = true } = {}) {
     } catch (err) {
       setError(err);
     }
-  }, [enabled]);
+  }, []);
 
   useEffect(() => {
     stoppedRef.current = false;
     if (!roomId || !enabled) return undefined;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     refresh();
     const id = setInterval(() => {
       if (!stoppedRef.current) refresh();
