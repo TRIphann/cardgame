@@ -63,30 +63,39 @@ function makeTick({ phase, flyingCardRefs, revealedSetRef, flipTimersRef,
 
   const tickReturning = (now) => {
     const t = clamp((now - startMs) / flightBackMs, 0, 1);
-    // Dramatic ease-out with overshoot feel
-    const eased = t < 0.7 ? easeOutCubic(t / 0.7) : 1;
+    // Ease-in for arriving, with gentle deceleration
+    const eased = easeInOut(t);
+
     for (let i = 0; i < N; i += 1) {
       const node = flyingCardRefs.current[i];
       if (!node) continue;
 
-      // Spiral angle - each card spirals with a unique phase
-      const spiralAngle = (1 - eased) * (Math.PI * 2.5) * (i % 2 === 0 ? 1 : -1);
-      // Outward then inward radius
-      const midT = Math.sin(eased * Math.PI); // peaks at 0.5
-      const spiralR = 40 * midT; // expand then contract
-      // Spiral offset
-      const spiralX = Math.cos(spiralAngle) * spiralR;
-      const spiralY = Math.sin(spiralAngle) * spiralR * 0.5;
+      // Spiral inward: each card has unique spiral direction
+      const spiralDir = i % 2 === 0 ? 1 : -1;
+      const spiralAngle = eased * Math.PI * 2 * spiralDir;
+      // Shrink radius from orbit size down to deck center
+      const spiralR = eased * ORBIT_RX;
+      const spiralRY = eased * ORBIT_RY;
 
-      const finalScale = (1 - eased) * 1.0 + eased * 0.05;
-      const rotZ = (1 - t) * 25 * (i % 2 === 0 ? 1 : -1) + eased * 180 * (i % 2 === 0 ? 1 : -1);
+      // Spiral offset that decreases as cards approach deck
+      const spiralX = Math.sin(spiralAngle) * spiralR * 0.15;
+      const spiralY = -Math.cos(spiralAngle) * spiralRY * 0.15;
+
+      // Final position: at deck center, fully upright, scale down to card size
+      const scale = 1 - eased * 0.92; // 1 → 0.08 (small card merging into pile)
+      const rotZ = eased * 10 * spiralDir;
+      // Undo the tilt from orbit so card arrives flat
+      const rotY = -tiltY_at_orbit(i) * (1 - eased);
+      const rotX = eased * 5 * spiralDir;
 
       node.style.transform =
         `translate(calc(-50% + ${spiralX.toFixed(1)}px), calc(-50% + ${spiralY.toFixed(1)}px)) ` +
         `rotateZ(${rotZ.toFixed(1)}deg) ` +
-        `scale(${Math.max(0.01, finalScale).toFixed(3)})`;
-      node.style.opacity = String(Math.max(0, 1 - t * 1.05));
-      node.style.zIndex = String(120 + Math.round((1 - t) * 20));
+        `rotateY(${rotY.toFixed(1)}deg) ` +
+        `rotateX(${rotX.toFixed(1)}deg) ` +
+        `scale(${Math.max(0.01, scale).toFixed(3)})`;
+      node.style.opacity = String(Math.max(0, 1 - eased * 0.95));
+      node.style.zIndex = String(120 - Math.round(eased * 30));
     }
     if (t < 1) {
       rafId = requestAnimationFrame(tickReturning);
@@ -103,6 +112,13 @@ function makeTick({ phase, flyingCardRefs, revealedSetRef, flipTimersRef,
       onEnd();
     }
   };
+
+  function tiltY_at_orbit(i) {
+    // Match the tiltY calculation from the orbit phase
+    const angle = i * PHASE_OFFSET;
+    const depth = Math.cos(angle);
+    return depth * 22;
+  }
 
   const tick = (now) => {
     if (phase === "returning") {

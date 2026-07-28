@@ -18,7 +18,10 @@ import { AvatarPicker } from "./AvatarPicker.jsx";
 import { CARD_CLOUDINARY } from "../../games/exploding-cats/cardCloudinary.js";
 
 // Cloudinary card URLs (basic exploding kittens deck).
-const CARD_URLS = Object.values(CARD_CLOUDINARY.cards || {});
+// Exclude the "back" card so flying cards only show real game faces.
+const CARD_URLS = Object.entries(CARD_CLOUDINARY.cards || {})
+  .filter(([key]) => key !== "back")
+  .map(([, url]) => url);
 const CARD_BACK_URL = CARD_CLOUDINARY.cards?.back || CARD_CLOUDINARY.baseUrl + "/v1785156350/back_knmzmp.svg";
 
 // Read the roomId directly from sessionStorage. Used as a fallback when the
@@ -72,7 +75,19 @@ export default function LobbyPage() {
   const settings = useSettings();
 
   const [codeVisible, setCodeVisible] = useState(false);
-  const [copyState, setCopyState] = useState("idle"); // 'idle' | 'copied'
+  const [copyState, setCopyState]     = useState("idle"); // 'idle' | 'copied'
+
+  // Always-available room code: prefer server room.code, fall back to session.
+  const displayCode = room?.code || session.session?.roomCode || "";
+  // Show real code only when the eye is open AND code is actually available.
+  const showCode   = codeVisible && displayCode.length > 0;
+
+  // When server finally returns the room code, reveal it automatically.
+  useEffect(() => {
+    if (displayCode && displayCode !== "------") {
+      setCodeVisible(true);
+    }
+  }, [displayCode]);
 
   // Game-mode carousel state. Persist across re-renders but not across
   // sessions — players usually want the default first.
@@ -287,12 +302,14 @@ export default function LobbyPage() {
               </span>
             </button>
             <span className="invite-code" id="invite-code">
-              {codeVisible ? (room?.code || session.session?.roomCode || "------") : "••••••"}
+              {showCode ? displayCode : "••••••"}
             </span>
             <button
               type="button"
-              className={`copy-button ${copyState === "copied" ? "is-copied" : ""}`}
+              className={`copy-button ${copyState === "copied" ? "is-copied" : ""} ${!displayCode ? "is-error" : ""}`}
               onClick={handleCopy}
+              disabled={!displayCode}
+              title={displayCode ? "Sao chép mã phòng" : "Đang chờ mã phòng..."}
             >
               <span className="copy-button__label">{copyState === "copied" ? t("lobby.copied") : t("lobby.copy")}</span>
               <span className="copy-button__check" aria-hidden="true">✓</span>
