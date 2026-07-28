@@ -31,6 +31,7 @@ export default defineConfig({
     assetsDir: "assets",
     sourcemap: false,
     target: "es2020",
+    minify: false,
     rollupOptions: {
       output: {
         manualChunks: (id) => {
