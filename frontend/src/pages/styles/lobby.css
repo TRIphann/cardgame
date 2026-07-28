@@ -778,24 +778,31 @@ body { }
   display: block;
 }
 
-/* Reveal 3D flip: back spins 180deg away, front spins forward into view.
+/* Reveal 3D flip: use CSS transitions for bidirectional flip.
+   Both back-face and front-face flip simultaneously.
+   When .revealed is added → front face shows (front 0deg, back 180deg)
+   When .revealed is removed → back face shows (front 180deg, back 0deg)
    0.65s cubic-bezier(0.4, 0, 0.2, 1) = snappy but smooth. */
+.flying-card .card-face {
+  transition: transform 0.65s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Default: back face visible (0deg), front face hidden (180deg) */
+.flying-card .card-back-face {
+  transform: rotateY(0deg);
+}
+.flying-card .card-front-face {
+  transform: rotateY(180deg);
+}
+
+/* Revealed: front face visible (0deg), back face hidden (180deg) */
 .flying-card.revealed .card-back-face {
-  animation: cardFlipBack 0.65s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  transform: rotateY(180deg);
 }
 .flying-card.revealed .card-front-face {
-  animation: cardFlipFront 0.65s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  transform: rotateY(0deg);
 }
 .flying-card.revealed::before { opacity: 1; }
-
-@keyframes cardFlipBack {
-  0%   { transform: rotateY(0deg); }
-  100% { transform: rotateY(180deg); }
-}
-@keyframes cardFlipFront {
-  0%   { transform: rotateY(180deg); }
-  100% { transform: rotateY(0deg); }
-}
 
 /* Bloom glow when revealed */
 .flying-card.revealed {

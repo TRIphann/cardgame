@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/GamePage-BNuDmMcR.js","assets/react-BhVOh7S1.js","assets/router-CJAaEV1m.js","assets/react-dom-BqzW1rgF.js","assets/vendor-Bz22r_8Z.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/GamePage-fr8OdHpr.js","assets/react-BhVOh7S1.js","assets/router-CJAaEV1m.js","assets/react-dom-BqzW1rgF.js","assets/vendor-Bz22r_8Z.js"])))=>i.map(i=>d[i]);
 var __defProp = Object.defineProperty;
 var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
 var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
@@ -1265,14 +1265,14 @@ const ORBIT_MS = 9e3;
 const PHASE_OFFSET = Math.PI * 2 / N;
 const WIGGLE_DELAYS = [5e3, 4e3, 2e3];
 const FLIGHT_OUT_MS = 1200;
-const FLIGHT_BACK_MS = 1400;
+const FLIGHT_BACK_MS = 1600;
 const REVEAL_HOLD_MS = 1800;
 const REVEAL_THRESH = 0.65;
 function easeOutCubic(t) {
   return 1 - Math.pow(1 - t, 3);
 }
-function easeInOut(t) {
-  return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+function easeInCubic(t) {
+  return t * t * t;
 }
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
@@ -1289,31 +1289,10 @@ function makeTick({
 }) {
   let rafId = 0;
   let startMs = 0;
-  const tickReturning = (now) => {
-    const prog = clamp((now - startMs) / flightBackMs, 0, 1);
-    const ek = easeInOut(prog);
-    for (let k = 0; k < N; k += 1) {
-      const nd = flyingCardRefs.current[k];
-      if (!nd) continue;
-      const sdir = k % 2 === 0 ? 1 : -1;
-      const sang = ek * Math.PI * 2 * sdir;
-      const srx = ek * ORBIT_RX;
-      const sry = ek * ORBIT_RY;
-      const ox = Math.sin(sang) * srx * 0.15;
-      const oy = -Math.cos(sang) * sry * 0.15;
-      const sc = 1 - ek * 0.92;
-      const rz = ek * 10 * sdir;
-      const oang = k * PHASE_OFFSET;
-      const odep = Math.cos(oang);
-      const ryv = -odep * 22 * (1 - ek);
-      const rxv = ek * 5 * sdir;
-      nd.style.transform = `translate(calc(-50% + ${ox.toFixed(1)}px), calc(-50% + ${oy.toFixed(1)}px)) rotateZ(${rz.toFixed(1)}deg) rotateY(${ryv.toFixed(1)}deg) rotateX(${rxv.toFixed(1)}deg) scale(${Math.max(0.01, sc).toFixed(3)})`;
-      nd.style.opacity = String(Math.max(0, 1 - ek * 0.95));
-      nd.style.zIndex = String(120 - Math.round(ek * 30));
-    }
-    if (prog < 1) {
-      rafId = requestAnimationFrame(tickReturning);
-    } else {
+  const tickFanIn = (now) => {
+    const totalMs = flightBackMs;
+    const el = now - startMs;
+    if (el >= totalMs) {
       cancelAnimationFrame(rafId);
       for (let k = 0; k < N; k += 1) {
         const nd = flyingCardRefs.current[k];
@@ -1324,7 +1303,34 @@ function makeTick({
         nd.classList.remove("revealed");
       }
       onEnd();
+      return;
     }
+    for (let k = 0; k < N; k += 1) {
+      const nd = flyingCardRefs.current[k];
+      if (!nd) continue;
+      const prog = clamp(el / totalMs, 0, 1);
+      const ek1 = easeInCubic(prog);
+      const ta = k * PHASE_OFFSET;
+      const sa = Math.PI / 2;
+      const fa = ta + (sa - ta) * ek1;
+      const fr = ORBIT_RX - ek1 * (ORBIT_RX - 20);
+      const fry = ORBIT_RY - ek1 * (ORBIT_RY - 15);
+      const fx = Math.sin(fa) * fr;
+      const fy = -Math.cos(fa) * fry;
+      const osc = 0.92 + 0.18 * (Math.cos(ta) + 1) / 2;
+      const fsc = osc - ek1 * (osc - 0.3);
+      const ir = -90 + ek1 * 90;
+      nd.style.transform = `translate(calc(-50% + ${fx.toFixed(1)}px), calc(-50% + ${fy.toFixed(1)}px)) rotateZ(${ir.toFixed(1)}deg) scale(${fsc.toFixed(3)})`;
+      const fadeStart = 0.4;
+      const fadeEnd = 0.85;
+      let opacity = 1;
+      if (prog > fadeStart) {
+        opacity = 1 - clamp((prog - fadeStart) / (fadeEnd - fadeStart), 0, 1);
+      }
+      nd.style.opacity = String(Math.max(0, opacity));
+      nd.style.zIndex = String(Math.round(120 - prog * 110));
+    }
+    rafId = requestAnimationFrame(tickFanIn);
   };
   const tickFanOut = (now) => {
     const totalMs = flightOutMs + (N - 1) * FANOUT_STAGGER_MS + orbitMs;
@@ -1338,6 +1344,7 @@ function makeTick({
       if (cEl < 0) {
         nd.style.opacity = "0";
         nd.style.zIndex = String(80 + k);
+        nd.style.transform = "";
         continue;
       }
       const p1 = clamp(cEl / FLIGHT_OUT_MS, 0, 1);
@@ -1368,7 +1375,7 @@ function makeTick({
     const orbitEl = el - fanDur;
     if (orbitEl >= orbitMs) {
       startMs = performance.now();
-      rafId = requestAnimationFrame(tickReturning);
+      rafId = requestAnimationFrame(tickFanIn);
       return;
     }
     for (let k = 0; k < N; k += 1) {
@@ -1402,11 +1409,7 @@ function makeTick({
   return {
     start(ms) {
       startMs = ms;
-      if (phase === "returning") {
-        rafId = requestAnimationFrame(tickReturning);
-      } else {
-        rafId = requestAnimationFrame(tickFanOut);
-      }
+      rafId = requestAnimationFrame(tickFanOut);
     },
     cancel() {
       cancelAnimationFrame(rafId);
@@ -1500,29 +1503,6 @@ function useDeckAnimation({ cardImageUrls }) {
       rafRunnerRef.current = null;
     };
   }, [phase, reduced, flyingCardUrls]);
-  reactExports.useEffect(() => {
-    if (phase !== "returning") return void 0;
-    const onEnd = () => {
-      setIsFlying(false);
-      setPhase("idle");
-      setWiggleLevel(0);
-    };
-    rafRunnerRef.current = makeTick({
-      phase: "returning",
-      flyingCardRefs,
-      revealedSetRef,
-      flipTimersRef,
-      orbitMs: ORBIT_MS,
-      flightOutMs: FLIGHT_OUT_MS,
-      flightBackMs: FLIGHT_BACK_MS,
-      onEnd
-    });
-    rafRunnerRef.current.start(performance.now());
-    return () => {
-      rafRunnerRef.current?.cancel();
-      rafRunnerRef.current = null;
-    };
-  }, [phase]);
   return {
     wiggleLevel,
     isFlying,
@@ -2132,7 +2112,7 @@ function LobbyPage() {
     roomError && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lobby-error", role: "alert", children: String(roomError.message || roomError) })
   ] });
 }
-const GamePage = reactExports.lazy(() => __vitePreload(() => import("./GamePage-BNuDmMcR.js"), true ? __vite__mapDeps([0,1,2,3,4]) : void 0));
+const GamePage = reactExports.lazy(() => __vitePreload(() => import("./GamePage-fr8OdHpr.js"), true ? __vite__mapDeps([0,1,2,3,4]) : void 0));
 function App() {
   const location = useLocation();
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(ErrorBoundary, { children: [
