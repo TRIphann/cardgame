@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/GamePage-C0nnOtCk.js","assets/react-BhVOh7S1.js","assets/router-CJAaEV1m.js","assets/react-dom-BqzW1rgF.js","assets/vendor-Bz22r_8Z.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/GamePage-BNuDmMcR.js","assets/react-BhVOh7S1.js","assets/router-CJAaEV1m.js","assets/react-dom-BqzW1rgF.js","assets/vendor-Bz22r_8Z.js"])))=>i.map(i=>d[i]);
 var __defProp = Object.defineProperty;
 var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
 var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
@@ -1803,13 +1803,6 @@ function LobbyPage() {
   const settings = useSettings();
   const [codeVisible, setCodeVisible] = reactExports.useState(false);
   const [copyState, setCopyState] = reactExports.useState("idle");
-  const displayCode = room?.code || session.session?.roomCode || "";
-  const showCode = codeVisible && displayCode.length > 0;
-  reactExports.useEffect(() => {
-    if (displayCode && displayCode !== "------") {
-      setCodeVisible(true);
-    }
-  }, [displayCode]);
   const [modeIndex, setModeIndex] = reactExports.useState(0);
   const mode = GAME_MODES[modeIndex];
   const [pickerOpen, setPickerOpen] = reactExports.useState(false);
@@ -1818,6 +1811,13 @@ function LobbyPage() {
   const roomId = session.session?.roomId;
   const isPending = roomId?.startsWith?.("pending-");
   const { room, error: roomError, refresh } = useRoomPolling(isPending ? null : roomId);
+  const displayCode = room?.code || session.session?.roomCode || "";
+  const showCode = codeVisible && displayCode.length > 0;
+  reactExports.useEffect(() => {
+    if (displayCode && displayCode !== "------") {
+      setCodeVisible(true);
+    }
+  }, [displayCode]);
   const localAvatar = session.session?.avatar;
   const members = reactExports.useMemo(() => {
     const list = room?.members || [];
@@ -2132,7 +2132,7 @@ function LobbyPage() {
     roomError && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lobby-error", role: "alert", children: String(roomError.message || roomError) })
   ] });
 }
-const GamePage = reactExports.lazy(() => __vitePreload(() => import("./GamePage-C0nnOtCk.js"), true ? __vite__mapDeps([0,1,2,3,4]) : void 0));
+const GamePage = reactExports.lazy(() => __vitePreload(() => import("./GamePage-BNuDmMcR.js"), true ? __vite__mapDeps([0,1,2,3,4]) : void 0));
 function App() {
   const location = useLocation();
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(ErrorBoundary, { children: [

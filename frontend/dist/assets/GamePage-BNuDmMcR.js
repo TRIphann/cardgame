@@ -1,6 +1,6 @@
 import { j as jsxRuntimeExports } from "./react-BhVOh7S1.js";
 import { c as useParams, L as Link } from "./router-CJAaEV1m.js";
-import { R as ROUTES } from "./index-Be_qzcAe.js";
+import { R as ROUTES } from "./index-CETzozwe.js";
 import "./react-dom-BqzW1rgF.js";
 import "./vendor-Bz22r_8Z.js";
 function GamePage() {

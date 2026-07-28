@@ -74,20 +74,10 @@ export default function LobbyPage() {
   const { t } = useI18n();
   const settings = useSettings();
 
+  // Always-available room code: prefer server room.code, fall back to session.
+  // Show real code only when the eye is open AND code is actually available.
   const [codeVisible, setCodeVisible] = useState(false);
   const [copyState, setCopyState]     = useState("idle"); // 'idle' | 'copied'
-
-  // Always-available room code: prefer server room.code, fall back to session.
-  const displayCode = room?.code || session.session?.roomCode || "";
-  // Show real code only when the eye is open AND code is actually available.
-  const showCode   = codeVisible && displayCode.length > 0;
-
-  // When server finally returns the room code, reveal it automatically.
-  useEffect(() => {
-    if (displayCode && displayCode !== "------") {
-      setCodeVisible(true);
-    }
-  }, [displayCode]);
 
   // Game-mode carousel state. Persist across re-renders but not across
   // sessions — players usually want the default first.
@@ -103,6 +93,17 @@ export default function LobbyPage() {
   const roomId = session.session?.roomId;
   const isPending = roomId?.startsWith?.("pending-");
   const { room, error: roomError, refresh } = useRoomPolling(isPending ? null : roomId);
+
+  // NOTE: displayCode and showCode are defined AFTER room is declared.
+  const displayCode = room?.code || session.session?.roomCode || "";
+  const showCode   = codeVisible && displayCode.length > 0;
+
+  // When server finally returns the room code, reveal it automatically.
+  useEffect(() => {
+    if (displayCode && displayCode !== "------") {
+      setCodeVisible(true);
+    }
+  }, [displayCode]);
 
   // Merge local-only avatar choice (from sessionStorage) into the live
   // member list so the seat shows it without a backend round-trip.
