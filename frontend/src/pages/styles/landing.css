@@ -4,6 +4,16 @@
 body { }
 
 
+/* Decorative backdrop wrapper — fills the page, sits behind all content */
+.landing-backdrop,
+.lobby-backdrop {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 0;
+}
+
 /* Decorative ambient blobs */
 .ambient {
   position: absolute;
@@ -92,7 +102,6 @@ body { }
 .landing-page {
   min-height: 100vh;
   overflow: hidden;
-  isolation: isolate;
   position: relative;
   z-index: 1;
   display: grid;

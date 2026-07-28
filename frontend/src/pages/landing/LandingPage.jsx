@@ -122,6 +122,19 @@ export default function LandingPage() {
 
   return (
     <main className={`landing-page ${shake > 0 ? "form-attention" : ""}`} key={`shake-${shake}`}>
+      {/* Decorative backdrop — inside the page so it renders above arc-ambient */}
+      <div className="landing-backdrop" aria-hidden="true">
+        <div className="ambient ambient-one" />
+        <div className="ambient ambient-two" />
+        <div className="stars" />
+        <div className="cards-scene">
+          <div className="floating-card card-sun"><span className="card-glyph">☼</span><span className="card-title">SOL</span></div>
+          <div className="floating-card card-moon"><span className="card-glyph">☾</span><span className="card-title">LUNA</span></div>
+          <div className="floating-card card-eye"><span className="card-glyph">◉</span><span className="card-title">ORACLE</span></div>
+          <div className="floating-card card-star"><span className="card-glyph">✦</span><span className="card-title">ASTRA</span></div>
+          <div className="floating-card card-flame"><span className="card-glyph">♠</span><span className="card-title">IGNIS</span></div>
+        </div>
+      </div>
       <section className="welcome-panel" aria-labelledby="game-title">
         <div className="brand-mark"><span></span><b>✦</b><span></span></div>
         <p className="eyebrow">{t("landing.eyebrow")}</p>

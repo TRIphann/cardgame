@@ -21,22 +21,33 @@ import { useReducedMotion } from "./useReducedMotion.js";
 
 const N = 4;
 
+// Cards fan out from below (angle π/2 = bottom of orbit = 6 o'clock).
+// They arrive at their target orbit positions in REVERSE index order so
+// card-0 (which starts last) reaches the reveal zone LAST, not FIRST.
+// Each card i fans out from startAngle=(π/2 + i*PHASE_OFFSET) to
+// targetAngle=(i*PHASE_OFFSET). This means card-0 starts at angle 1.57
+// (cos≈0, no flip) and must do ~1 full orbit before cos>0.65 triggers.
+// Card-1 starts at angle 2.51 (cos≈-0.81), also delayed.
+// Cards fan out in reverse order (i=3 → 2 → 1 → 0) with a 200ms stagger
+// so the last-to-launch (card-0) still reaches the orbit LAST.
+const FANOUT_ORDER = [3, 2, 1, 0];
+const FANOUT_STAGGER_MS = 220;
+
 // ── Orbit geometry ──────────────────────────────────────────────────────
-// The ellipse must be wide enough that cards never overlap the deck
-// (deck ≈ 110×156px after the 58° tilt ≈ 165×80px bounding box).
-// We give 160px horizontal and 120px vertical clearance.
-const ORBIT_RX = 165;   // horizontal radius
-const ORBIT_RY = 120;   // vertical radius
-const ORBIT_MS = 9000;  // milliseconds per full revolution
+// The ellipse is wide enough to clear left/right seat columns (~120px).
+// Vertical is tight so cards stay in the visible stage area.
+const ORBIT_RX = 220;
+const ORBIT_RY = 85;
+const ORBIT_MS = 9000;
 
 // ── Per-card phase offsets ────────────────────────────────────────────────
 const PHASE_OFFSET = (Math.PI * 2) / N;
 
 // ── Timing constants ─────────────────────────────────────────────────────
 const WIGGLE_DELAYS   = [5000, 4000, 2000]; // idle→w1, w1→w2, w2→w3
-const FLIGHT_OUT_MS   = 1000;  // fan-out from deck to orbit start
-const FLIGHT_BACK_MS  = 800;   // return spiral to deck centre
-const REVEAL_HOLD_MS  = 1500; // milliseconds front face stays visible
+const FLIGHT_OUT_MS   = 1200;  // fan-out from deck to orbit start
+const FLIGHT_BACK_MS  = 900;   // return spiral to deck centre
+const REVEAL_HOLD_MS  = 1800; // milliseconds front face stays visible
 const REVEAL_THRESH   = 0.65;  // cos(angle) value at which reveal fires
 
 // ── Easing helpers ───────────────────────────────────────────────────────
@@ -87,35 +98,52 @@ function makeTick({ phase, flyingCardRefs, revealedSetRef, flipTimersRef,
     }
 
     // flying phase
-    const totalFlyingMs = flightOutMs + orbitMs;
+    const totalFlyingMs = flightOutMs + (N - 1) * FANOUT_STAGGER_MS + orbitMs;
     const elapsed = now - startMs;
 
     for (let i = 0; i < N; i += 1) {
       const node = flyingCardRefs.current[i];
       if (!node) continue;
 
-      if (elapsed < flightOutMs) {
-        // ─── FAN-OUT: cards spread from centre to orbit ─────────────────
-        const t    = clamp(elapsed / flightOutMs, 0, 1);
+      if (elapsed < flightOutMs + FANOUT_STAGGER_MS * (N - 1)) {
+        // ─── FAN-OUT: cards launch from bottom of stage to orbit positions ─
+        // Cards launch in reverse index order (3→2→1→0) with stagger.
+        // When a card hasn't launched yet it stays hidden at deck centre.
+        const cardSlot = FANOUT_ORDER.indexOf(i);
+        const cardStartMs = cardSlot * FANOUT_STAGGER_MS;
+        const cardElapsed = elapsed - cardStartMs;
+
+        if (cardElapsed < 0) {
+          // Hasn't launched yet — hide at centre
+          node.style.opacity = "0";
+          node.style.zIndex  = String(80 + i);
+          continue;
+        }
+
+        const t    = clamp(cardElapsed / FLIGHT_OUT_MS, 0, 1);
         const ease = easeOutCubic(t);
         const targetAngle = i * PHASE_OFFSET;
-        const startAngle = -Math.PI / 2;
-        const angle      = startAngle + (targetAngle - startAngle) * ease;
+        // Start from bottom (6 o'clock) so card-0 (rightmost) starts far right,
+        // cos<0 → no premature reveal. After a full orbit it reaches front.
+        const startAngle  = Math.PI / 2;
+        const angle        = startAngle + (targetAngle - startAngle) * ease;
         const r  = 20 + ease * ORBIT_RX;
         const ry = 15 + ease * ORBIT_RY;
         const x  = Math.sin(angle) * r;
         const y  = -Math.cos(angle) * ry;
-        const scale = 0.35 + ease * 0.65;
-        const initRot = (1 - ease) * -20;
+        const scale = 0.3 + ease * 0.7;
+        // Launch from "below" — slight tilt that unwinds during flight
+        const initRot = (1 - ease) * -90;
         node.style.transform =
           `translate(calc(-50% + ${x.toFixed(1)}px), calc(-50% + ${y.toFixed(1)}px)) ` +
-          `rotateZ(${(initRot + targetAngle * 57.3 * 0.06).toFixed(1)}deg) ` +
+          `rotateZ(${(initRot + ease * 5 * (i % 2 === 0 ? 1 : -1)).toFixed(1)}deg) ` +
           `scale(${scale.toFixed(3)})`;
-        node.style.opacity = String(0.1 + ease * 0.9);
+        node.style.opacity = String(Math.min(1, 0.15 + ease * 0.85));
         node.style.zIndex  = String(80 + i);
       } else {
         // ─── ORBIT: elliptical loop with bob ──────────────────────────
-        const orbitEl = elapsed - flightOutMs;
+        const fanOutDuration = flightOutMs + (N - 1) * FANOUT_STAGGER_MS;
+        const orbitEl = elapsed - fanOutDuration;
         const baseAngle = (orbitEl / orbitMs) * Math.PI * 2;
         const angle     = baseAngle + i * PHASE_OFFSET;
 
@@ -138,8 +166,8 @@ function makeTick({ phase, flyingCardRefs, revealedSetRef, flipTimersRef,
         node.style.zIndex  = String(100 + Math.round(depth * 10));
         node.style.opacity = "1";
 
-        // ─── REVEAL: first time card crosses the front ────────────────
-        if (depth > REVEAL_THRESH && !revealedSetRef.current.has(i)) {
+        // ─── REVEAL: first time card crosses the front AFTER fan-out finishes
+        if (elapsed > fanOutDuration && depth > REVEAL_THRESH && !revealedSetRef.current.has(i)) {
           revealedSetRef.current.add(i);
           node.classList.add("revealed");
           if (flipTimersRef.current[i]) clearTimeout(flipTimersRef.current[i]);

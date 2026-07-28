@@ -12,14 +12,31 @@ import { useI18n } from "@shared/i18n/i18n.jsx";
 import { useSettings } from "../../app/settings.jsx";
 import { useRoomPolling } from "../../hooks/useRoomPolling.js";
 import { useDeckAnimation } from "../../hooks/useDeckAnimation.js";
-import { CARD_CLOUDINARY } from "@games/exploding-cats/cardCloudinary.js";
 import { FlyingCards } from "./FlyingCards.jsx";
 import { Seats } from "./Seats.jsx";
 import { AvatarPicker } from "./AvatarPicker.jsx";
 
-// URL list for reveal randomisation: every face URL from Cloudinary.
-const CARD_URLS = Object.values(CARD_CLOUDINARY.cards || CARD_CLOUDINARY);
-const CARD_BACK_URL = CARD_CLOUDINARY.cards?.["card-back"] || "/assets/cards/default/cards/back.svg";
+// Local SVG card assets (Cloudinary was deleted; using local fallback).
+const LOCAL_CARDS = [
+  "/assets/cards/default/cards/attack-1.svg",
+  "/assets/cards/default/cards/bomb-1.svg",
+  "/assets/cards/default/cards/defuse-1.svg",
+  "/assets/cards/default/cards/favor-1.svg",
+  "/assets/cards/default/cards/future-1.svg",
+  "/assets/cards/default/cards/nope-1.svg",
+  "/assets/cards/default/cards/shuffle-1.svg",
+  "/assets/cards/default/cards/skip-1.svg",
+  "/assets/cards/default/cards/ninja.svg",
+  "/assets/cards/default/cards/robot.svg",
+  "/assets/cards/default/cards/zombie.svg",
+  "/assets/cards/default/cards/superman.svg",
+  "/assets/cards/default/cards/hải tặc.svg",
+];
+
+// URL list for reveal randomisation: local SVGs + Cloudinary (if alive).
+const cloudinaryUrls = Object.values(CARD_CLOUDINARY.cards || CARD_CLOUDINARY);
+const CARD_URLS = cloudinaryUrls.length > 0 ? cloudinaryUrls : LOCAL_CARDS;
+const CARD_BACK_URL = "/assets/cards/default/cards/back.svg";
 
 // Read the roomId directly from sessionStorage. Used as a fallback when the
 // React session context hasn't re-rendered yet (e.g. right after
@@ -235,6 +252,18 @@ export default function LobbyPage() {
 
   return (
     <main className="lobby-page">
+      {/* Decorative backdrop — inside the page so it renders above arc-ambient */}
+      <div className="lobby-backdrop" aria-hidden="true">
+        <div className="ambient ambient-one" />
+        <div className="ambient ambient-two" />
+        <div className="stars" />
+        <div className="cards-scene">
+          <div className="floating-card card-sun"><span className="card-glyph">☼</span><span className="card-title">SOL</span></div>
+          <div className="floating-card card-moon"><span className="card-glyph">☾</span><span className="card-title">LUNA</span></div>
+          <div className="floating-card card-eye"><span className="card-glyph">◉</span><span className="card-title">ORACLE</span></div>
+          <div className="floating-card card-star"><span className="card-glyph">✦</span><span className="card-title">ASTRA</span></div>
+        </div>
+      </div>
       <Link to={ROUTES.landing} className="back-link">
         <span>←</span> Quay lại
       </Link>

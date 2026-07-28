@@ -8,13 +8,15 @@ body { }
 .lobby-page {
   min-height: 100vh;
   overflow: hidden;
-  isolation: isolate;
   position: relative;
   z-index: 1;
   display: grid;
   grid-template-rows: auto 1fr auto;
   gap: 16px;
   padding: 56px 24px 28px;
+  background: rgba(7, 8, 26, 0.88);
+  backdrop-filter: blur(6px);
+  box-shadow: inset 0 0 80px rgba(77, 62, 161, 0.15);
 }
 
 .lobby-page::before {
@@ -540,10 +542,10 @@ body { }
      translateY adds a small vertical offset so the card below peeks out
      from the top edge. */
   transform:
-    translateY(calc(var(--i, 0) * 2px))
-    translateZ(calc(var(--i, 0) * -7px));
-  /* Layer 3 (i=3) is darkest, layer 0 (i=0, top) is full brightness */
-  filter: brightness(calc(0.55 + 0.15 * (4 - var(--i, 0))));
+    translateY(calc(var(--i, 0) * 4px))
+    translateZ(calc(var(--i, 0) * -9px));
+  /* Layer 3 (i=3, bottom) is darkest; layer 0 (i=0, top) is brightest */
+  filter: brightness(calc(0.4 + 0.15 * (var(--i, 0))));
   pointer-events: none;
 }
 
@@ -712,7 +714,6 @@ body { }
   -webkit-backface-visibility: hidden;
   will-change: transform, opacity;
   pointer-events: none;
-  /* Base shadow */
   filter: drop-shadow(0 8px 16px rgba(0,0,0,0.45));
 }
 
@@ -748,6 +749,17 @@ body { }
   background: #0a0a14;
   border: 1.5px solid rgba(255, 210, 80, 0.5);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5), inset 0 0 18px rgba(255, 210, 80, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.flying-card .card-back-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 7px;
+  display: block;
+  pointer-events: none;
 }
 
 /* Front face (revealed) */
