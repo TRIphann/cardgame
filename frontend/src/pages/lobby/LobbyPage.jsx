@@ -17,7 +17,9 @@ import { FlyingCards } from "./FlyingCards.jsx";
 import { Seats } from "./Seats.jsx";
 import { AvatarPicker } from "./AvatarPicker.jsx";
 
-const CARD_URLS = Object.values(CARD_CLOUDINARY);
+// URL list for reveal randomisation: every face URL from Cloudinary.
+const CARD_URLS = Object.values(CARD_CLOUDINARY.cards || CARD_CLOUDINARY);
+const CARD_BACK_URL = CARD_CLOUDINARY.cards?.["card-back"] || "/assets/cards/default/cards/back.svg";
 
 // Read the roomId directly from sessionStorage. Used as a fallback when the
 // React session context hasn't re-rendered yet (e.g. right after
@@ -69,7 +71,7 @@ export default function LobbyPage() {
   const { t } = useI18n();
   const settings = useSettings();
 
-  const [codeVisible, setCodeVisible] = useState(true);
+  const [codeVisible, setCodeVisible] = useState(false);
   const [copyState, setCopyState] = useState("idle"); // 'idle' | 'copied'
 
   // Game-mode carousel state. Persist across re-renders but not across
@@ -318,15 +320,20 @@ export default function LobbyPage() {
                   data-flying={deckAnimation.isFlying ? "1" : "0"}
                 >
                   <div className="deck-stack">
-                    {/* Multiple offset layers give the illusion of a tilted stack. */}
-                    <span className="deck-stack__layer" style={{ "--i": 6 }} />
-                    <span className="deck-stack__layer" style={{ "--i": 5 }} />
-                    <span className="deck-stack__layer" style={{ "--i": 4 }} />
+                    {/* 4 stacked layer surfaces. Each layer is the actual
+                        cloudinary back.svg so the stack reads as a real
+                        stack of cards, not placeholder text. Lower layers
+                        are dimmer — only their curved top edge is visible
+                        underneath the top card (no fake duplicates). */}
                     <span className="deck-stack__layer" style={{ "--i": 3 }} />
                     <span className="deck-stack__layer" style={{ "--i": 2 }} />
                     <span className="deck-stack__layer" style={{ "--i": 1 }} />
                     <span className="deck-stack__layer deck-stack__layer--top">
-                      <img src="/assets/cards/default/cards/back.svg" alt="" draggable="false" />
+                      <img
+                        src={CARD_BACK_URL}
+                        alt=""
+                        draggable="false"
+                      />
                     </span>
                   </div>
                   <div className="deck-pile__glow" aria-hidden="true" />
@@ -334,6 +341,7 @@ export default function LobbyPage() {
                 <FlyingCards
                   refs={deckAnimation.flyingCardRefs}
                   faceUrls={deckAnimation.flyingCardUrls}
+                  backUrl={CARD_BACK_URL}
                 />
               </>
             ) : (

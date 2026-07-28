@@ -1,287 +1,304 @@
-// useDeckAnimation — drives the deck + 4 flying cards on the lobby page.
+// useDeckAnimation — lobby deck animation engine.
 //
-// Spec (from user):
-//   • Show a *tilted stack* of cards (not a single card on its own).
-//   • Idle cascade: 5s → wiggle 1 → +4s → wiggle 2 → +2s → wiggle 3 → fly.
-//   • 4 cards fly OUT of the deck and orbit AROUND it. The deck stays
-//     visible the whole time (no disappearing swap).
-//   • When a card crosses the front (closest to the viewer) it flips to
-//     reveal a random face. Each card reveals exactly once per cycle.
-//   • After all 4 have been revealed, cards fly BACK to the deck and the
-//     idle cascade restarts.
-//   • Loop forever.
+// ┌──────────────────────────────────────────────────────────────┐
+// │  PHASE TIMELINE (one full cycle ≈ 24–26 seconds)             │
+// │                                                              │
+// │  IDLE ────(5s)────► WIGGLE-1 ──(4s)──► WIGGLE-2         │
+// │                    ──(2s)──► WIGGLE-3 ──(fly)──►           │
+// │  FLYING:   fan-out → orbit (9s/rev) → reveal → return     │
+// │                                          ──(0.8s)──►        │
+// │  IDLE (restart)                                             │
+// └──────────────────────────────────────────────────────────────┘
 //
-// "Closest to camera" is depth ≈ 1 in our orbit math (cos(angle) close to 1).
+// Cards are driven 100% by RAF + inline style for pixel-perfect control.
+// The CSS only handles:
+//   - Wiggle keyframes (perspective-aware)
+//   - 3D flip (class="revealed" toggled by JS, CSS does the rotation)
+//   - Box-shadow glow polish
 
 import { useEffect, useRef, useState } from "react";
 import { useReducedMotion } from "./useReducedMotion.js";
 
 const N = 4;
+
+// ── Orbit geometry ──────────────────────────────────────────────────────
+// The ellipse must be wide enough that cards never overlap the deck
+// (deck ≈ 110×156px after the 58° tilt ≈ 165×80px bounding box).
+// We give 160px horizontal and 120px vertical clearance.
+const ORBIT_RX = 165;   // horizontal radius
+const ORBIT_RY = 120;   // vertical radius
+const ORBIT_MS = 9000;  // milliseconds per full revolution
+
+// ── Per-card phase offsets ────────────────────────────────────────────────
 const PHASE_OFFSET = (Math.PI * 2) / N;
-const ORBIT_RADIUS_X = 110;   // horizontal radius (ellipse, wider than tall)
-const ORBIT_RADIUS_Y = 78;    // vertical radius
-const ORBIT_DURATION_MS = 9000;     // one full orbit
-const REVEAL_HOLD_MS = 1600;        // how long the card stays flipped
-const REVEAL_DEPTH_THRESHOLD = 0.85;
-const FLIGHT_OUT_MS = 700;          // launching from the deck
-const FLIGHT_BACK_MS = 700;         // returning to the deck
-const FLIGHT_PHASE_MS = 1100;       // total lift-out before orbit starts
 
-const TIMINGS = {
-  wiggle1Delay: 5000,
-  wiggle2Delay: 4000,
-  wiggle3Delay: 2000,
-};
+// ── Timing constants ─────────────────────────────────────────────────────
+const WIGGLE_DELAYS   = [5000, 4000, 2000]; // idle→w1, w1→w2, w2→w3
+const FLIGHT_OUT_MS   = 1000;  // fan-out from deck to orbit start
+const FLIGHT_BACK_MS  = 800;   // return spiral to deck centre
+const REVEAL_HOLD_MS  = 1500; // milliseconds front face stays visible
+const REVEAL_THRESH   = 0.65;  // cos(angle) value at which reveal fires
 
-export function useDeckAnimation({ cardImageUrls }) {
-  const reduced = useReducedMotion();
-  const [wiggleLevel, setWiggleLevel] = useState(0); // 0 idle, 1/2/3 = wiggle level
-  const [isFlying, setIsFlying] = useState(false);
-  const [phase, setPhase] = useState("idle"); // 'idle' | 'flying' | 'returning'
+// ── Easing helpers ───────────────────────────────────────────────────────
+function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+function easeInOut(t)    { return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t; }
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 
-  const timeoutsRef = useRef([]);
-  const rafRef = useRef(0);
-  const startTimeRef = useRef(0);
+// ── RAF loop ──────────────────────────────────────────────────────────
+function makeTick({ phase, flyingCardRefs, revealedSetRef, flipTimersRef,
+                    orbitMs, flightOutMs, flightBackMs, onEnd }) {
+  let rafId  = 0;
+  let startMs = 0;
 
-  // Refs populated by the FlyingCards component.
-  const flyingCardRefs = useRef([]);
-  const flyingCardUrlsRef = useRef([]);
-
-  // Per-cycle bookkeeping: which cards have already been revealed, and the
-  // face URL each one is showing while flipped.
-  const revealedSetRef = useRef(new Set());
-  const cardFacesRef = useRef([]);
-  const flipTimerRef = useRef(null);
-
-  const clearTimers = () => {
-    for (const id of timeoutsRef.current) clearTimeout(id);
-    timeoutsRef.current = [];
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    rafRef.current = 0;
-    if (flipTimerRef.current) clearTimeout(flipTimerRef.current);
-    flipTimerRef.current = null;
+  const tickReturning = (now) => {
+    const t = clamp((now - startMs) / flightBackMs, 0, 1);
+    const e = easeInOut(t);
+    for (let i = 0; i < N; i += 1) {
+      const node = flyingCardRefs.current[i];
+      if (!node) continue;
+      const squeeze = t > 0.88 ? (t - 0.88) / 0.12 : 0;
+      const scale  = (1 - e) * 1.0 + e * 0.05 - squeeze * 0.06;
+      const rotZ   = (1 - t) * 12 * (i % 2 === 0 ? 1 : -1);
+      node.style.transform =
+        `translate(-50%, -50%) scale(${Math.max(0.01, scale).toFixed(3)}) rotateZ(${rotZ.toFixed(1)}deg)`;
+      node.style.opacity = String(Math.max(0, 1 - t * 1.1));
+      node.style.zIndex   = String(120 + i);
+    }
+    if (t < 1) {
+      rafId = requestAnimationFrame(tickReturning);
+    } else {
+      cancelAnimationFrame(rafId);
+      for (let i = 0; i < N; i += 1) {
+        const node = flyingCardRefs.current[i];
+        if (!node) continue;
+        node.style.transform = "";
+        node.style.opacity = "";
+        node.style.zIndex  = "";
+        node.classList.remove("revealed");
+      }
+      onEnd();
+    }
   };
 
-  useEffect(() => () => clearTimers(), []);
+  const tick = (now) => {
+    if (phase === "returning") {
+      tickReturning(now);
+      return;
+    }
 
-  // Reduced-motion fallback: just toggle the "flying" flag for the CSS to take
-  // over. The tilt stack itself still renders, no JS animation.
+    // flying phase
+    const totalFlyingMs = flightOutMs + orbitMs;
+    const elapsed = now - startMs;
+
+    for (let i = 0; i < N; i += 1) {
+      const node = flyingCardRefs.current[i];
+      if (!node) continue;
+
+      if (elapsed < flightOutMs) {
+        // ─── FAN-OUT: cards spread from centre to orbit ─────────────────
+        const t    = clamp(elapsed / flightOutMs, 0, 1);
+        const ease = easeOutCubic(t);
+        const targetAngle = i * PHASE_OFFSET;
+        const startAngle = -Math.PI / 2;
+        const angle      = startAngle + (targetAngle - startAngle) * ease;
+        const r  = 20 + ease * ORBIT_RX;
+        const ry = 15 + ease * ORBIT_RY;
+        const x  = Math.sin(angle) * r;
+        const y  = -Math.cos(angle) * ry;
+        const scale = 0.35 + ease * 0.65;
+        const initRot = (1 - ease) * -20;
+        node.style.transform =
+          `translate(calc(-50% + ${x.toFixed(1)}px), calc(-50% + ${y.toFixed(1)}px)) ` +
+          `rotateZ(${(initRot + targetAngle * 57.3 * 0.06).toFixed(1)}deg) ` +
+          `scale(${scale.toFixed(3)})`;
+        node.style.opacity = String(0.1 + ease * 0.9);
+        node.style.zIndex  = String(80 + i);
+      } else {
+        // ─── ORBIT: elliptical loop with bob ──────────────────────────
+        const orbitEl = elapsed - flightOutMs;
+        const baseAngle = (orbitEl / orbitMs) * Math.PI * 2;
+        const angle     = baseAngle + i * PHASE_OFFSET;
+
+        const ox = Math.sin(angle) * ORBIT_RX;
+        const oy = -Math.cos(angle) * ORBIT_RY;
+
+        // Perpendicular bob: ±12px toward/away from camera, 2× per orbit
+        const bob      = Math.sin((orbitEl / orbitMs) * Math.PI * 2 * 2 + i * (Math.PI / 3)) * 12;
+        const cosA     = Math.cos(angle);
+        const depth    = cosA; // 1 = closest (right), -1 = farthest (left)
+        const scale    = 0.92 + 0.18 * (depth + 1) / 2;
+        const tiltY    = depth * 22; // lean toward viewer at front
+        const tiltZ    = Math.sin(angle) * 7; // gentle rock
+
+        node.style.transform =
+          `translate(calc(-50% + ${ox.toFixed(1)}px), calc(-50% + ${oy.toFixed(1)}px)) ` +
+          `rotateZ(${tiltZ.toFixed(1)}deg) ` +
+          `rotateY(${tiltY.toFixed(1)}deg) ` +
+          `scale(${scale.toFixed(3)})`;
+        node.style.zIndex  = String(100 + Math.round(depth * 10));
+        node.style.opacity = "1";
+
+        // ─── REVEAL: first time card crosses the front ────────────────
+        if (depth > REVEAL_THRESH && !revealedSetRef.current.has(i)) {
+          revealedSetRef.current.add(i);
+          node.classList.add("revealed");
+          if (flipTimersRef.current[i]) clearTimeout(flipTimersRef.current[i]);
+          flipTimersRef.current[i] = setTimeout(() => {
+            const n = flyingCardRefs.current[i];
+            if (n) n.classList.remove("revealed");
+            flipTimersRef.current[i] = 0;
+          }, REVEAL_HOLD_MS);
+        }
+      }
+    }
+
+    if (elapsed < totalFlyingMs) {
+      rafId = requestAnimationFrame(tick);
+    } else {
+      // Switch to return phase
+      startMs = performance.now();
+      rafId = requestAnimationFrame(tickReturning);
+    }
+  };
+
+  return {
+    start(ms) { startMs = ms; rafId = requestAnimationFrame(tick); },
+    cancel()  { cancelAnimationFrame(rafId); },
+  };
+}
+
+// ── Main hook ────────────────────────────────────────────────────────────
+export function useDeckAnimation({ cardImageUrls }) {
+  const reduced = useReducedMotion();
+
+  const [wiggleLevel, setWiggleLevel] = useState(0);
+  const [isFlying,   setIsFlying]      = useState(false);
+  const [phase,     setPhase]          = useState("idle");
+  const [flyingCardUrls, setFlyingCardUrls] = useState([]);
+
+  const timeoutsRef      = useRef([]);
+  const flyingCardRefs   = useRef([]);
+  const revealedSetRef   = useRef(new Set());
+  const flipTimersRef    = useRef(Array(N).fill(0));
+  const rafRunnerRef     = useRef(null);
+
+  // ── Cleanup ────────────────────────────────────────────────────────────
+  const clearAll = () => {
+    for (const id of timeoutsRef.current) clearTimeout(id);
+    timeoutsRef.current = [];
+    rafRunnerRef.current?.cancel();
+    rafRunnerRef.current = null;
+    for (const t of flipTimersRef.current) if (t) clearTimeout(t);
+    flipTimersRef.current = Array(N).fill(0);
+  };
+
+  useEffect(() => () => clearAll(), []);
+
+  // ── Reduced motion: just toggle isFlying on a slow timer ─────────────────
   useEffect(() => {
     if (!reduced) return undefined;
-    setPhase("idle");
-    setWiggleLevel(0);
+    setPhase("idle"); setWiggleLevel(0);
     const id = setInterval(() => {
       setPhase("flying");
       setTimeout(() => setPhase("idle"), 3000);
     }, 12000);
     timeoutsRef.current.push(id);
-    return () => clearTimers();
+    return () => clearAll();
   }, [reduced]);
 
-  // Idle cascade 0 -> 1 (5s) -> 2 (+4s) -> 3 (+2s) -> flying.
+  // ── Idle cascade: 0 → 1 → 2 → 3 → flying ───────────────────────────────
   useEffect(() => {
     if (reduced) return undefined;
     if (phase !== "idle") return undefined;
 
-    if (wiggleLevel === 0) {
-      const id = setTimeout(() => setWiggleLevel(1), TIMINGS.wiggle1Delay);
+    if (wiggleLevel < 3) {
+      const delay = WIGGLE_DELAYS[wiggleLevel];
+      const id = setTimeout(() => setWiggleLevel(w => w + 1), delay);
       timeoutsRef.current.push(id);
-    } else if (wiggleLevel === 1) {
-      const id = setTimeout(() => setWiggleLevel(2), TIMINGS.wiggle2Delay);
-      timeoutsRef.current.push(id);
-    } else if (wiggleLevel === 2) {
-      const id = setTimeout(() => setWiggleLevel(3), TIMINGS.wiggle3Delay);
-      timeoutsRef.current.push(id);
-    } else if (wiggleLevel === 3) {
-      // Pick *per-card* random faces so the four reveals can all be
-      // different cards from the deck.
+      return () => clearAll();
+    }
+
+    if (wiggleLevel === 3) {
+      // Pick 4 distinct random faces
       const pool = Array.isArray(cardImageUrls) ? cardImageUrls : [];
-      if (pool.length > 0) {
-        // Fisher-Yates-ish shuffle a copy and take the first N unique faces.
+      if (pool.length >= N) {
         const copy = [...pool];
-        for (let k = copy.length - 1; k > 0; k -= 1) {
+        for (let k = copy.length - 1; k > 0; k--) {
           const r = Math.floor(Math.random() * (k + 1));
           [copy[k], copy[r]] = [copy[r], copy[k]];
         }
-        cardFacesRef.current = copy.slice(0, N);
-        // Make sure the refs/urls the FlyingCards component reads match.
-        flyingCardUrlsRef.current = cardFacesRef.current;
+        setFlyingCardUrls(copy.slice(0, N));
       } else {
-        cardFacesRef.current = Array(N).fill("");
-        flyingCardUrlsRef.current = cardFacesRef.current;
+        setFlyingCardUrls(Array(N).fill(""));
       }
 
       revealedSetRef.current = new Set();
+      flipTimersRef.current  = Array(N).fill(0);
       setIsFlying(true);
       setPhase("flying");
     }
 
-    return () => clearTimers();
+    return () => clearAll();
   }, [phase, wiggleLevel, reduced, cardImageUrls]);
 
-  // Orbit + reveal-on-front behaviour while phase === "flying".
-  //
-  // Animation phases per card:
-  //   0  .. FLIGHT_PHASE_MS       launching up out of the deck
-  //   FLIGHT_PHASE_MS .. END      orbiting around the deck (with flips)
-  //   END (all done)              return-to-deck animation
+  // ── Flying orbit (RAF) ──────────────────────────────────────────────────
   useEffect(() => {
     if (reduced) return undefined;
-    if (phase !== "flying") return undefined;
+    if (phase !== "flying") {
+      rafRunnerRef.current?.cancel();
+      rafRunnerRef.current = null;
+      return undefined;
+    }
 
-    startTimeRef.current = performance.now();
-    const orbitMs = ORBIT_DURATION_MS;
-    const totalFlightMs = FLIGHT_PHASE_MS + orbitMs;
-
-    const tick = (now) => {
-      const elapsed = now - startTimeRef.current;
-
-      for (let i = 0; i < N; i += 1) {
-        const node = flyingCardRefs.current[i];
-        if (!node) continue;
-
-        let progress, liftT;
-        if (elapsed < FLIGHT_PHASE_MS) {
-          // Phase A: rising out of the deck. Cards pop up from the centre,
-          // staggered so they fan out, then settle into orbit positions.
-          progress = elapsed / FLIGHT_PHASE_MS;
-          liftT = 1 - Math.pow(1 - progress, 3); // easeOutCubic
-          // Each card is offset slightly in angle so they fan upward.
-          const fanAngle = -Math.PI / 2 + (i - (N - 1) / 2) * 0.35;
-          const liftR = 30 + liftT * 20;
-          const x = Math.cos(fanAngle) * liftR;
-          const y = Math.sin(fanAngle) * liftR - liftT * 50;
-          const tilt = (i - (N - 1) / 2) * 8 - liftT * 4;
-          const scale = 0.6 + liftT * 0.4;
-          node.style.transform =
-            `translate(calc(-50% + ${x.toFixed(1)}px), calc(-50% + ${y.toFixed(1)}px)) ` +
-            `rotateZ(${tilt.toFixed(1)}deg) scale(${scale.toFixed(3)})`;
-          node.style.opacity = String(0.2 + liftT * 0.8);
-          node.style.zIndex = String(80 + i);
-        } else {
-          // Phase B: orbit. baseAngle advances at orbitMs per revolution.
-          const orbitElapsed = elapsed - FLIGHT_PHASE_MS;
-          const baseAngle = (orbitElapsed / orbitMs) * Math.PI * 2;
-
-          const angle = baseAngle + i * PHASE_OFFSET;
-          const x = Math.sin(angle) * ORBIT_RADIUS_X;
-          const y = -Math.cos(angle) * ORBIT_RADIUS_Y;
-          const tilt = Math.sin(angle) * 10;
-          const depth = Math.cos(angle);
-          const scale = 0.92 + (0.18 * (depth + 1)) / 2;
-
-          node.style.transform =
-            `translate(calc(-50% + ${x.toFixed(1)}px), calc(-50% + ${y.toFixed(1)}px)) ` +
-            `rotateZ(${tilt.toFixed(1)}deg) rotateY(${(depth * 22).toFixed(1)}deg) ` +
-            `scale(${scale.toFixed(3)})`;
-          // The card nearest the camera is in front of the stack.
-          node.style.zIndex = String(100 + Math.round(depth * 10));
-          node.style.opacity = "1";
-
-          // Reveal-on-front: each card flips once per cycle when its depth
-          // crosses the threshold and it hasn't been revealed yet.
-          if (depth > REVEAL_DEPTH_THRESHOLD && !revealedSetRef.current.has(i)) {
-            revealedSetRef.current.add(i);
-            node.classList.add("revealed");
-            if (flipTimerRef.current) clearTimeout(flipTimerRef.current);
-            flipTimerRef.current = setTimeout(() => {
-              // Flip back to face-down *only if* this card is still showing
-              // its reveal. Other cards (further along the orbit) keep theirs.
-              const n = flyingCardRefs.current[i];
-              if (n && n.classList.contains("revealed")) {
-                n.classList.remove("revealed");
-              }
-            }, REVEAL_HOLD_MS);
-          }
-        }
-      }
-
-      if (elapsed < totalFlightMs) {
-        rafRef.current = requestAnimationFrame(tick);
-      }
+    const onEnd = () => {
+      setIsFlying(false);
+      setPhase("idle");
+      setWiggleLevel(0);
     };
 
-    rafRef.current = requestAnimationFrame(tick);
+    rafRunnerRef.current = makeTick({
+      phase,
+      flyingCardRefs,
+      revealedSetRef,
+      flipTimersRef,
+      orbitMs: ORBIT_MS,
+      flightOutMs: FLIGHT_OUT_MS,
+      flightBackMs: FLIGHT_BACK_MS,
+      onEnd,
+    });
+    rafRunnerRef.current.start(performance.now());
+
     return () => {
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = 0;
-      if (flipTimerRef.current) clearTimeout(flipTimerRef.current);
-      flipTimerRef.current = null;
+      rafRunnerRef.current?.cancel();
+      rafRunnerRef.current = null;
     };
-  }, [phase, reduced]);
+  }, [phase, reduced, flyingCardUrls]);
 
-  // After all 4 cards have been revealed (or after a hard time cap), end
-  // the flying phase and start the return animation.
-  useEffect(() => {
-    if (reduced) return undefined;
-    if (phase !== "flying") return undefined;
-
-    const orbitMs = ORBIT_DURATION_MS;
-    const totalMs = FLIGHT_PHASE_MS + orbitMs + REVEAL_HOLD_MS + 200;
-    const id = setTimeout(() => setPhase("returning"), totalMs);
-    timeoutsRef.current.push(id);
-    return () => clearTimeout(id);
-  }, [phase, reduced]);
-
-  // Returning animation: each card glides back to the deck centre with an
-  // ease-in-out cubic, then fades. The deck stays visible throughout.
+  // ── Returning spiral ─────────────────────────────────────────────────────
   useEffect(() => {
     if (phase !== "returning") return undefined;
 
-    const start = performance.now();
-    const startPositions = [];
-    for (let i = 0; i < N; i += 1) {
-      const node = flyingCardRefs.current[i];
-      const rect = node ? node.getBoundingClientRect() : null;
-      startPositions.push(rect ? { left: rect.left, top: rect.top } : null);
-      if (!node) continue;
-      node.style.transition =
-        "transform 0.7s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.6s ease";
-      node.classList.remove("revealed");
-    }
-
-    const stepMs = 16;
-
-    const tick = (now) => {
-      const t = Math.min(1, (now - start) / FLIGHT_BACK_MS);
-      for (let i = 0; i < N; i += 1) {
-        const node = flyingCardRefs.current[i];
-        if (!node) continue;
-        const x = (1 - t) * 0; // shrink back to centre
-        const y = (1 - t) * 0;
-        // Slight over-shoot for a satisfying "click" into the deck.
-        const settle = t > 0.85 ? (t - 0.85) / 0.15 : 0;
-        const squeeze = 1 - settle * 0.06;
-        node.style.transform = `translate(-50%, -50%) scale(${(0.05 + t * 0.55) * squeeze}) rotateZ(${((1 - t) * 12).toFixed(1)}deg)`;
-        node.style.opacity = String(1 - t);
-        node.style.zIndex = String(120 + i);
-      }
-      if (t < 1) rafRef.current = requestAnimationFrame(tick);
-    };
-
-    rafRef.current = requestAnimationFrame(tick);
-
-    const end = setTimeout(() => {
-      for (let i = 0; i < N; i += 1) {
-        const node = flyingCardRefs.current[i];
-        if (!node) continue;
-        node.style.transition = "";
-        node.style.transform = "";
-        node.style.opacity = "";
-        node.style.zIndex = "";
-        node.classList.remove("revealed");
-      }
+    const onEnd = () => {
       setIsFlying(false);
       setPhase("idle");
-      setWiggleLevel(0); // restart the idle cascade from level 0
-    }, FLIGHT_BACK_MS + 60);
+      setWiggleLevel(0);
+    };
 
-    timeoutsRef.current.push(end);
+    rafRunnerRef.current = makeTick({
+      phase: "returning",
+      flyingCardRefs,
+      revealedSetRef,
+      flipTimersRef,
+      orbitMs: ORBIT_MS,
+      flightOutMs: FLIGHT_OUT_MS,
+      flightBackMs: FLIGHT_BACK_MS,
+      onEnd,
+    });
+    rafRunnerRef.current.start(performance.now());
 
     return () => {
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = 0;
-      clearTimeout(end);
+      rafRunnerRef.current?.cancel();
+      rafRunnerRef.current = null;
     };
   }, [phase]);
 
@@ -290,6 +307,6 @@ export function useDeckAnimation({ cardImageUrls }) {
     isFlying,
     phase,
     flyingCardRefs,
-    flyingCardUrls: flyingCardUrlsRef.current,
+    flyingCardUrls,
   };
 }

@@ -3,7 +3,7 @@
 
 import React from "react";
 
-export function FlyingCards({ refs, faceUrls }) {
+export function FlyingCards({ refs, faceUrls, backUrl }) {
   const items = [];
   for (let i = 0; i < 4; i += 1) {
     items.push(
@@ -15,7 +15,7 @@ export function FlyingCards({ refs, faceUrls }) {
         aria-hidden="true"
       >
         <div className="card-face card-back-face">
-          <img src="/assets/cards/default/cards/back.svg" alt="" className="card-back-img" draggable="false" />
+          <img src={backUrl || "/assets/cards/default/cards/back.svg"} alt="" className="card-back-img" draggable="false" />
         </div>
         <div className="card-face card-front-face">
           <img src={faceUrls[i] || ""} alt="" className="card-img" draggable="false" />

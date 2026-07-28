@@ -16,7 +16,10 @@
   position: fixed;
   inset: 0;
   pointer-events: none;
-  z-index: 0;
+  /* Sits BEHIND every page (which all set position:relative z-index>=1) so
+     floating cards stay visible across navigation. Pages override this with
+     `position: relative; z-index: 1;` so they stay on top. */
+  z-index: -1;
 }
 .arc-ambient .ambient,
 .arc-ambient .stars,

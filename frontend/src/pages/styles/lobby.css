@@ -8,8 +8,8 @@ body { }
 .lobby-page {
   min-height: 100vh;
   overflow: hidden;
-  isolation: isolate;
   position: relative;
+  z-index: 1;
   display: grid;
   grid-template-rows: auto 1fr auto;
   gap: 16px;
@@ -473,17 +473,18 @@ body { }
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 16px;
-  perspective: 1200px;
+  gap: 14px;
+  padding: 0 110px;
+  perspective: 1400px;
 }
 
-/* Stage area that holds the stack + flying cards. This is the only
-   element with the 3D context, so the stack tilts naturally without
-   affecting the caption underneath. */
+/* Stage area that holds the stack + flying cards. The flying-card
+   container is sized to match an orbit radius slightly larger than the
+   stack so the cards can orbit without clipping. */
 .deck-stage {
   position: relative;
-  width: 240px;
-  height: 240px;
+  width: 460px;
+  height: 320px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -491,7 +492,7 @@ body { }
 }
 
 /* Caption sits below the stage on top of the layout — flying cards can't
-   reach it because they orbit inside `.deck-stage`'s 240×240 box. */
+   reach it because they orbit inside `.deck-stage`. */
 .deck-caption {
   position: relative;
   z-index: 5;
@@ -502,25 +503,27 @@ body { }
   pointer-events: none;
 }
 
-/* The deck pile = a tilted stack of cards. */
+/* The deck pile = a tilted stack of cards, viewed *top-down, with a
+   slight side-tilt* (matches the "card-back" reference). After the
+   rotateX(~55deg), what was a 110x150 card becomes a wide flat sliver
+   (~95 x 200 with perspective). The lower layers peek out behind/below
+   the top layer and read as the back edges of cards underneath. */
 .deck-pile {
   position: relative;
-  width: 140px;
-  height: 200px;
+  width: 110px;
+  height: 156px;
   transform-style: preserve-3d;
-  transform: rotateX(14deg) rotateY(-18deg);
-  transition: transform 0.5s ease, filter 0.4s ease;
-  filter: drop-shadow(0 20px 30px rgba(0, 0, 0, 0.55));
+  /* Top-down view + slight side-tilt */
+  transform: perspective(900px) rotateX(58deg) rotateZ(-9deg);
+  transition: filter 0.3s ease;
+  filter: drop-shadow(0 18px 28px rgba(0, 0, 0, 0.45));
   will-change: transform;
 }
 
-/* While cards are flying out, dim the top slightly so the flying cards
-   read more clearly. The stack never disappears. */
 .deck-pile[data-flying="1"] {
-  filter: drop-shadow(0 18px 28px rgba(0, 0, 0, 0.5)) brightness(0.78);
+  filter: drop-shadow(0 18px 28px rgba(0, 0, 0, 0.4)) brightness(0.78);
 }
 
-/* Stack container holds N offset layers. */
 .deck-stack {
   position: relative;
   width: 100%;
@@ -528,35 +531,44 @@ body { }
   transform-style: preserve-3d;
 }
 
+/* Each "back edge" layer is just the top arc of a card image so the
+   user sees only the *curve of the cards below*, no second card body. */
 .deck-stack__layer {
   position: absolute;
   inset: 0;
   border-radius: 10px;
-  background: linear-gradient(135deg, #1a1a2e 0%, #0a0a0f 100%);
-  border: 2px solid rgba(255, 200, 100, 0.45);
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.55), inset 0 0 16px rgba(255, 215, 0, 0.06);
-  /* Layered offsets create depth: higher layers sit further toward the
-     back-right of the stack. */
-  transform: translate(calc(var(--i, 0) * -1.6px), calc(var(--i, 0) * -1.2px));
-  transition: transform 0.25s ease;
+  /* Lower layers peek downward by `i * 3px` so only their bottom curve
+     is visible underneath the top card. */
+  clip-path: polygon(
+    0 calc(100% - (6px * var(--i, 0))),
+    100% calc(100% - (6px * var(--i, 0))),
+    100% 100%,
+    0 100%
+  );
+  /* Same back image so the stack reads as a real stack of cards. */
+  background: var(--c-card-back, transparent) center / cover no-repeat,
+    linear-gradient(180deg, rgba(255, 215, 0, 0.16), rgba(255, 215, 0, 0.04));
+  border: 1.5px solid rgba(255, 200, 100, 0.45);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.55);
+  /* Lower layers are pushed physically DOWN with translateZ so they sit
+     underneath; only the small "lip" at the bottom shows. */
+  transform: translateZ(calc(-12px * var(--i, 0))) translateY(calc(2px * var(--i, 0)));
+  /* Each layer behind is slightly dimmer and offset down so the stack
+     reads as a sequence of back-edges. */
+  filter: brightness(calc(0.7 + 0.1 * (4 - var(--i, 0))));
+  pointer-events: none;
 }
 
-.deck-stack__layer::before {
-  content: "? ? ? ? ? ? ? ?\a? ? ? ? ? ? ? ?\a? ? ? ? ? ? ? ?";
-  white-space: pre-wrap;
-  text-align: center;
-  position: absolute;
-  inset: 0;
-  font-size: 10px;
-  color: #ffd700;
-  opacity: 0.18;
-  line-height: 1.3;
-  letter-spacing: 2px;
-  padding: 10px;
+.deck-stack__layer {
+  --c-card-back: url("/assets/cards/default/cards/back.svg");
 }
 
 .deck-stack__layer--top {
-  background: #0a0a14;
+  clip-path: none;
+  background: transparent;
+  border: 1.5px solid rgba(255, 215, 0, 0.55);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6), inset 0 0 20px rgba(255, 215, 0, 0.06);
+  transform: translateZ(0);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -574,10 +586,10 @@ body { }
 /* Glow underneath the stack — gives the floating feel. */
 .deck-pile__glow {
   position: absolute;
-  inset: auto -20px -30px -20px;
-  height: 50px;
-  background: radial-gradient(ellipse at center, rgba(159, 113, 241, 0.45), transparent 65%);
-  filter: blur(12px);
+  inset: auto -30px -38px -30px;
+  height: 56px;
+  background: radial-gradient(ellipse at center, rgba(159, 113, 241, 0.4), transparent 65%);
+  filter: blur(14px);
   pointer-events: none;
   z-index: -1;
 }
@@ -626,367 +638,173 @@ body { }
   50% { translate: 0 -8px; }
 }
 
-.deck-stage {
-  position: relative;
-  width: 200px;
-  height: 280px;
-  transform-style: preserve-3d;
-}
-
-/* The main deck pile */
-.deck-pile {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: 140px;
-  height: 200px;
-  transform-style: preserve-3d;
-  perspective: 800px;
-}
-
-/* Individual cards in the deck */
-.pile-card {
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #1a1a2e 0%, #0a0a0f 100%);
-  border: 2px solid rgba(255, 200, 100, 0.4);
-  backface-visibility: hidden;
-  transform-style: preserve-3d;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
-}
-
-/* Question marks background pattern */
-.pile-card::before {
-  content: "? ? ? ? ? ? ? ?\a? ? ? ? ? ? ? ?\a? ? ? ? ? ? ? ?";
-  white-space: pre-wrap;
-  text-align: center;
-  font-size: 10px;
-  color: #ffd700;
-  opacity: 0.15;
-  line-height: 1.3;
-  letter-spacing: 2px;
-}
-
-/* Text overlay */
-.pile-card::after {
-  content: "cái gì đây\n???";
-  text-align: center;
-  white-space: pre;
-  font-size: 11px;
-  font-weight: 700;
-  color: #ffffff;
-  letter-spacing: 1px;
-  text-shadow: 0 0 15px rgba(255, 215, 0, 0.8), 0 0 30px rgba(255, 215, 0, 0.4);
-  z-index: 1;
-}
-
-/* Card back (the mysterious side) */
-.card-back {
-  background: #0a0a0f;
-  border: 2px solid rgba(255, 200, 100, 0.3);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-  width: 100%;
-  height: 100%;
-  border-radius: 10px;
-}
-
-.card-back-pattern {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-wrap: wrap;
-  align-content: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 10px;
-  opacity: 0.15;
-}
-
-.card-back-pattern .qmark {
-  color: #ffd700;
-  font-weight: bold;
-  line-height: 1;
-}
-
-.card-back-text {
-  position: relative;
-  z-index: 2;
-  text-align: center;
-  color: #ffffff;
-}
-
-.card-back-text .line1 {
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: 2px;
-  margin-bottom: 4px;
-}
-
-.card-back-text .line2 {
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: 3px;
-}
-
-/* Flying card back styling */
-.flying-card .card-back-face .card-back {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  background: #0a0a0f;
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.flying-card .card-back-face .card-back-pattern {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-wrap: wrap;
-  align-content: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 10px;
-}
-
-.flying-card .card-back-face .card-back-text {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  z-index: 2;
-}
-
-.flying-card .card-back-face .card-back-text .line1 {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 1px;
-  color: #ffffff;
-  text-shadow: 0 0 8px rgba(255, 255, 255, 0.5);
-}
-
-.flying-card .card-back-face .card-back-text .line2 {
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 2px;
-  color: #ffd700;
-  text-shadow: 0 0 12px rgba(255, 215, 0, 0.7);
-}
-
-/* Card front (revealed card) */
-.flying-card .card-front-face {
-  background: linear-gradient(135deg, #1a1a2e, #0f0f1a);
-  border: 2px solid var(--c-accent);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transform: rotateY(180deg);
-  border-radius: 8px;
-}
-
-.flying-card .card-front-face img {
-  width: 90%;
-  height: 90%;
-  object-fit: contain;
-  border-radius: 6px;
-}
 
 /* ============================================
-   DECK WIGGLE ANIMATIONS (IDLE PHASE)
+   DECK WIGGLE ANIMATIONS
+   All wiggles use the NEW deck tilt (perspective 900px rotateX 58deg rotateZ -9deg).
    ============================================ */
 
-/* Phase 1: Gentle wobble after 5s. The whole stack shuffles slightly. */
+/* Gentle micro-wobble */
 .deck-pile.wiggle-1 {
-  animation: deckWiggle1 0.8s ease-in-out;
+  animation: deckWiggle1 0.9s cubic-bezier(0.36, 0.07, 0.19, 0.97) forwards;
 }
-
 @keyframes deckWiggle1 {
-  0%, 100% { transform: rotateX(14deg) rotateY(-18deg); }
-  50% { transform: rotateX(14deg) rotateY(-18deg) translateZ(6px) rotate(-2deg); }
+  0%   { transform: perspective(900px) rotateX(58deg) rotateZ(-9deg) scale(1); }
+  20%  { transform: perspective(900px) rotateX(55deg) rotateZ(-5deg) scale(1.01); }
+  45%  { transform: perspective(900px) rotateX(60deg) rotateZ(-13deg) scale(1.005); }
+  70%  { transform: perspective(900px) rotateX(56deg) rotateZ(-7deg) scale(1.008); }
+  85%  { transform: perspective(900px) rotateX(59deg) rotateZ(-10deg) scale(1.003); }
+  100% { transform: perspective(900px) rotateX(58deg) rotateZ(-9deg) scale(1); }
 }
 
-/* Phase 2: Stronger wobble after +4s. Top card lifts a touch. */
+/* Medium wobble */
 .deck-pile.wiggle-2 {
-  animation: deckWiggle2 0.85s ease-in-out;
+  animation: deckWiggle2 1.0s cubic-bezier(0.36, 0.07, 0.19, 0.97) forwards;
 }
-
 @keyframes deckWiggle2 {
-  0%, 100% { transform: rotateX(14deg) rotateY(-18deg); }
-  20% { transform: rotateX(16deg) rotateY(-22deg) translateZ(12px) rotate(-3deg); }
-  55% { transform: rotateX(12deg) rotateY(-14deg) translateZ(8px) rotate(3deg); }
-  80% { transform: rotateX(15deg) rotateY(-20deg) translateZ(10px) rotate(-2deg); }
+  0%   { transform: perspective(900px) rotateX(58deg) rotateZ(-9deg) scale(1); }
+  18%  { transform: perspective(900px) rotateX(62deg) rotateZ(-4deg) translateY(-4px) scale(1.02); }
+  42%  { transform: perspective(900px) rotateX(52deg) rotateZ(-15deg) translateY(-6px) scale(1.025); }
+  65%  { transform: perspective(900px) rotateX(61deg) rotateZ(-6deg) translateY(-3px) scale(1.015); }
+  82%  { transform: perspective(900px) rotateX(57deg) rotateZ(-11deg) translateY(-2px) scale(1.01); }
+  100% { transform: perspective(900px) rotateX(58deg) rotateZ(-9deg) scale(1); }
 }
 
-/* Phase 3: Intense wobble before flying — top layer peeks up. */
+/* Intense wobble before fly-out */
 .deck-pile.wiggle-3 {
-  animation: deckWiggle3 1.05s ease-in-out;
+  animation: deckWiggle3 1.2s cubic-bezier(0.36, 0.07, 0.19, 0.97) forwards;
 }
-
 @keyframes deckWiggle3 {
-  0%, 100% { transform: rotateX(14deg) rotateY(-18deg); }
-  15% { transform: rotateX(20deg) rotateY(-28deg) translateZ(22px) rotate(-5deg); }
-  35% { transform: rotateX(8deg) rotateY(-10deg) translateZ(18px) rotate(4deg); }
-  55% { transform: rotateX(18deg) rotateY(-26deg) translateZ(20px) rotate(-4deg); }
-  75% { transform: rotateX(10deg) rotateY(-12deg) translateZ(15px) rotate(5deg); }
-  90% { transform: rotateX(16deg) rotateY(-22deg) translateZ(18px) rotate(-3deg); }
+  0%   { transform: perspective(900px) rotateX(58deg) rotateZ(-9deg) scale(1) translateY(0); }
+  14%  { transform: perspective(900px) rotateX(65deg) rotateZ(-2deg) translateY(-10px) scale(1.05); }
+  32%  { transform: perspective(900px) rotateX(50deg) rotateZ(-18deg) translateY(-14px) scale(1.06); }
+  50%  { transform: perspective(900px) rotateX(64deg) rotateZ(-4deg) translateY(-8px) scale(1.04); }
+  68%  { transform: perspective(900px) rotateX(54deg) rotateZ(-16deg) translateY(-12px) scale(1.05); }
+  82%  { transform: perspective(900px) rotateX(60deg) rotateZ(-8deg) translateY(-5px) scale(1.02); }
+  92%  { transform: perspective(900px) rotateX(57deg) rotateZ(-12deg) translateY(-3px) scale(1.01); }
+  100% { transform: perspective(900px) rotateX(58deg) rotateZ(-9deg) scale(1); }
 }
 
-/* Idle breathing — slow, subtle. */
+/* Idle breathe: ultra-slow gentle float */
 .deck-pile.idle {
-  animation: deckBreathe 4.5s ease-in-out infinite;
+  animation: deckIdle 5s ease-in-out infinite;
 }
-
-@keyframes deckBreathe {
-  0%, 100% { transform: rotateX(14deg) rotateY(-18deg) translateZ(0); }
-  50% { transform: rotateX(13deg) rotateY(-17deg) translateZ(4px); }
+@keyframes deckIdle {
+  0%, 100% { transform: perspective(900px) rotateX(58deg) rotateZ(-9deg) translateY(0); }
+  50%       { transform: perspective(900px) rotateX(56deg) rotateZ(-8deg) translateY(-3px); }
 }
 
 /* ============================================
-   FLYING CARDS ANIMATION
+   FLYING CARDS
    ============================================ */
 
 .flying-cards-container {
   position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: 300px;
-  height: 300px;
-  transform-style: preserve-3d;
+  inset: 0;
   pointer-events: none;
+  transform-style: preserve-3d;
 }
 
+/* Individual flying card. JS hook drives transform via inline style on every
+   RAF frame. CSS handles: (a) reveal 3D flip (class=revealed), (b) box shadow. */
 .flying-card {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 80px;
-  height: 114px;
-  margin-left: -40px;
-  margin-top: -57px;
+  width: 68px;
+  height: 97px;
+  margin-left: -34px;
+  margin-top: -48px;
   border-radius: 8px;
   transform-style: preserve-3d;
   backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  will-change: transform, opacity;
+  pointer-events: none;
+  /* Base shadow */
+  filter: drop-shadow(0 8px 16px rgba(0,0,0,0.45));
 }
 
-/* Orbit positions around the deck */
+/* Purple halo glow behind each card */
+.flying-card::before {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border-radius: 14px;
+  background: radial-gradient(ellipse at center,
+    rgba(159, 113, 241, 0.25) 0%,
+    transparent 70%);
+  filter: blur(10px);
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+/* Flip-box faces */
 .flying-card .card-face {
   position: absolute;
-  width: 100%;
-  height: 100%;
+  inset: 0;
   border-radius: 8px;
   backface-visibility: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  -webkit-backface-visibility: hidden;
+  transform-style: preserve-3d;
+  overflow: hidden;
 }
 
+/* Back face */
 .flying-card .card-back-face {
-  background: #0a0a0f;
-  border: 2px solid rgba(255, 200, 100, 0.3);
+  background: #0a0a14;
+  border: 1.5px solid rgba(255, 210, 80, 0.5);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5), inset 0 0 18px rgba(255, 210, 80, 0.05);
 }
 
+/* Front face (revealed) */
 .flying-card .card-front-face {
-  background: linear-gradient(135deg, #1a1a2e, #0f0f1a);
-  border: 2px solid var(--c-accent);
+  background: #0d0d1a;
+  border: 1.5px solid rgba(255, 215, 0, 0.7);
   transform: rotateY(180deg);
+  box-shadow:
+    0 0 20px rgba(255, 215, 0, 0.5),
+    0 0 50px rgba(255, 200, 80, 0.2),
+    0 6px 20px rgba(0, 0, 0, 0.4);
 }
 
 .flying-card .card-front-face img {
-  width: 90%;
-  height: 90%;
-  object-fit: contain;
-  border-radius: 6px;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 7px;
+  display: block;
 }
 
-/* Animation phases */
-/* Backwards-compat: old keyframe selectors are kept as no-ops so any
-   cached class names don't break the layout. The new hook drives
-   transforms inline via requestAnimationFrame. */
-
-/* Orbit around center */
-.flying-card.orbit {
-  animation: orbitCard 4s linear forwards;
+/* Reveal 3D flip: back spins 180deg away, front spins forward into view.
+   0.65s cubic-bezier(0.4, 0, 0.2, 1) = snappy but smooth. */
+.flying-card.revealed .card-back-face {
+  animation: cardFlipBack 0.65s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
-
-.flying-card:nth-child(1).orbit { animation-name: orbitCard1; }
-.flying-card:nth-child(2).orbit { animation-name: orbitCard2; }
-.flying-card:nth-child(3).orbit { animation-name: orbitCard3; }
-.flying-card:nth-child(4).orbit { animation-name: orbitCard4; }
-
-/* Old keyframes (orbitCard1..4, flipToBack, flipToFront) are referenced by
-   no remaining selectors. The new useDeckAnimation hook drives every
-   transform inline. Keeping these keyframes here is harmless but verbose. */
-
-@keyframes orbitCard2 {
-  0% { transform: translate(60px, -40px) rotateY(0deg); }
-  25% { transform: translate(0px, 80px) rotateY(90deg); }
-  50% { transform: translate(-60px, -40px) rotateY(180deg); }
-  75% { transform: translate(0px, -80px) rotateY(270deg); }
-  100% { transform: translate(60px, -40px) rotateY(360deg); }
+.flying-card.revealed .card-front-face {
+  animation: cardFlipFront 0.65s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
+.flying-card.revealed::before { opacity: 1; }
 
-@keyframes orbitCard3 {
-  0% { transform: translate(0px, 80px) rotateY(0deg); }
-  25% { transform: translate(-60px, -40px) rotateY(90deg); }
-  50% { transform: translate(0px, -80px) rotateY(180deg); }
-  75% { transform: translate(60px, 40px) rotateY(270deg); }
-  100% { transform: translate(0px, 80px) rotateY(360deg); }
-}
-
-@keyframes orbitCard4 {
-  0% { transform: translate(-60px, -40px) rotateY(0deg); }
-  25% { transform: translate(0px, -80px) rotateY(90deg); }
-  50% { transform: translate(60px, 40px) rotateY(180deg); }
-  75% { transform: translate(0px, 80px) rotateY(270deg); }
-  100% { transform: translate(-60px, -40px) rotateY(360deg); }
-}
-
-/* Flip animation when facing player */
-.flying-card.flip .card-back-face {
-  animation: flipToBack 0.6s ease-in-out forwards;
-}
-
-.flying-card.flip .card-front-face {
-  animation: flipToFront 0.6s ease-in-out forwards;
-}
-
-@keyframes flipToBack {
-  0% { transform: rotateY(0deg); }
+@keyframes cardFlipBack {
+  0%   { transform: rotateY(0deg); }
   100% { transform: rotateY(180deg); }
 }
-
-@keyframes flipToFront {
-  0% { transform: rotateY(180deg); }
+@keyframes cardFlipFront {
+  0%   { transform: rotateY(180deg); }
   100% { transform: rotateY(0deg); }
 }
 
-/* Fly back to deck — old keyframes, no longer used. */
-.flying-card.fly-back { animation: none !important; }
-.flying-card:nth-child(1).fly-back,
-.flying-card:nth-child(2).fly-back,
-.flying-card:nth-child(3).fly-back,
-.flying-card:nth-child(4).fly-back { animation: none !important; }
-
-/* Card reveal glow */
-.flying-card.revealed .card-front-face {
-  box-shadow: 0 0 30px var(--c-accent-glow), 0 0 60px rgba(255, 200, 100, 0.3);
+/* Bloom glow when revealed */
+.flying-card.revealed {
+  filter:
+    drop-shadow(0 0 16px rgba(255, 215, 0, 0.65))
+    drop-shadow(0 0 40px rgba(255, 200, 80, 0.3))
+    drop-shadow(0 8px 20px rgba(0,0,0,0.5));
 }
+
 
 /* ============================================
    DECK INFO
@@ -1032,8 +850,8 @@ body { }
   transition: transform 0.2s, border-color 0.2s, background 0.2s, box-shadow 0.2s;
   z-index: 4;
 }
-.deck-arrow-prev { left: -52px; }
-.deck-arrow-next { right: -52px; }
+.deck-arrow-prev { left: -96px; }
+.deck-arrow-next { right: -96px; }
 .deck-arrow:hover {
   border-color: var(--c-accent);
   background: rgba(255, 93, 143, 0.12);

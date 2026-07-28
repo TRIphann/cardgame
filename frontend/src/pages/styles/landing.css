@@ -97,6 +97,7 @@ body { }
   overflow: hidden;
   isolation: isolate;
   position: relative;
+  z-index: 1;
   display: grid;
   place-items: center;
   padding: 40px 20px;
