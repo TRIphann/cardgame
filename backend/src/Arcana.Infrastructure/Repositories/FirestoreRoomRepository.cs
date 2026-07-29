@@ -220,7 +220,7 @@ public class FirestoreRoomRepository : IRoomRepository
         CancellationToken ct = default)
     {
         var docRef = _db.Collection(RoomsCollection).Document(roomId);
-        var updates = new Dictionary<string, object>();
+        var updates = new Dictionary<string, object?>();
         if (status.HasValue)
         {
             updates["status"] = status.Value.ToString().ToLowerInvariant();
@@ -237,32 +237,32 @@ public class FirestoreRoomRepository : IRoomRepository
         return await GetByIdAsync(roomId, ct);
     }
 
-    private static Dictionary<string, object> BuildGameStateDoc(Domain.Entities.GameState gs)
+    private static Dictionary<string, object?> BuildGameStateDoc(Domain.Entities.GameState gs)
     {
-        var doc = new Dictionary<string, object>
+        var doc = new Dictionary<string, object?>
         {
             ["deck"] = gs.Deck,
             ["discardPile"] = gs.DiscardPile,
-            ["hands"] = gs.Hands.ToDictionary(kv => kv.Key, kv => (object)kv.Value),
+            ["hands"] = gs.Hands.ToDictionary(kv => kv.Key, kv => (object?)kv.Value),
             ["currentTurnMemberId"] = gs.CurrentTurnMemberId,
             ["attackCounter"] = gs.AttackCounter,
-            ["turnsTaken"] = gs.TurnsTaken.ToDictionary(kv => kv.Key, kv => (object)kv.Value),
-            ["cardsPlayed"] = gs.CardsPlayed.ToDictionary(kv => kv.Key, kv => (object)kv.Value),
-            ["alive"] = gs.Alive.ToDictionary(kv => kv.Key, kv => (object)kv.Value),
+            ["turnsTaken"] = gs.TurnsTaken.ToDictionary(kv => kv.Key, kv => (object?)kv.Value),
+            ["cardsPlayed"] = gs.CardsPlayed.ToDictionary(kv => kv.Key, kv => (object?)kv.Value),
+            ["alive"] = gs.Alive.ToDictionary(kv => kv.Key, kv => (object?)kv.Value),
             ["diedAt"] = gs.DiedAt.ToDictionary(
                 kv => kv.Key,
                 kv => kv.Value.HasValue
-                    ? (object)Timestamp.FromDateTime(kv.Value.Value.ToUniversalTime())
-                    : (object)null),
+                    ? (object?)Timestamp.FromDateTime(kv.Value.Value.ToUniversalTime())
+                    : null),
             ["startedAt"] = gs.StartedAt.HasValue
-                ? Timestamp.FromDateTime(gs.StartedAt.Value.ToUniversalTime())
-                : (object)null,
+                ? (object?)Timestamp.FromDateTime(gs.StartedAt.Value.ToUniversalTime())
+                : null,
             ["endedAt"] = gs.EndedAt.HasValue
-                ? Timestamp.FromDateTime(gs.EndedAt.Value.ToUniversalTime())
-                : (object)null,
+                ? (object?)Timestamp.FromDateTime(gs.EndedAt.Value.ToUniversalTime())
+                : null,
             ["winnerId"] = gs.WinnerId ?? string.Empty,
             ["pendingAction"] = gs.PendingAction is null
-                ? (object?)null
+                ? null
                 : BuildPendingActionDoc(gs.PendingAction),
         };
         return doc;

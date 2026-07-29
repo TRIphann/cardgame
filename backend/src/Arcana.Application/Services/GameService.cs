@@ -461,14 +461,42 @@ public class GameService
         if (!gs.Alive.GetValueOrDefault(memberId))
             throw new DomainException("already_dead", "Bạn đã không còn trong trò chơi.");
 
+        // If this player currently holds the turn, move it forward BEFORE
+        // removing them so AdvanceTurn skips them naturally.
+        var wasCurrentTurn = gs.CurrentTurnMemberId == memberId;
+
         gs.Alive[memberId] = false;
         gs.DiedAt[memberId] = DateTime.UtcNow;
 
+        // Move the conceded player's hand to the discard pile so their cards
+        // remain in circulation (they just can't be used anymore).
+        if (gs.Hands.TryGetValue(memberId, out var hand))
+        {
+            gs.DiscardPile.AddRange(hand);
+            gs.Hands.Remove(memberId);
+        }
+        // Clear per-player counters so stale entries don't leak into the DTO.
+        gs.TurnsTaken.Remove(memberId);
+        gs.CardsPlayed.Remove(memberId);
+
+        if (wasCurrentTurn) AdvanceTurn(gs);
+
         CheckWinCondition(gs);
-        await PersistAsync(room.Id, gs, ct);
+
+        // Persist game-state first, then remove the member from room.Members
+        // so the lobby stops showing a dead player.
+        await _repository.UpdateGameStateAsync(room.Id, gs,
+            gs.EndedAt is null ? null : Domain.Enums.RoomStatus.Finished, ct);
+
+        var updated = await _repository.RemoveMemberAsync(room.Id, memberId, ct);
+        var finalRoom = updated ?? (await _repository.GetByIdAsync(room.Id, ct)) ?? room;
+        // If RemoveMemberAsync didn't touch gameState (in-memory impls may not
+        // copy it back), graft the up-to-date gameState on.
+        finalRoom.GameState ??= gs;
+
         return new GameActionResult
         {
-            Room = (await _repository.GetByIdAsync(room.Id, ct))!,
+            Room = finalRoom,
             Toast = "Bạn đã đầu hàng và bị loại khỏi ván chơi.",
         };
     }
@@ -742,12 +770,9 @@ public class GameService
         }
         else if (aliveIds.Count == 0 && gs.WinnerId is null)
         {
-            var lastDied = gs.DiedAt
-                .Where(kv => kv.Value.HasValue)
-                .OrderByDescending(kv => kv.Value!.Value)
-                .Select(kv => kv.Key)
-                .FirstOrDefault();
-            gs.WinnerId = lastDied;
+            // Everyone is dead (e.g. last survivor conceded). No real winner —
+            // leave WinnerId null so the UI can show "no winner" instead of
+            // crowning the last player who just gave up.
             gs.EndedAt = DateTime.UtcNow;
         }
     }
