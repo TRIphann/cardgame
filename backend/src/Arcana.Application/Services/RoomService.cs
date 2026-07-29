@@ -70,7 +70,7 @@ public class RoomService : Abstractions.IRoomService
             throw new DomainException("invalid_name", "Tên người chơi không được để trống.");
 
         var room = await _repository.GetByCodeAsync(code.ToUpperInvariant(), ct)
-            ?? throw new DomainException("room_not_found", "Không tìm thấy phòng với mã này.");
+            ?? throw new DomainException("invalid_code", "Mã phòng không tồn tại. Vui lòng kiểm tra lại mã.");
 
         var member = new RoomMember
         {

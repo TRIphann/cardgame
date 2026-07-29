@@ -115,6 +115,22 @@ public class RoomsController : ControllerBase
 
     // ── Game endpoints ────────────────────────────────────────────────
 
+    [HttpPost("{id}/game/concede")]
+    public async Task<ActionResult<GameActionResponse>> Concede(
+        [FromRoute] string id,
+        [FromBody] NopeRequest request,
+        CancellationToken ct)
+    {
+        var result = await _gameService.ConcedeAsync(id, request.MemberId, ct);
+        return Ok(new GameActionResponse(
+            MapToDto(result.Room, request.MemberId),
+            result.Toast, null,
+            false, false, false,
+            false, null,
+            null, null,
+            null));
+    }
+
     [HttpPost("{id}/start")]
     public async Task<ActionResult<StartGameResponse>> Start(
         [FromRoute] string id,
@@ -154,6 +170,7 @@ public class RoomsController : ControllerBase
             MapToDto(result.Room, request.MemberId),
             result.Toast, result.DrawnCardKey,
             result.RequiresDefuse, result.RequiresDiscardPick, result.RequiresTargetPick,
+            result.RequiresFavorPick, result.FavorCandidates,
             result.FuturePeek, result.PlayedCardKey,
             result.ComboKind?.ToString()));
     }
@@ -169,6 +186,7 @@ public class RoomsController : ControllerBase
             MapToDto(result.Room, request.MemberId),
             result.Toast, result.DrawnCardKey,
             result.RequiresDefuse, result.RequiresDiscardPick, result.RequiresTargetPick,
+            result.RequiresFavorPick, result.FavorCandidates,
             result.FuturePeek, result.PlayedCardKey,
             result.ComboKind?.ToString()));
     }
@@ -184,6 +202,7 @@ public class RoomsController : ControllerBase
             MapToDto(result.Room, request.MemberId),
             result.Toast, result.DrawnCardKey,
             result.RequiresDefuse, result.RequiresDiscardPick, result.RequiresTargetPick,
+            false, null,
             result.FuturePeek, result.PlayedCardKey,
             result.ComboKind?.ToString()));
     }
@@ -198,8 +217,9 @@ public class RoomsController : ControllerBase
         return Ok(new GameActionResponse(
             MapToDto(result.Room, request.MemberId),
             result.Toast, result.DrawnCardKey,
-            result.RequiresDefuse, result.RequiresDiscardPick, result.RequiresTargetPick,
-            result.FuturePeek, result.PlayedCardKey,
+            false, false, false,
+            false, null,
+            null, result.PlayedCardKey,
             result.ComboKind?.ToString()));
     }
 
@@ -228,7 +248,7 @@ public class RoomsController : ControllerBase
     private static GameStateDto MapGameState(GameState gs)
     {
         return new GameStateDto(
-            gs.Deck.Count,
+            // NOTE: DeckCount intentionally omitted — nobody should see deck size.
             gs.DiscardPile.Count,
             gs.Hands.ToDictionary(kv => kv.Key, kv => kv.Value.Count),
             new Dictionary<string, int>(gs.TurnsTaken),

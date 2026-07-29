@@ -61,11 +61,16 @@ export async function request(path, options = {}) {
 async function jsonRequest(path, options = {}) {
   const res = await request(path, options);
   if (!res.ok) {
+    let code = `http_${res.status}`;
     let msg = `HTTP ${res.status}`;
     try {
-      msg = (await res.json()).message || msg;
+      const body = await res.json();
+      code = body.code || code;
+      msg = body.message || msg;
     } catch (_) { /* ignore */ }
-    throw new Error(msg);
+    const err = new Error(msg);
+    err.code = code;
+    throw err;
   }
   if (res.status === 204) return null;
   return res.json();
@@ -171,6 +176,12 @@ export const roomsApi = {
   },
   nope(roomId, memberId) {
     return jsonRequest(`/api/rooms/${roomId}/game/nope`, {
+      method: "POST",
+      body: JSON.stringify({ memberId }),
+    });
+  },
+  concede(roomId, memberId) {
+    return jsonRequest(`/api/rooms/${roomId}/game/concede`, {
       method: "POST",
       body: JSON.stringify({ memberId }),
     });

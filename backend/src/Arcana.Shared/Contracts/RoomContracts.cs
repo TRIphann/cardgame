@@ -24,8 +24,9 @@ public record NopeRequest(string MemberId);
 
 public record RoomMemberDto(string Id, string Name, bool IsHost, bool IsReady, bool IsOnline, DateTime JoinedAt, DateTime LastSeenAt);
 
+// NOTE: DeckCount intentionally excluded from the public DTO — no player should
+// know how many cards remain. Clients derive nothing from deck size.
 public record GameStateDto(
-    int DeckCount,
     int DiscardCount,
     Dictionary<string, int> HandCounts,
     Dictionary<string, int> TurnsTaken,
@@ -86,6 +87,8 @@ public record GameActionResponse(
     bool RequiresDefuse,
     bool RequiresDiscardPick,
     bool RequiresTargetPick,
+    bool RequiresFavorPick,
+    IReadOnlyList<string>? FavorCandidates,
     IReadOnlyList<string>? FuturePeek,
     string? PlayedCardKey,
     string? ComboKind);

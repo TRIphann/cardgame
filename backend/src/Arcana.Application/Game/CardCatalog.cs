@@ -67,29 +67,58 @@ public static class CardCatalog
 
     /// <summary>
     /// Build the deck (Fisher-Yates shuffled) for the given player count.
-    /// Base of 5 players, then each +/-1 player delta adds or subtracts one
-    /// of every action card and a bomb. Defuses are NOT included — they're
-    /// dealt directly (1 per player) so each player starts safe.
+    ///
+    /// Card counts per player count (Exploding Kittens variant):
+    ///   4 players: 3 bombs (winner is the 1 player who avoids all 3)
+    ///   5 players: 4 bombs (winner is the 1 player who avoids all 4)
+    ///   N players: N-1 bombs (guarantees at least 1 survivor)
+    ///
+    /// For N players the composition is:
+    ///   Bombs        = N - 1
+    ///   Attack      = N
+    ///   Future      = N
+    ///   Defuse      = N + 1  (1 per player at start + 1 leftover in deck)
+    ///   Shuffle     = N - 1
+    ///   Skip        = N - 1
+    ///   Favor       = N
+    ///   Nope        = N - 1
+    ///   Combo defuse variants: each = N - 1 (split evenly across 5 types if needed)
     /// </summary>
     public static List<string> BuildDeck(int playerCount)
     {
-        var d = playerCount - 5;
-        var rng = Random.Shared;
+        if (playerCount < 2) playerCount = 2;
+        if (playerCount > 8) playerCount = 8;
 
+        var rng = Random.Shared;
         var deck = new List<string>();
 
-        // Bombs: base 4 for 5 players, ±1 per player delta. Min 1 so the deck
-        // can still explode someone (one bomb per player is the floor).
-        var bombCount = Math.Max(1, 4 + d);
+        // Bombs: N - 1 so the last player CAN win if they dodge all.
+        var bombCount = playerCount - 1;
         for (var i = 0; i < bombCount; i++) deck.Add(Bomb);
 
-        // Action cards: base values from the user's spec for 5 players.
-        AddCopies(deck, Attack, Math.Max(1, 5 + d));
-        AddCopies(deck, Skip, Math.Max(1, 5 + d));
-        AddCopies(deck, Favor, Math.Max(1, 5 + d));
-        AddCopies(deck, Future, Math.Max(1, 4 + d));
-        AddCopies(deck, Shuffle, Math.Max(1, 4 + d));
-        AddCopies(deck, Nope, Math.Max(1, 4 + d));
+        // Core action cards: exactly N copies each.
+        AddCopies(deck, Attack, playerCount);
+        AddCopies(deck, Favor, playerCount);
+        AddCopies(deck, Future, playerCount);
+
+        // Defuse: N + 1 (1 per player for starting hands + 1 extra in deck).
+        AddCopies(deck, Defuse, playerCount + 1);
+
+        // Cards that appear N - 1 times.
+        AddCopies(deck, Shuffle, playerCount - 1);
+        AddCopies(deck, Skip, playerCount - 1);
+        AddCopies(deck, Nope, playerCount - 1);
+
+        // Combo defuse variants (5 types): N - 1 total copies distributed evenly.
+        // These are the cards players USE in combos (2/3/5 same).
+        var comboCopies = playerCount - 1;
+        var comboPerType = comboCopies / ComboDefuses.Count;
+        var comboRemainder = comboCopies % ComboDefuses.Count;
+        for (var i = 0; i < ComboDefuses.Count; i++)
+        {
+            var count = comboPerType + (i < comboRemainder ? 1 : 0);
+            AddCopies(deck, ComboDefuses[i], count);
+        }
 
         // Fisher-Yates shuffle.
         for (var i = deck.Count - 1; i > 0; i--)

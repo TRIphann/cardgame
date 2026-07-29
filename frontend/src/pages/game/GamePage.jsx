@@ -82,6 +82,7 @@ export default function GamePage() {
   const [pickModal, setPickModal] = useState(null);
   const [futurePeek, setFuturePeek] = useState(null); // [key1, key2, key3]
   const [defuseModal, setDefuseModal] = useState(false);
+  const [concedeConfirm, setConcedeConfirm] = useState(false);
   const [drawAnim, setDrawAnim] = useState(null); // { sourceRect, targetRect, cardKey, viewer, revealKey }
   const [recentDiscards, setRecentDiscards] = useState([]); // [{ key, by }] — last played cards
   const [opponentDrawAnim, setOpponentDrawAnim] = useState(null); // { memberId, cardKey }
@@ -533,6 +534,25 @@ export default function GamePage() {
     [audio, myId, pickModal, roomId, toast],
   );
 
+  // ── Concede / surrender ────────────────────────────────────────
+  const onConcede = useCallback(
+    async (confirmed) => {
+      if (!confirmed) {
+        setConcedeConfirm(true);
+        return;
+      }
+      setConcedeConfirm(false);
+      try {
+        const res = await roomsApi.concede(roomId, myId);
+        toast?.info?.(res?.Toast || "Bạn đã đầu hàng.");
+        navigate(ROUTES.landing, { replace: true });
+      } catch (e) {
+        toast?.error?.(e.message || "Không thể đầu hàng.");
+      }
+    },
+    [myId, navigate, roomId, toast],
+  );
+
   // ── Draw card ──────────────────────────────────────────────
   const onDrawCard = useCallback(async () => {
     if (!isMyTurn || !isAlive || gameEnded) return;
@@ -681,7 +701,7 @@ export default function GamePage() {
     );
   }
 
-  const deckCount = gs?.deckCount ?? 0;
+  const deckCount = gs?.deckCount ?? null; // null = hidden from client
   const discardCount = gs?.discardCount ?? 0;
   const lastDiscarded = null; // discard pile keys not exposed to client
   const discardTop = null;
@@ -709,6 +729,18 @@ export default function GamePage() {
         <span className="game-header__elapsed" aria-label="Thời gian">
           {mm}:{ss}
         </span>
+        <div className="game-header__actions">
+          {!gameEnded && (
+            <button
+              type="button"
+              className="game-action-btn game-action-btn--concede"
+              onClick={() => onConcede(false)}
+              title="Đầu hàng"
+            >
+              Đầu hàng
+            </button>
+          )}
+        </div>
       </header>
 
       <section className="game-table">
@@ -738,7 +770,7 @@ export default function GamePage() {
               ))}
               <span className="deck-stack__layer deck-stack__layer--top">
                 <img src={CARD_CLOUDINARY.cards.back} alt="" draggable={false} />
-                <span className="deck-stack__layer--badge">{deckCount}</span>
+                <span className="deck-stack__layer--badge">?</span>
               </span>
             </div>
             <div className="deck-pile__glow" aria-hidden="true" />
@@ -870,9 +902,8 @@ export default function GamePage() {
       )}
       {defuseModal && (
         <DefuseModal
-          deckSize={deckCount}
           onConfirm={onConfirmDefuse}
-          onSkip={() => onConfirmDefuse(deckCount)}
+          onSkip={() => onConfirmDefuse(5)}
         />
       )}
       {futurePeek && (
@@ -880,6 +911,34 @@ export default function GamePage() {
           peek={futurePeek}
           onClose={() => setFuturePeek(null)}
         />
+      )}
+
+      {/* Concede confirm dialog */}
+      {concedeConfirm && (
+        <div className="game-modal__scrim concede-scrim">
+          <div className="game-modal concede-modal">
+            <h3 className="game-modal__title">Xác nhận đầu hàng</h3>
+            <p className="game-modal__sub">
+              Bạn sẽ bị loại khỏi ván chơi. Hành động này không thể hoàn tác.
+            </p>
+            <div className="game-modal__actions">
+              <button
+                type="button"
+                className="game-action-btn"
+                onClick={() => setConcedeConfirm(false)}
+              >
+                Huỷ
+              </button>
+              <button
+                type="button"
+                className="game-action-btn game-action-btn--danger"
+                onClick={() => onConcede(true)}
+              >
+                Đầu hàng
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Nope countdown toast */}

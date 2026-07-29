@@ -228,7 +228,12 @@ export default function LandingPage() {
 
 function humanize(err, action) {
   const msg = err?.message || "";
+  const code = err?.code || "";
+  if (code === "invalid_code" || /không hợp lệ|mã phòng không/i.test(msg))
+    return "Sai mã phòng. Vui lòng kiểm tra lại mã phòng.";
   if (/timeout|không phản hồi/i.test(msg)) return "Máy chủ không phản hồi. Vui lòng thử lại.";
   if (/network|failed to fetch/i.test(msg)) return "Không kết nối được máy chủ. Kiểm tra CORS hoặc mạng.";
+  if (/room_full|đủ người/i.test(msg)) return "Phòng đã đủ người chơi.";
+  if (/game_already_started|đã bắt đầu/i.test(msg)) return "Phòng đã bắt đầu chơi rồi.";
   return msg || (action === "join" ? "Vào phòng thất bại." : "Tạo phòng thất bại.");
 }

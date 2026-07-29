@@ -49,21 +49,74 @@ public class GameService
             StartedAt = DateTime.UtcNow,
         };
 
+        // ── Safe dealing protocol ────────────────────────────────────
+        //
+        // Deck starts with N+1 Defuse cards. We:
+        //   1) Extract N Defuse from the deck (one per player).
+        //   2) The last N players to receive a Defuse in this loop are the
+        //      "survivor candidates" — whoever draws a bomb later still has their
+        //      starting Defuse as a safety net.
+        //   3) Deal 4 non-bomb cards to each player from a shuffled safe pool.
+        //   4) The N-th (last) player gets the last Defuse → guaranteed survivor.
+        //   5) Any leftover Defuse goes back into the deck.
+        //
+        // The result: every player starts with Defuse, NO bombs dealt, and exactly
+        // 1 player can dodge every bomb and win.
+
+        // Step 1: extract N defuses from the deck.
+        var defuseReserve = new List<string>();
+        for (var i = 0; i < players.Count; i++)
+        {
+            var idx = state.Deck.LastIndexOf(CardCatalog.Defuse);
+            if (idx < 0) break;
+            defuseReserve.Add(state.Deck[idx]);
+            state.Deck.RemoveAt(idx);
+        }
+
+        // Step 2: shuffle the non-bomb cards for dealing.
+        var safePool = state.Deck.Where(c => c != CardCatalog.Bomb).ToList();
+        for (var i = safePool.Count - 1; i > 0; i--)
+        {
+            var j = Random.Shared.Next(i + 1);
+            (safePool[i], safePool[j]) = (safePool[j], safePool[i]);
+        }
+
+        // Step 3: deal to each player.
+        var safeIdx = 0;
         foreach (var p in players)
         {
             var hand = new List<string>();
-            for (var i = 0; i < 4; i++)
-            {
-                if (state.Deck.Count == 0) break;
-                hand.Add(state.Deck[^1]);
-                state.Deck.RemoveAt(state.Deck.Count - 1);
-            }
-            hand.Add(CardCatalog.RollDefuseVariant());
+
+            // Deal 4 non-bomb cards.
+            for (var i = 0; i < 4 && safeIdx < safePool.Count; i++, safeIdx++)
+                hand.Add(safePool[safeIdx]);
+
+            // Give the player a Defuse (reverse order so last player gets last defuse).
+            var defuseToGive = defuseReserve.Count > 0
+                ? defuseReserve[defuseReserve.Count - 1]
+                : CardCatalog.RollDefuseVariant();
+            if (defuseReserve.Count > 0) defuseReserve.RemoveAt(defuseReserve.Count - 1);
+            hand.Add(defuseToGive);
+
             state.Hands[p.Id] = hand;
             state.Alive[p.Id] = true;
             state.DiedAt[p.Id] = null;
             state.TurnsTaken[p.Id] = 0;
             state.CardsPlayed[p.Id] = 0;
+        }
+
+        // Step 4: put leftover Defuse back into the deck.
+        foreach (var d in defuseReserve) state.Deck.Add(d);
+
+        // Step 5: rebuild final deck (remaining safe + all bombs, shuffled).
+        var bombs = state.Deck.Where(c => c == CardCatalog.Bomb).ToList();
+        state.Deck = state.Deck.Where(c => c != CardCatalog.Bomb).ToList();
+        // safePool[safeIdx..] are the undelt safe cards — state.Deck already has them.
+        state.Deck.AddRange(bombs);
+        for (var i = state.Deck.Count - 1; i > 0; i--)
+        {
+            var j = Random.Shared.Next(i + 1);
+            (state.Deck[i], state.Deck[j]) = (state.Deck[j], state.Deck[i]);
         }
 
         state.CurrentTurnMemberId = players[Random.Shared.Next(players.Count)].Id;
@@ -386,6 +439,30 @@ public class GameService
         await PersistAsync(room.Id, gs, ct);
         result.Room = (await _repository.GetByIdAsync(room.Id, ct))!;
         return result;
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    //  Concede
+    // ──────────────────────────────────────────────────────────────────
+
+    public async Task<GameActionResult> ConcedeAsync(string roomId, string memberId, CancellationToken ct = default)
+    {
+        var room = await LoadPlayingRoomAsync(roomId, ct);
+        var gs = room.GameState!;
+
+        if (!gs.Alive.GetValueOrDefault(memberId))
+            throw new DomainException("already_dead", "Bạn đã không còn trong trò chơi.");
+
+        gs.Alive[memberId] = false;
+        gs.DiedAt[memberId] = DateTime.UtcNow;
+
+        CheckWinCondition(gs);
+        await PersistAsync(room.Id, gs, ct);
+        return new GameActionResult
+        {
+            Room = (await _repository.GetByIdAsync(room.Id, ct))!,
+            Toast = "Bạn đã đầu hàng và bị loại khỏi ván chơi.",
+        };
     }
 
     // ──────────────────────────────────────────────────────────────────

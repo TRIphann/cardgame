@@ -4050,6 +4050,52 @@ body { }
   color: rgba(255, 255, 255, 0.55);
 }
 
+/* ── Game header: concede button ──────────────────── */
+.game-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.game-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.game-action-btn--concede {
+  font-size: 12px;
+  padding: 6px 14px;
+  background: rgba(255, 77, 109, 0.18);
+  border: 1px solid rgba(255, 77, 109, 0.5);
+  color: #ff8aa3;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 160ms, transform 120ms;
+}
+.game-action-btn--concede:hover {
+  background: rgba(255, 77, 109, 0.32);
+  transform: scale(1.04);
+}
+.game-action-btn--danger {
+  background: linear-gradient(135deg, #ff4d6d, #c01a3a) !important;
+  border-color: rgba(255, 150, 170, 0.7) !important;
+  color: #fff !important;
+}
+.game-action-btn--danger:hover {
+  filter: brightness(1.15);
+  transform: scale(1.04);
+}
+
+/* ── Concede modal ────────────────────────────────── */
+.concede-modal {
+  max-width: 400px;
+  background: linear-gradient(135deg, rgba(40, 18, 30, 0.97), rgba(20, 8, 20, 0.97));
+  border: 2px solid rgba(255, 77, 109, 0.65);
+  box-shadow:
+    0 24px 70px rgba(0, 0, 0, 0.8),
+    0 0 60px rgba(255, 77, 109, 0.3);
+}
+
 @media (max-width: 900px) {
   .game-table { grid-template-columns: 1fr; grid-template-rows: auto auto auto; }
   .game-side { flex-direction: row; flex-wrap: wrap; }

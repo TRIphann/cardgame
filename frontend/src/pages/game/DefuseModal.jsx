@@ -8,8 +8,8 @@ import { cardImageUrl } from "@games/exploding-cats/cardCloudinary.js";
 
 const SLOTS = [0, 1, 2, 3, 4, 5];
 
-export function DefuseModal({ deckSize, onConfirm, onSkip }) {
-  const maxSlot = Math.min(deckSize, 5);
+export function DefuseModal({ onConfirm, onSkip }) {
+  // Always show slots 0–5. Server clamps the value anyway.
   const [tickKey, setTickKey] = useState(0);
   // Trigger sparkle bursts periodically (every ~1.4s) on the modal edge.
   useEffect(() => {
@@ -34,13 +34,13 @@ export function DefuseModal({ deckSize, onConfirm, onSkip }) {
         </p>
         <div className="defuse-slots">
           {SLOTS.map((s) => {
-            const usable = s <= maxSlot;
+            const usable = true; // server clamps; always show all slots
             return (
               <button
                 key={s}
                 type="button"
                 className={`defuse-slot${usable ? "" : " defuse-slot--disabled"}`}
-                disabled={!usable}
+                disabled={!usable ? true : undefined}
                 onClick={usable ? () => onConfirm(s) : undefined}
               >
                 <span className="defuse-slot__num">{s}</span>

@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/GamePage-B9Zb1Hru.js","assets/react-BhVOh7S1.js","assets/vendor-DcE7maHo.js","assets/router-DRJyKT9H.js","assets/react-dom-HPixZcWd.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/GamePage-DuhzOCbQ.js","assets/react-BhVOh7S1.js","assets/vendor-DcE7maHo.js","assets/router-DRJyKT9H.js","assets/react-dom-HPixZcWd.js"])))=>i.map(i=>d[i]);
 var __defProp = Object.defineProperty;
 var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
 var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
@@ -767,12 +767,17 @@ async function request(path, options = {}) {
 async function jsonRequest(path, options = {}) {
   const res = await request(path, options);
   if (!res.ok) {
+    let code = `http_${res.status}`;
     let msg = `HTTP ${res.status}`;
     try {
-      msg = (await res.json()).message || msg;
+      const body = await res.json();
+      code = body.code || code;
+      msg = body.message || msg;
     } catch (_) {
     }
-    throw new Error(msg);
+    const err = new Error(msg);
+    err.code = code;
+    throw err;
   }
   if (res.status === 204) return null;
   return res.json();
@@ -856,6 +861,12 @@ const roomsApi = {
   },
   nope(roomId, memberId) {
     return jsonRequest(`/api/rooms/${roomId}/game/nope`, {
+      method: "POST",
+      body: JSON.stringify({ memberId })
+    });
+  },
+  concede(roomId, memberId) {
+    return jsonRequest(`/api/rooms/${roomId}/game/concede`, {
       method: "POST",
       body: JSON.stringify({ memberId })
     });
@@ -1221,8 +1232,13 @@ function LandingPage() {
 }
 function humanize(err, action) {
   const msg = err?.message || "";
+  const code = err?.code || "";
+  if (code === "invalid_code" || /không hợp lệ|mã phòng không/i.test(msg))
+    return "Sai mã phòng. Vui lòng kiểm tra lại mã phòng.";
   if (/timeout|không phản hồi/i.test(msg)) return "Máy chủ không phản hồi. Vui lòng thử lại.";
   if (/network|failed to fetch/i.test(msg)) return "Không kết nối được máy chủ. Kiểm tra CORS hoặc mạng.";
+  if (/room_full|đủ người/i.test(msg)) return "Phòng đã đủ người chơi.";
+  if (/game_already_started|đã bắt đầu/i.test(msg)) return "Phòng đã bắt đầu chơi rồi.";
   return msg || (action === "join" ? "Vào phòng thất bại." : "Tạo phòng thất bại.");
 }
 const SessionContext = reactExports.createContext(null);
@@ -2356,7 +2372,7 @@ function LobbyPage() {
     roomError && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lobby-error", role: "alert", children: String(roomError.message || roomError) })
   ] });
 }
-const GamePage = reactExports.lazy(() => __vitePreload(() => import("./GamePage-B9Zb1Hru.js"), true ? __vite__mapDeps([0,1,2,3,4]) : void 0));
+const GamePage = reactExports.lazy(() => __vitePreload(() => import("./GamePage-DuhzOCbQ.js"), true ? __vite__mapDeps([0,1,2,3,4]) : void 0));
 function App() {
   const location = useLocation();
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(ErrorBoundary, { children: [

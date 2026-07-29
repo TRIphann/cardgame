@@ -1,5 +1,5 @@
 import { r as reactExports, j as jsxRuntimeExports } from "./react-BhVOh7S1.js";
-import { r as roomsApi, A as API_BASE_URL, c as cardImageUrl, u as useSession, a as useToast, b as useAudio, R as ROUTES, C as CARD_CLOUDINARY } from "./index-8rxDvRYa.js";
+import { r as roomsApi, A as API_BASE_URL, c as cardImageUrl, u as useSession, a as useToast, b as useAudio, R as ROUTES, C as CARD_CLOUDINARY } from "./index-CWe6VjL0.js";
 import { H as HubConnectionBuilder, L as LogLevel } from "./vendor-DcE7maHo.js";
 import { c as useParams, a as useNavigate } from "./router-DRJyKT9H.js";
 import "./react-dom-HPixZcWd.js";
@@ -627,8 +627,7 @@ function FxBurst({ anchor, fxKey = "general", size = "md", id = "burst" }) {
   );
 }
 const SLOTS = [0, 1, 2, 3, 4, 5];
-function DefuseModal({ deckSize, onConfirm, onSkip }) {
-  const maxSlot = Math.min(deckSize, 5);
+function DefuseModal({ onConfirm, onSkip }) {
   const [tickKey, setTickKey] = reactExports.useState(0);
   reactExports.useEffect(() => {
     const id = setInterval(() => setTickKey((k) => k + 1), 1400);
@@ -647,14 +646,13 @@ function DefuseModal({ deckSize, onConfirm, onSkip }) {
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "game-modal__sub", children: "Chọn vị trí đặt bom trở lại vào chồng bài (0 = trên cùng, 5 = sâu hơn)." }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "defuse-slots", children: SLOTS.map((s) => {
-        const usable = s <= maxSlot;
         return /* @__PURE__ */ jsxRuntimeExports.jsxs(
           "button",
           {
             type: "button",
-            className: `defuse-slot${usable ? "" : " defuse-slot--disabled"}`,
-            disabled: !usable,
-            onClick: usable ? () => onConfirm(s) : void 0,
+            className: `defuse-slot${""}`,
+            disabled: void 0,
+            onClick: () => onConfirm(s),
             children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "defuse-slot__num", children: s }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "defuse-slot__hint", children: s === 0 ? "Đỉnh" : s === 5 ? "Đáy" : "" }),
@@ -1211,6 +1209,7 @@ function GamePage() {
   const [pickModal, setPickModal] = reactExports.useState(null);
   const [futurePeek, setFuturePeek] = reactExports.useState(null);
   const [defuseModal, setDefuseModal] = reactExports.useState(false);
+  const [concedeConfirm, setConcedeConfirm] = reactExports.useState(false);
   const [drawAnim, setDrawAnim] = reactExports.useState(null);
   const [recentDiscards, setRecentDiscards] = reactExports.useState([]);
   const [opponentDrawAnim, setOpponentDrawAnim] = reactExports.useState(null);
@@ -1572,6 +1571,23 @@ function GamePage() {
     },
     [audio, myId, pickModal, roomId, toast]
   );
+  const onConcede = reactExports.useCallback(
+    async (confirmed) => {
+      if (!confirmed) {
+        setConcedeConfirm(true);
+        return;
+      }
+      setConcedeConfirm(false);
+      try {
+        const res = await roomsApi.concede(roomId, myId);
+        toast?.info?.(res?.Toast || "Bạn đã đầu hàng.");
+        navigate(ROUTES.landing, { replace: true });
+      } catch (e) {
+        toast?.error?.(e.message || "Không thể đầu hàng.");
+      }
+    },
+    [myId, navigate, roomId, toast]
+  );
   const onDrawCard = reactExports.useCallback(async () => {
     if (!isMyTurn || !isAlive || gameEnded) return;
     if (drawInFlightRef.current) return;
@@ -1676,7 +1692,7 @@ function GamePage() {
       ] })
     ] });
   }
-  const deckCount = gs?.deckCount ?? 0;
+  gs?.deckCount ?? null;
   const discardCount = gs?.discardCount ?? 0;
   const elapsedSec = (() => {
     if (!gs?.startedAt) return 0;
@@ -1704,7 +1720,17 @@ function GamePage() {
         mm,
         ":",
         ss
-      ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-header__actions", children: !gameEnded && /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          className: "game-action-btn game-action-btn--concede",
+          onClick: () => onConcede(false),
+          title: "Đầu hàng",
+          children: "Đầu hàng"
+        }
+      ) })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "game-table", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-side game-side--left", children: opponents.left.map((m) => /* @__PURE__ */ jsxRuntimeExports.jsx(Seat, { member: m, gs }, m.id)) }),
@@ -1723,7 +1749,7 @@ function GamePage() {
                 [11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1].map((i) => /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "deck-stack__layer", style: { "--i": i } }, i)),
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "deck-stack__layer deck-stack__layer--top", children: [
                   /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: CARD_CLOUDINARY.cards.back, alt: "", draggable: false }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "deck-stack__layer--badge", children: deckCount })
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "deck-stack__layer--badge", children: "?" })
                 ] })
               ] }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "deck-pile__glow", "aria-hidden": "true" })
@@ -1858,9 +1884,8 @@ function GamePage() {
     defuseModal && /* @__PURE__ */ jsxRuntimeExports.jsx(
       DefuseModal,
       {
-        deckSize: deckCount,
         onConfirm: onConfirmDefuse,
-        onSkip: () => onConfirmDefuse(deckCount)
+        onSkip: () => onConfirmDefuse(5)
       }
     ),
     futurePeek && /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -1870,6 +1895,30 @@ function GamePage() {
         onClose: () => setFuturePeek(null)
       }
     ),
+    concedeConfirm && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-modal__scrim concede-scrim", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "game-modal concede-modal", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "game-modal__title", children: "Xác nhận đầu hàng" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "game-modal__sub", children: "Bạn sẽ bị loại khỏi ván chơi. Hành động này không thể hoàn tác." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "game-modal__actions", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            className: "game-action-btn",
+            onClick: () => setConcedeConfirm(false),
+            children: "Huỷ"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            className: "game-action-btn game-action-btn--danger",
+            onClick: () => onConcede(true),
+            children: "Đầu hàng"
+          }
+        )
+      ] })
+    ] }) }),
     pendingAction && nopeRemaining > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "nope-react-toast", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "nope-react-toast__label", children: pendingAction.initiatorId === myId ? "Hành động của bạn" : "Hành động vừa xảy ra" }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "nope-react-toast__timer", children: [

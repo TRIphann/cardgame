@@ -35,5 +35,5 @@ public class InvitationCodeGenerator : IInvitationCodeGenerator
 public class InvalidInvitationCodeException : DomainException
 {
     public InvalidInvitationCodeException()
-        : base("invalid_code", "Mã phòng không hợp lệ.") { }
+        : base("invalid_code", "Mã phòng không hợp lệ. Mã phòng gồm 6 ký tự.") { }
 }
