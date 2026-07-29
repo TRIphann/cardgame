@@ -1,0 +1,1823 @@
+import { r as reactExports, j as jsxRuntimeExports } from "./react-BhVOh7S1.js";
+import { r as roomsApi, A as API_BASE_URL, c as cardImageUrl, C as CARD_CLOUDINARY, u as useSession, a as useToast, b as useAudio, R as ROUTES } from "./index-BHF95ZSs.js";
+import { H as HubConnectionBuilder, L as LogLevel } from "./vendor-DcE7maHo.js";
+import { c as useParams, a as useNavigate } from "./router-DRJyKT9H.js";
+import "./react-dom-HPixZcWd.js";
+const FALLBACK_POLL_MS = 1500;
+const HUB_RETRY_MS = 3e3;
+function hubUrl() {
+  const base = API_BASE_URL.replace(/\/+$/, "");
+  return `${base}/hubs/game`;
+}
+function useGameChannel({ roomId, memberId, onUpdate, enabled }) {
+  const [connected, setConnected] = reactExports.useState(false);
+  const connRef = reactExports.useRef(null);
+  const pollTimerRef = reactExports.useRef(null);
+  const retryTimerRef = reactExports.useRef(null);
+  reactExports.useEffect(() => {
+    if (!enabled || !roomId) return void 0;
+    let disposed = false;
+    const startPoll = () => {
+      if (pollTimerRef.current) return;
+      const tick = async () => {
+        try {
+          const data = await roomsApi.snapshotWithViewer(roomId, memberId);
+          if (!disposed) onUpdate?.(data);
+        } catch (_) {
+        }
+      };
+      tick();
+      pollTimerRef.current = setInterval(tick, FALLBACK_POLL_MS);
+    };
+    const stopPoll = () => {
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
+    };
+    const stopRetry = () => {
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
+    };
+    const startHub = async () => {
+      stopRetry();
+      try {
+        const conn = new HubConnectionBuilder().withUrl(hubUrl()).withAutomaticReconnect([1e3, 2e3, 5e3, 1e4]).configureLogging(LogLevel.Warning).build();
+        conn.on("room-updated", async () => {
+          try {
+            const data = await roomsApi.snapshotWithViewer(roomId, memberId);
+            if (!disposed) onUpdate?.(data);
+          } catch (_) {
+          }
+        });
+        conn.onreconnecting(() => {
+          if (disposed) return;
+          setConnected(false);
+          startPoll();
+        });
+        conn.onreconnected(() => {
+          if (disposed) return;
+          setConnected(true);
+          stopPoll();
+          conn.invoke("JoinRoom", roomId, memberId).catch(() => {
+          });
+        });
+        conn.onclose(() => {
+          if (disposed) return;
+          setConnected(false);
+          startPoll();
+        });
+        await conn.start();
+        if (disposed) {
+          await conn.stop();
+          return;
+        }
+        connRef.current = conn;
+        await conn.invoke("JoinRoom", roomId, memberId);
+        setConnected(true);
+        stopPoll();
+      } catch (_) {
+        if (!disposed) {
+          startPoll();
+          retryTimerRef.current = setTimeout(() => {
+            if (!disposed) startHub();
+          }, HUB_RETRY_MS);
+        }
+      }
+    };
+    startPoll();
+    startHub();
+    return () => {
+      disposed = true;
+      stopPoll();
+      stopRetry();
+      if (connRef.current) {
+        try {
+          connRef.current.invoke("LeaveRoom", roomId).catch(() => {
+          });
+        } catch (_) {
+        }
+        connRef.current.stop().catch(() => {
+        });
+        connRef.current = null;
+      }
+    };
+  }, [enabled, roomId, memberId]);
+  return { connected };
+}
+const CARD_LABELS = {
+  bomb: {
+    label: "Bom",
+    description: "Nổ ngay khi bạn rút phải. Trừ khi bạn có lá Cứu để hóa giải."
+  },
+  defuse: {
+    label: "Cứu (1 mệnh)",
+    description: "Tự dùng để hóa giải bom. Đặt bom vào vị trí bất kỳ trong chồng bài."
+  },
+  attack: {
+    label: "Tấn công",
+    description: "Đối phương phải chơi thêm 1 lượt, bạn không phải rút bài."
+  },
+  skip: {
+    label: "Bỏ lượt",
+    description: "Kết thúc lượt của bạn. Nếu đang chịu tấn công thì tiêu hao lượt đó."
+  },
+  favor: {
+    label: "Xin",
+    description: "Lấy 1 lá ngẫu nhiên từ 1 đối thủ còn sống."
+  },
+  future: {
+    label: "Xem trước",
+    description: "Xem 3 lá trên cùng chồng bài rồi úp xuống lại theo đúng thứ tự."
+  },
+  shuffle: {
+    label: "Xáo bài",
+    description: "Trộn lại toàn bộ chồng bài."
+  },
+  nope: {
+    label: "Cản",
+    description: "Huỷ hành động vừa được thực hiện trong vòng 3 giây. Có thể nối nhiều Cản liên tiếp."
+  },
+  ninja: {
+    label: "Ninja",
+    description: "Combo 2 lá cùng tên: lấy 1 lá úp từ tay đối thủ (chọn lá cụ thể)."
+  },
+  superman: {
+    label: "Siêu nhân",
+    description: "Combo 2/3 lá cùng tên. 2 lá: lấy lá úp; 3 lá: yêu cầu đối thủ đưa lá chỉ định."
+  },
+  zombie: {
+    label: "Xác sống",
+    description: "Combo 2/3 lá cùng tên. 2 lá: lấy lá úp; 3 lá: yêu cầu đối thủ đưa lá chỉ định."
+  },
+  robot: {
+    label: "Robot",
+    description: "Combo 2/3 lá cùng tên. 2 lá: lấy lá úp; 3 lá: yêu cầu đối thủ đưa lá chỉ định."
+  },
+  "hải-tặc": {
+    label: "Hải tặc",
+    description: "Combo 2/3 lá cùng tên. 5 lá bất kỳ: lấy 1 lá từ chồng bỏ."
+  },
+  "hải tặc": {
+    label: "Hải tặc",
+    description: "Combo 2/3 lá cùng tên. 5 lá bất kỳ: lấy 1 lá từ chồng bỏ."
+  }
+};
+function getCardLabel(key) {
+  return CARD_LABELS[key] || { label: key || "?", description: "" };
+}
+const FLOATING_GLYPHS = ["☀", "☾", "◉", "✦"];
+const DUST_COUNT = 22;
+const ARC_COUNT = 4;
+function FloatingBackdrop() {
+  const dust = reactExports.useMemo(() => {
+    return Array.from({ length: DUST_COUNT }).map((_, i) => ({
+      i,
+      left: Math.random() * 100,
+      delay: Math.random() * 12,
+      dur: 12 + Math.random() * 8,
+      size: 1.5 + Math.random() * 3,
+      hue: i % 3 === 0 ? "rgba(255, 215, 130, 0.85)" : i % 3 === 1 ? "rgba(154, 115, 255, 0.85)" : "rgba(122, 223, 255, 0.85)"
+    }));
+  }, []);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "arc-ambient", "aria-hidden": "true", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "ambient ambient-one" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "ambient ambient-two" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "stars" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "arc-dust", "aria-hidden": "true", children: dust.map((d) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "span",
+      {
+        className: "arc-dust__mote",
+        style: {
+          left: `${d.left}%`,
+          width: `${d.size}px`,
+          height: `${d.size}px`,
+          background: d.hue,
+          boxShadow: `0 0 12px ${d.hue}, 0 0 24px ${d.hue}`,
+          animationDelay: `${d.delay}s`,
+          animationDuration: `${d.dur}s`
+        }
+      },
+      d.i
+    )) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "arc-sweep", "aria-hidden": "true", children: Array.from({ length: ARC_COUNT }).map((_, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "span",
+      {
+        className: "arc-sweep__line",
+        style: {
+          animationDelay: `${i * 1.6}s`,
+          animationDuration: `${10 + i * 2}s`,
+          top: `${15 + i * 18}%`
+        }
+      },
+      i
+    )) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cards-scene", children: FLOATING_GLYPHS.map((g, i) => {
+      const positions = [
+        { top: "8%", left: "10%" },
+        { top: "20%", right: "12%" },
+        { top: "70%", left: "6%" },
+        { top: "80%", right: "8%" }
+      ];
+      const pos = positions[i] || {};
+      return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "div",
+        {
+          className: "floating-card floating-card--fx",
+          style: { ...pos, animationDelay: `${i * 1.6}s` },
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "card-glyph", children: g }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "floating-card__trail", "aria-hidden": "true" })
+          ]
+        },
+        i
+      );
+    }) })
+  ] });
+}
+const BACK_URL = cardImageUrl("back");
+function arcStep(total) {
+  if (total <= 5) return 64;
+  if (total <= 8) return 48;
+  if (total <= 12) return 36;
+  if (total <= 16) return 28;
+  return 22;
+}
+function slotTransform(index, total) {
+  const t = total <= 1 ? 0.5 : index / (total - 1);
+  const totalRot = Math.max(8, 28 - (total - 5) * 1.2);
+  const rot = (t - 0.5) * totalRot;
+  const lift = Math.sin(t * Math.PI) * Math.min(18, 30 / Math.sqrt(total));
+  const step = arcStep(total);
+  const tx = (t - 0.5) * step * (total - 1);
+  return {
+    tx: `translateX(${tx.toFixed(1)}px)`,
+    tr: `rotate(${-rot.toFixed(1)}deg)`,
+    ty: `translateY(${-lift.toFixed(1)}px)`
+  };
+}
+function HandArc({ hand, selectedIndex, onSelectCard, onHoverCard }) {
+  const [hoveredIdx, setHoveredIdx] = reactExports.useState(null);
+  const total = hand?.length || 0;
+  if (total === 0) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "hand-arc hand-arc--empty", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { opacity: 0.4, fontSize: 14 }, children: "Không có lá nào" }) });
+  }
+  const step = arcStep(total);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "hand-arc", style: { "--hand-step": `${step}px` }, children: hand.map((key, idx) => {
+    const { tx, tr, ty } = slotTransform(idx, total);
+    const selected = selectedIndex === idx;
+    const hovered = hoveredIdx === idx;
+    const offset = (idx - (total - 1) / 2) * step;
+    const styleVars = {
+      left: `calc(50% + ${offset.toFixed(1)}px)`,
+      "--arc-tx": tx,
+      "--arc-tr": tr,
+      "--arc-ty": ty,
+      transform: `${tx} ${tr} ${ty}`,
+      zIndex: 10 + idx + (hovered ? 1e3 : 0)
+    };
+    const url = cardImageUrl(key);
+    const meta = CARD_LABELS[key] || { label: key, description: "" };
+    const tooltipId = `hand-card-tip-${idx}`;
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "button",
+      {
+        type: "button",
+        className: [
+          "hand-card",
+          selected ? "hand-card--selected" : "",
+          hovered ? "hand-card--hovered" : ""
+        ].filter(Boolean).join(" "),
+        style: styleVars,
+        onClick: () => onSelectCard?.(idx, key),
+        onMouseEnter: () => {
+          setHoveredIdx(idx);
+          onHoverCard?.(idx, key, true);
+        },
+        onMouseLeave: () => {
+          setHoveredIdx(null);
+          onHoverCard?.(idx, key, false);
+        },
+        onFocus: () => setHoveredIdx(idx),
+        onBlur: () => setHoveredIdx(null),
+        "aria-label": meta.label,
+        "aria-describedby": tooltipId,
+        "data-card-key": key,
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "img",
+            {
+              src: url || BACK_URL,
+              alt: meta.label,
+              draggable: false,
+              loading: "lazy",
+              onError: (e) => {
+                if (e.currentTarget.src !== BACK_URL) e.currentTarget.src = BACK_URL;
+              }
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "span",
+            {
+              id: tooltipId,
+              role: "tooltip",
+              className: `hand-card__tooltip${hovered ? " hand-card__tooltip--visible" : ""}`,
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hand-card__tooltip-title", children: meta.label }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hand-card__tooltip-desc", children: meta.description })
+              ]
+            }
+          )
+        ]
+      },
+      `${idx}-${key}`
+    );
+  }) });
+}
+const CARD_FX = {
+  attack: { glyph: "⚔", color: "#ff5247", accent: "#ff8a7a", particle: "✦", count: 10, ring: true },
+  skip: { glyph: "⤳", color: "#7adfff", accent: "#9af3ff", particle: "✧", count: 8, ring: false },
+  favor: { glyph: "✋", color: "#ffd86b", accent: "#ffeaa3", particle: "★", count: 10, ring: true },
+  future: { glyph: "◉", color: "#9a78ff", accent: "#cdb9ff", particle: "✦", count: 6, ring: true },
+  shuffle: { glyph: "🌀", color: "#5fdcb6", accent: "#a4f2dc", particle: "✧", count: 14, ring: true },
+  nope: { glyph: "✕", color: "#ff4d6d", accent: "#ff8aa3", particle: "✕", count: 6, ring: true },
+  bomb: { glyph: "💣", color: "#ff3030", accent: "#ff7474", particle: "✦", count: 22, ring: true },
+  defuse: { glyph: "✚", color: "#5fe07e", accent: "#a4f4ba", particle: "✧", count: 12, ring: true },
+  combo: { glyph: "✦", color: "#ffd86b", accent: "#a4f2dc", particle: "★", count: 14, ring: true },
+  "5-any": { glyph: "🌟", color: "#9a78ff", accent: "#ffd86b", particle: "★", count: 16, ring: true },
+  general: { glyph: "✦", color: "#ffd86b", accent: "#a4f2dc", particle: "✧", count: 8, ring: false },
+  draw: { glyph: "✧", color: "#9af3ff", accent: "#7adfff", particle: "✧", count: 10, ring: false },
+  back: { glyph: "✦", color: "#a98cff", accent: "#cdb9ff", particle: "✧", count: 6, ring: false }
+};
+function fxFor(key) {
+  return CARD_FX[key] || CARD_FX.general;
+}
+function CardActionModal({
+  card,
+  onClose,
+  onConfirm,
+  requiresTarget,
+  opponents,
+  onPickTarget
+}) {
+  const fx = reactExports.useMemo(() => fxFor(card?.key || "general"), [card?.key]);
+  if (!card) return null;
+  const url = cardImageUrl(card.key);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "game-modal__scrim card-action-scrim", onClick: onClose, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        className: "card-action-modal__backdrop",
+        style: {
+          "--fx-color": fx.color,
+          "--fx-accent": fx.accent
+        },
+        "aria-hidden": "true"
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        className: `game-modal card-action-modal card-action-modal--${card.key}`,
+        onClick: (e) => e.stopPropagation(),
+        style: { "--fx-color": fx.color, "--fx-accent": fx.accent },
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "game-modal__close", type: "button", onClick: onClose, "aria-label": "Đóng", children: "×" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "card-action-modal__layout", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "card-action-modal__art", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: url, alt: card.label || card.key, draggable: false }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "card-action-modal__art-glow", "aria-hidden": "true" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "card-action-modal__art-glyph", "aria-hidden": "true", children: fx.glyph })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "card-action-modal__body", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "game-modal__title", children: [
+                "Dùng lá: ",
+                card.label || card.key
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "game-modal__sub", children: card.description || "Xác nhận để sử dụng." }),
+              requiresTarget && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { style: { fontSize: 12, opacity: 0.7 }, children: "Chọn đối thủ:" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "combo-grid", children: (opponents || []).filter((o) => o.alive).map((o) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    type: "button",
+                    className: "combo-card",
+                    style: { display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Cinzel, serif" },
+                    onClick: () => onPickTarget(o.id),
+                    children: o.name
+                  },
+                  o.id
+                )) })
+              ] }),
+              !requiresTarget && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "game-modal__actions", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "game-action-btn", onClick: onClose, children: "Huỷ" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "game-action-btn game-action-btn--primary", onClick: onConfirm, children: "Xác nhận" })
+              ] })
+            ] })
+          ] })
+        ]
+      }
+    )
+  ] });
+}
+function urlFor(key) {
+  return CARD_CLOUDINARY.cards[key] || "";
+}
+function ComboModal({ kind, targetName, handCards, discardPile, onPick, onCancel }) {
+  if (kind === "TwoSame") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-modal__scrim", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "game-modal", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "game-modal__title", children: [
+        "Lấy 1 lá từ ",
+        targetName
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "game-modal__sub", children: "Mặt bài úp xuống. Bạn chọn 1, các lá còn lại quay về tay đối thủ." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "combo-grid", children: handCards.map((key, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          className: "combo-card combo-card--face-down",
+          onClick: () => onPick(key),
+          "aria-label": `Lá ${i + 1}`,
+          children: "?"
+        },
+        i
+      )) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-modal__actions", children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "game-action-btn", onClick: onCancel, children: "Huỷ" }) })
+    ] }) });
+  }
+  if (kind === "ThreeSame") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-modal__scrim", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "game-modal", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "game-modal__title", children: [
+        "Chỉ định lá muốn lấy từ ",
+        targetName
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "game-modal__sub", children: "Nếu đối thủ không có lá đó thì hành động không có tác dụng." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "combo-grid", children: handCards.map((key, i) => {
+        const url = urlFor(key);
+        return /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            className: "combo-card",
+            onClick: () => onPick(key),
+            children: url ? /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: url, alt: key }) : key
+          },
+          i
+        );
+      }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-modal__actions", children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "game-action-btn", onClick: onCancel, children: "Bỏ qua" }) })
+    ] }) });
+  }
+  if (kind === "FiveAny") {
+    if (!discardPile || discardPile.length === 0) {
+      return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-modal__scrim", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "game-modal", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "game-modal__title", children: "Chọn 1 lá từ chồng bỏ" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "game-modal__sub", children: "Chồng bỏ trống — không thể dùng combo 5-any." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-modal__actions", children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "game-action-btn", onClick: onCancel, children: "Đóng" }) })
+      ] }) });
+    }
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-modal__scrim", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "game-modal", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "game-modal__title", children: "Chọn 1 lá từ chồng bỏ" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "game-modal__sub", children: "Lá bạn chọn sẽ về tay bạn." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "discard-picker", children: discardPile.map((key, i) => {
+        const url = urlFor(key);
+        return /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            className: "combo-card",
+            onClick: () => onPick(key),
+            children: url ? /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: url, alt: key }) : key
+          },
+          `${i}-${key}`
+        );
+      }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-modal__actions", children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "game-action-btn", onClick: onCancel, children: "Bỏ qua" }) })
+    ] }) });
+  }
+  return null;
+}
+const PARTICLE_COUNT = 18;
+function seedAngle(i, n) {
+  return i / n * Math.PI * 2 + Math.sin(i * 11.3) * 0.18;
+}
+function seedDistance(i) {
+  return 60 + Math.sin(i * 7.7) * 20;
+}
+function seedSize(i) {
+  return 6 + Math.sin(i * 3.1) * 2.5;
+}
+function FxBurst({ anchor, fxKey = "general", size = "md", id = "burst" }) {
+  const fx = fxFor(fxKey);
+  const count = Math.min(PARTICLE_COUNT, fx.count || 12);
+  const variant = fxKey;
+  const seeds = reactExports.useMemo(() => {
+    const arr = [];
+    for (let i = 0; i < count; i += 1) {
+      arr.push({
+        i,
+        angle: seedAngle(i, count),
+        dist: seedDistance(i),
+        size: seedSize(i),
+        delay: Math.random() * 80,
+        dur: 700 + Math.random() * 280,
+        glyph: i % 3 === 0 ? fx.glyph : fx.particle
+      });
+    }
+    return arr;
+  }, [count, fx]);
+  if (!anchor) return null;
+  const cx = "left" in anchor ? anchor.left + anchor.width / 2 : anchor.x;
+  const cy = "top" in anchor ? anchor.top + anchor.height / 2 : anchor.y;
+  const scale = size === "lg" ? 1.6 : size === "sm" ? 0.6 : 1;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: `fx-burst fx-burst--${variant}`,
+      style: {
+        position: "fixed",
+        left: cx,
+        top: cy,
+        width: 0,
+        height: 0,
+        pointerEvents: "none",
+        zIndex: 220
+      },
+      "data-burst-id": id,
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "span",
+          {
+            className: "fx-burst__glyph",
+            style: {
+              color: fx.accent,
+              textShadow: `0 0 18px ${fx.color}, 0 0 32px ${fx.color}`
+            },
+            children: fx.glyph
+          }
+        ),
+        fx.ring && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "span",
+            {
+              className: "fx-burst__ring",
+              style: { borderColor: fx.color, boxShadow: `0 0 28px ${fx.color}` }
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "span",
+            {
+              className: "fx-burst__ring fx-burst__ring--delay",
+              style: { borderColor: fx.accent, boxShadow: `0 0 22px ${fx.accent}` }
+            }
+          )
+        ] }),
+        seeds.map((p) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "span",
+          {
+            className: "fx-burst__particle",
+            style: {
+              color: p.i % 2 === 0 ? fx.color : fx.accent,
+              textShadow: `0 0 12px ${fx.color}, 0 0 22px ${fx.accent}`,
+              fontSize: `${p.size * 4 * scale}px`,
+              "--ang": `${p.angle}rad`,
+              "--dist": `${p.dist * scale}px`,
+              "--delay": `${p.delay}ms`,
+              "--dur": `${p.dur}ms`
+            },
+            children: p.glyph
+          },
+          p.i
+        ))
+      ]
+    }
+  );
+}
+const SLOTS = [0, 1, 2, 3, 4, 5];
+function DefuseModal({ deckSize, onConfirm, onSkip }) {
+  const maxSlot = Math.min(deckSize, 5);
+  const [tickKey, setTickKey] = reactExports.useState(0);
+  reactExports.useEffect(() => {
+    const id = setInterval(() => setTickKey((k) => k + 1), 1400);
+    return () => clearInterval(id);
+  }, []);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "game-modal__scrim defuse-scrim", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "game-modal defuse-modal", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "defuse-modal__bomb", "aria-hidden": "true", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: cardImageUrl("bomb"), alt: "", draggable: false }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "defuse-modal__bomb-pulse" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "defuse-modal__bomb-pulse defuse-modal__bomb-pulse--late" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "game-modal__title defuse-modal__title", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "defuse-modal__title-glyph", "aria-hidden": "true", children: "💣" }),
+        "Cứu bom!"
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "game-modal__sub", children: "Chọn vị trí đặt bom trở lại vào chồng bài (0 = trên cùng, 5 = sâu hơn)." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "defuse-slots", children: SLOTS.map((s) => {
+        const usable = s <= maxSlot;
+        return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "button",
+          {
+            type: "button",
+            className: `defuse-slot${usable ? "" : " defuse-slot--disabled"}`,
+            disabled: !usable,
+            onClick: usable ? () => onConfirm(s) : void 0,
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "defuse-slot__num", children: s }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "defuse-slot__hint", children: s === 0 ? "Đỉnh" : s === 5 ? "Đáy" : "" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "defuse-slot__beam", "aria-hidden": "true" })
+            ]
+          },
+          s
+        );
+      }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-modal__actions", children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "game-action-btn", onClick: onSkip, children: "Đặt cuối" }) })
+    ] }),
+    [0, 1].map((corner) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+      FxBurst,
+      {
+        anchor: corner === 0 ? { x: window.innerWidth / 2 - 220, y: window.innerHeight / 2 - 120 } : { x: window.innerWidth / 2 + 220, y: window.innerHeight / 2 + 120 },
+        fxKey: "bomb",
+        size: "md",
+        id: `defuse-tick-${corner}`
+      },
+      `${corner}-${tickKey}`
+    ))
+  ] });
+}
+const FLIGHT_MS$1 = 850;
+function DrawAnimation({ sourceRect, targetRect, cardKey = "back", revealKey, onComplete }) {
+  const [phase, setPhase] = reactExports.useState("flying");
+  const [mounted, setMounted] = reactExports.useState(true);
+  reactExports.useEffect(() => {
+    const t1 = setTimeout(() => setPhase("landing"), FLIGHT_MS$1 - 80);
+    const t2 = setTimeout(() => setPhase("done"), FLIGHT_MS$1 + 80);
+    const t3 = setTimeout(() => {
+      setMounted(false);
+      onComplete?.();
+    }, FLIGHT_MS$1 + 140);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
+  }, [onComplete]);
+  if (!mounted || !sourceRect || !targetRect) return null;
+  const startX = sourceRect.left + sourceRect.width / 2;
+  const startY = sourceRect.top + sourceRect.height / 2;
+  const endX = targetRect.left + targetRect.width / 2;
+  const endY = targetRect.top + targetRect.height / 2;
+  const cardStyle = {
+    position: "fixed",
+    left: 0,
+    top: 0,
+    width: 92,
+    height: 132,
+    zIndex: 200,
+    pointerEvents: "none",
+    "--start-x": `${startX - 46}px`,
+    "--start-y": `${startY - 66}px`,
+    "--end-x": `${endX - 46}px`,
+    "--end-y": `${endY - 66}px`
+  };
+  const showFace = !!revealKey;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "span",
+      {
+        className: "fx-magic-circle",
+        style: {
+          position: "fixed",
+          left: startX,
+          top: startY + sourceRect.height / 2 + 6,
+          transform: "translateX(-50%)",
+          zIndex: 198,
+          pointerEvents: "none"
+        },
+        "aria-hidden": "true"
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "span",
+      {
+        className: "fx-draw-trail",
+        style: {
+          position: "fixed",
+          left: startX,
+          top: startY,
+          width: 200,
+          height: 200,
+          transform: "translate(-50%, -50%)",
+          zIndex: 199,
+          pointerEvents: "none"
+        },
+        "aria-hidden": "true"
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `draw-anim draw-anim--${phase}${showFace ? " draw-anim--reveal" : ""}`, style: cardStyle, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "draw-anim__inner", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "draw-anim__face draw-anim__face--back", children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: cardImageUrl("back"), alt: "", draggable: false }) }),
+      showFace && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "draw-anim__face draw-anim__face--front", children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: cardImageUrl(revealKey), alt: revealKey, draggable: false }) })
+    ] }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "span",
+      {
+        className: "fx-magic-circle fx-magic-circle--target",
+        style: {
+          position: "fixed",
+          left: endX,
+          top: endY,
+          transform: "translate(-50%, -50%)",
+          zIndex: 197,
+          pointerEvents: "none"
+        },
+        "aria-hidden": "true"
+      }
+    ),
+    phase === "landing" && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      FxBurst,
+      {
+        anchor: { x: endX, y: endY },
+        fxKey: showFace ? revealKey : "draw",
+        size: "lg",
+        id: `draw-${Date.now()}`
+      }
+    )
+  ] });
+}
+const FLIGHT_MS = 620;
+function PlayCardAnimation({ sourceRect, cardKey, targetRect }) {
+  const [phase, setPhase] = reactExports.useState("flying");
+  const [mounted, setMounted] = reactExports.useState(true);
+  reactExports.useEffect(() => {
+    const t1 = setTimeout(() => setPhase("burst"), FLIGHT_MS);
+    const t2 = setTimeout(() => setPhase("done"), FLIGHT_MS + 900);
+    const t3 = setTimeout(() => setMounted(false), FLIGHT_MS + 1100);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
+  }, []);
+  if (!mounted || !sourceRect) return null;
+  const startX = sourceRect.left + sourceRect.width / 2;
+  const startY = sourceRect.top + sourceRect.height / 2;
+  const endX = targetRect ? targetRect.left + targetRect.width / 2 : startX;
+  const endY = targetRect ? targetRect.top + targetRect.height / 2 : startY;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        className: `play-card-anim play-card-anim--${phase}`,
+        style: {
+          position: "fixed",
+          left: 0,
+          top: 0,
+          width: 86,
+          height: 124,
+          zIndex: 195,
+          pointerEvents: "none",
+          "--start-x": `${startX - 43}px`,
+          "--start-y": `${startY - 62}px`,
+          "--end-x": `${endX - 43}px`,
+          "--end-y": `${endY - 62}px`
+        },
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: cardImageUrl(cardKey), alt: cardKey, draggable: false }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "play-card-anim__halo", "aria-hidden": "true" })
+        ]
+      }
+    ),
+    phase === "burst" && targetRect && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      FxBurst,
+      {
+        anchor: { x: endX, y: endY },
+        fxKey: cardKey,
+        size: "lg",
+        id: `play-${cardKey}-${Date.now()}`
+      }
+    )
+  ] });
+}
+const REVEAL_DURATION_MS = 3e3;
+const FLIP_DELAY_MS = 320;
+function BombReveal({ memberName, memberId, willDefuse, onComplete }) {
+  const [phase, setPhase] = reactExports.useState("back");
+  const [mounted, setMounted] = reactExports.useState(true);
+  reactExports.useEffect(() => {
+    const t1 = setTimeout(() => setPhase("flip"), FLIP_DELAY_MS);
+    const t2 = setTimeout(() => setPhase("face"), FLIP_DELAY_MS + 380);
+    const t3 = setTimeout(() => {
+      if (willDefuse) {
+        setPhase("fadeout");
+        const t4 = setTimeout(() => {
+          setMounted(false);
+          onComplete?.();
+        }, 360);
+        return () => clearTimeout(t4);
+      }
+      setPhase("explode");
+    }, REVEAL_DURATION_MS);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
+  }, [willDefuse, onComplete]);
+  if (!mounted) return null;
+  const backUrl = cardImageUrl("back");
+  const faceUrl = cardImageUrl("bomb");
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        className: `bomb-reveal-scrim bomb-reveal-scrim--${phase}`,
+        "aria-hidden": "true"
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `bomb-reveal bomb-reveal--${phase}`, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-reveal__halo", "aria-hidden": "true" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bomb-reveal__inner", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-reveal__face bomb-reveal__face--back", children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: backUrl, alt: "", draggable: false }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-reveal__face bomb-reveal__face--front", children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: faceUrl, alt: "", draggable: false }) })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bomb-reveal__label", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "bomb-reveal__name", children: memberName || "Bạn" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "bomb-reveal__text", children: [
+          phase === "back" && "Đang rút...",
+          (phase === "flip" || phase === "face" || phase === "hold") && "rút trúng bom!",
+          phase === "explode" && (willDefuse ? "💣" : "💥 NỔ!"),
+          phase === "fadeout" && "An toàn — có lá Cứu"
+        ] })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bomb-reveal-rings", "aria-hidden": "true", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "bomb-reveal-rings__ring" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "bomb-reveal-rings__ring bomb-reveal-rings__ring--delay" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "bomb-reveal-rings__ring bomb-reveal-rings__ring--late" })
+    ] })
+  ] });
+}
+function BombExplode({ memberName, onComplete }) {
+  const [mounted, setMounted] = reactExports.useState(true);
+  reactExports.useEffect(() => {
+    const id = setTimeout(() => {
+      setMounted(false);
+      onComplete?.();
+    }, 2200);
+    return () => clearTimeout(id);
+  }, [onComplete]);
+  if (!mounted) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-explode-flash", "aria-hidden": "true" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bomb-explode bomb-explode--fireball", "aria-hidden": "true", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-explode__core" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-explode__ring bomb-explode__ring--1" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-explode__ring bomb-explode__ring--2" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-explode__ring bomb-explode__ring--3" }),
+      Array.from({ length: 14 }).map((_, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "span",
+        {
+          className: "bomb-explode__shard",
+          style: {
+            "--angle": `${i / 14 * 360}deg`,
+            "--dist": `${280 + i % 3 * 70}px`,
+            "--delay": `${100 + i % 4 * 60}ms`
+          }
+        },
+        i
+      )),
+      Array.from({ length: 24 }).map((_, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "span",
+        {
+          className: "bomb-explode__spark",
+          style: {
+            "--angle": `${i * 17.3 % 360}deg`,
+            "--dist": `${160 + i * 13 % 200}px`,
+            "--delay": `${50 + i % 5 * 40}ms`,
+            color: i % 3 === 0 ? "#ffeb6b" : i % 3 === 1 ? "#ff8a4a" : "#ff4242"
+          }
+        },
+        `s-${i}`
+      ))
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bomb-explode-label", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "bomb-explode-label__glyph", children: "💥" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "bomb-explode-label__text", children: memberName ? `${memberName} đã nổ` : "Bạn đã nổ" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "bomb-explode-label__sub", children: "Bị loại khỏi ván" })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-explode-vignette", "aria-hidden": "true" })
+  ] });
+}
+const ENTER_MS = 360;
+const EXIT_MS = 280;
+function ActionCardReveal({
+  cardKey,
+  byMemberName,
+  isNopeChain,
+  // boolean — true nếu lần này là do Nope chain (label khác)
+  chainCount,
+  // nopeChain.length hiện tại
+  nopeRemainingMs,
+  // thời gian còn lại của nope window (ms); null khi không có pendingAction
+  onComplete
+}) {
+  const [phase, setPhase] = reactExports.useState("enter");
+  const [mounted, setMounted] = reactExports.useState(true);
+  const [resetKey, setResetKey] = reactExports.useState(0);
+  const fx = fxFor(cardKey || "general");
+  const safeCardKey = cardKey || "general";
+  const url = cardImageUrl(safeCardKey);
+  reactExports.useEffect(() => {
+    setPhase("enter");
+    const t1 = setTimeout(() => setPhase("hold"), ENTER_MS);
+    return () => clearTimeout(t1);
+  }, []);
+  reactExports.useEffect(() => {
+    if (nopeRemainingMs === 0) {
+      setPhase("exit");
+      const t = setTimeout(() => {
+        setMounted(false);
+        onComplete?.();
+      }, EXIT_MS);
+      return () => clearTimeout(t);
+    }
+    return void 0;
+  }, [nopeRemainingMs, onComplete]);
+  if (!mounted) return null;
+  const ringPct = nopeRemainingMs != null ? Math.max(0, Math.min(1, nopeRemainingMs / 3e3)) : 0;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        className: `action-reveal__scrim action-reveal__scrim--${phase} action-reveal__scrim--${safeCardKey}`,
+        "aria-hidden": "true",
+        style: { "--fx-color": fx.color, "--fx-accent": fx.accent }
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        className: `action-reveal action-reveal--${phase} action-reveal--${safeCardKey}`,
+        style: { "--fx-color": fx.color, "--fx-accent": fx.accent },
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "action-reveal__glyph", "aria-hidden": "true", children: fx.glyph }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "action-reveal__halo", "aria-hidden": "true" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "action-reveal__card", children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: url, alt: cardKey, draggable: false }) }),
+          nopeRemainingMs != null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "action-reveal__countdown", "aria-hidden": "true", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("svg", { viewBox: "0 0 120 120", className: "action-reveal__countdown-svg", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("defs", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("linearGradient", { id: "ac-grad", x1: "0%", y1: "0%", x2: "100%", y2: "100%", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "0%", stopColor: fx.color }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "100%", stopColor: fx.accent })
+              ] }) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "circle",
+                {
+                  className: "action-reveal__countdown-track",
+                  cx: "60",
+                  cy: "60",
+                  r: "52",
+                  fill: "none",
+                  stroke: "rgba(255,255,255,0.08)",
+                  strokeWidth: "6"
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "circle",
+                {
+                  className: "action-reveal__countdown-bar",
+                  cx: "60",
+                  cy: "60",
+                  r: "52",
+                  fill: "none",
+                  stroke: "url(#ac-grad)",
+                  strokeWidth: "6",
+                  strokeLinecap: "round",
+                  transform: "rotate(-90 60 60)",
+                  strokeDasharray: `${2 * Math.PI * 52 * ringPct} ${2 * Math.PI * 52}`
+                }
+              )
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "action-reveal__countdown-text", children: [
+              (nopeRemainingMs / 1e3).toFixed(1),
+              "s"
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "action-reveal__label", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "action-reveal__name", children: byMemberName || (isNopeChain ? "Ai đó" : "Bạn") }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "action-reveal__action", children: isNopeChain ? `${chainCount > 1 ? `lần ${chainCount}` : "vừa"} dùng "Cản"!` : `đã dùng "${cardKey}"` })
+          ] }),
+          chainCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "action-reveal__chain-badge", "aria-hidden": "true", children: [
+            "×",
+            chainCount
+          ] })
+        ]
+      },
+      resetKey
+    )
+  ] });
+}
+function FxScreenShake({ active, intensity = "md", durationMs = 600 }) {
+  if (!active) return null;
+  const amp = intensity === "lg" ? 14 : intensity === "sm" ? 5 : 9;
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "div",
+    {
+      className: `fx-shake fx-shake--${intensity}`,
+      style: {
+        position: "fixed",
+        inset: 0,
+        pointerEvents: "none",
+        zIndex: 230,
+        "--shake-amp": `${amp}px`,
+        "--shake-dur": `${durationMs}ms`
+      },
+      "aria-hidden": "true"
+    }
+  );
+}
+function formatElapsed(startedAt, endedAt, diedAt) {
+  const startMs = startedAt ? new Date(startedAt).getTime() : null;
+  if (!startMs) return "—";
+  const endMs = endedAt ? new Date(endedAt).getTime() : diedAt ? new Date(diedAt).getTime() : Date.now();
+  const sec = Math.max(0, Math.round((endMs - startMs) / 1e3));
+  const m = Math.floor(sec / 60).toString().padStart(2, "0");
+  const s = (sec % 60).toString().padStart(2, "0");
+  return `${m}:${s}`;
+}
+function SummaryScreen({ room, gameState, myId, onContinue }) {
+  const members = room.members || [];
+  const playersSorted = [...members].sort((a, b) => {
+    const aDead = !gameState.alive?.[a.id];
+    const bDead = !gameState.alive?.[b.id];
+    if (aDead !== bDead) return aDead ? 1 : -1;
+    const aDied = gameState.diedAt?.[a.id] || 0;
+    const bDied = gameState.diedAt?.[b.id] || 0;
+    return new Date(aDied) - new Date(bDied);
+  });
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "summary-screen", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "summary-card", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "summary-card__title", children: "Kết thúc ván" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "summary-card__winner", children: gameState.winnerId ? `Người thắng: ${members.find((m) => m.id === gameState.winnerId)?.name || "?"}` : "Không có người thắng" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("table", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("thead", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { children: "Hạng" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { children: "Người chơi" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { children: "Thời gian" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { children: "Số lượt" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { children: "Lá đã dùng" })
+      ] }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("tbody", { children: playersSorted.map((m, idx) => {
+        const isWinner = gameState.winnerId === m.id;
+        const isDead = !gameState.alive?.[m.id];
+        const isYou = m.id === myId;
+        const turns = gameState.turnsTaken?.[m.id] ?? 0;
+        const played = gameState.cardsPlayed?.[m.id] ?? 0;
+        const elapsed = formatElapsed(
+          gameState.startedAt,
+          isDead ? null : gameState.endedAt,
+          gameState.diedAt?.[m.id]
+        );
+        const rankClass = isWinner ? "summary-card__rank--gold" : idx === 1 ? "summary-card__rank--silver" : idx === 2 ? "summary-card__rank--bronze" : "";
+        return /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { className: isWinner ? "winner-row" : isDead ? "dead-row" : "", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("td", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: `summary-card__rank ${rankClass}`, children: [
+            "#",
+            idx + 1
+          ] }) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("td", { children: [
+            m.name,
+            isYou ? " (bạn)" : ""
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("td", { children: /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: elapsed }) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("td", { children: turns }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("td", { children: played })
+        ] }, m.id);
+      }) })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-modal__actions", style: { justifyContent: "center", marginTop: 24 }, children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "game-action-btn game-action-btn--primary", onClick: onContinue, children: "Về sảnh chờ" }) })
+  ] }) });
+}
+function readSessionRoomId() {
+  try {
+    const raw = sessionStorage.getItem("arcana.session.v1");
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (_) {
+    return null;
+  }
+}
+const NOPE_WINDOW_MS = 3e3;
+function statusToText(s) {
+  if (s === "playing") return "Đang chơi";
+  if (s === "finished") return "Đã kết thúc";
+  if (s === "waiting") return "Đợi";
+  return s;
+}
+function getLocalPlayerId(session) {
+  return session?.session?.playerId || readSessionRoomId()?.playerId || null;
+}
+function GamePage() {
+  const { roomId } = useParams();
+  const navigate = useNavigate();
+  const session = useSession();
+  const toast = useToast();
+  const audio = useAudio();
+  const myId = getLocalPlayerId(session);
+  const [room, setRoom] = reactExports.useState(null);
+  const [now, setNow] = reactExports.useState(Date.now());
+  const [selectedCardIdx, setSelectedCardIdx] = reactExports.useState(null);
+  const [actionModal, setActionModal] = reactExports.useState(null);
+  const [pendingTarget, setPendingTarget] = reactExports.useState(null);
+  const [comboModal, setComboModal] = reactExports.useState(null);
+  const [defuseModal, setDefuseModal] = reactExports.useState(false);
+  const [drawAnim, setDrawAnim] = reactExports.useState(null);
+  const [recentDiscards, setRecentDiscards] = reactExports.useState([]);
+  const [opponentDrawAnim, setOpponentDrawAnim] = reactExports.useState(null);
+  const [playedAnim, setPlayedAnim] = reactExports.useState(null);
+  const [fxQueue, setFxQueue] = reactExports.useState([]);
+  const [shake, setShake] = reactExports.useState(null);
+  const [turnHighlight, setTurnHighlight] = reactExports.useState(null);
+  const [bombReveal, setBombReveal] = reactExports.useState(null);
+  const [bombExplode, setBombExplode] = reactExports.useState(null);
+  const lastTurnRef = reactExports.useRef(null);
+  const lastDrawnRef = reactExports.useRef(null);
+  const [localDrawPending, setLocalDrawPending] = reactExports.useState(false);
+  const drawInFlightRef = reactExports.useRef(false);
+  const deckRef = reactExports.useRef(null);
+  const handCenterRef = reactExports.useRef(null);
+  const discardRef = reactExports.useRef(null);
+  const rotatingRef = reactExports.useRef(false);
+  const gs = room?.gameState || null;
+  const members = room?.members || [];
+  const myMember = members.find((m) => m.id === myId) || null;
+  const myHand = room?.myHand || (gs && myId ? [] : []);
+  const isMyTurn = gs && myId && gs.currentTurnMemberId === myId;
+  const isAlive = !myMember || gs && gs.alive?.[myId] !== false;
+  const gameEnded = gs && gs.endedAt;
+  const emitFx = reactExports.useCallback((fxKey, anchor, opts = {}) => {
+    if (!anchor) return;
+    let cx, cy;
+    if (typeof anchor.left === "number") {
+      cx = anchor.left + (anchor.width || 0) / 2;
+      cy = anchor.top + (anchor.height || 0) / 2;
+    } else {
+      cx = anchor.x;
+      cy = anchor.y;
+    }
+    const id = `${fxKey}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    setFxQueue((q) => [...q, { id, fxKey, anchor: { x: cx, y: cy }, size: opts.size || "md" }]);
+    setTimeout(() => {
+      setFxQueue((q) => q.filter((f) => f.id !== id));
+    }, opts.durationMs || 1300);
+  }, []);
+  const emitShake = reactExports.useCallback((intensity = "md", durationMs = 600) => {
+    setShake({ intensity, until: Date.now() + durationMs });
+    setTimeout(() => setShake(null), durationMs);
+  }, []);
+  const opponents = reactExports.useMemo(() => {
+    const alive = members.filter((m) => m.id !== myId);
+    const left = [];
+    const right = [];
+    alive.forEach((m, i) => {
+      if (i % 2 === 0) left.push(m);
+      else right.push(m);
+    });
+    return { left, right };
+  }, [members, myId]);
+  const topPlayer = reactExports.useMemo(() => {
+    if (!gs) return null;
+    return members.find((m) => m.id === gs.currentTurnMemberId) || null;
+  }, [members, gs]);
+  useGameChannel({
+    roomId,
+    memberId: myId,
+    enabled: Boolean(roomId && myId),
+    onUpdate: (data) => {
+      setRoom((prev) => data);
+      if (data?.status === "waiting") {
+        navigate(ROUTES.lobby, { replace: true });
+      }
+    }
+  });
+  reactExports.useEffect(() => {
+    if (!roomId) return;
+    const fromStorage = readSessionRoomId();
+    if (!fromStorage && !session?.session?.roomId) {
+      navigate(ROUTES.landing, { replace: true });
+      return;
+    }
+  }, [roomId, session?.session?.roomId, navigate]);
+  reactExports.useEffect(() => {
+    const prevTurn = lastTurnRef.current;
+    const curTurn = gs?.currentTurnMemberId;
+    const cardCounts = gs?.handCounts || {};
+    if (prevTurn && curTurn && prevTurn !== curTurn) {
+      const drewCount = cardCounts[prevTurn] ?? 0;
+      if (drewCount > 0 && prevTurn !== myId) {
+        setOpponentDrawAnim({ memberId: prevTurn, ts: Date.now() });
+        setTimeout(() => setOpponentDrawAnim(null), 1100);
+      }
+    }
+    lastTurnRef.current = curTurn;
+  }, [gs?.currentTurnMemberId, gs?.handCounts, myId]);
+  reactExports.useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 250);
+    return () => clearInterval(id);
+  }, []);
+  const onContinueFromSummary = reactExports.useCallback(async () => {
+    if (!roomId) return;
+    if (rotatingRef.current) return;
+    rotatingRef.current = true;
+    try {
+      if (session?.session?.isHost) {
+        const res = await roomsApi.rotateRoom(roomId, session.session.playerId);
+        const newRoomId = res?.room?.id;
+        if (newRoomId) {
+          const updatedSession = {
+            ...session.session || {},
+            roomId: newRoomId
+          };
+          session.patch?.({ roomId: newRoomId });
+          navigate(ROUTES.lobby + "/" + newRoomId, { replace: true });
+          return;
+        }
+      }
+      navigate(ROUTES.landing, { replace: true });
+    } catch (e) {
+      toast?.error?.(e.message || "Không thể tạo ván mới.");
+      navigate(ROUTES.landing, { replace: true });
+    } finally {
+      rotatingRef.current = false;
+    }
+  }, [roomId, session, navigate, toast]);
+  const onSelectHandCard = reactExports.useCallback(
+    (idx, key) => {
+      if (!isMyTurn || !isAlive || gameEnded) return;
+      setSelectedCardIdx(idx);
+      const meta = getCardLabel(key);
+      setActionModal({ card: { key, ...meta }, handIdx: idx });
+    },
+    [isMyTurn, isAlive, gameEnded]
+  );
+  const onConfirmAction = reactExports.useCallback(async () => {
+    if (!actionModal) return;
+    const card = actionModal.card;
+    setActionModal(null);
+    setSelectedCardIdx(null);
+    const srcRect = handCenterRef.current?.getBoundingClientRect?.();
+    const discardRect = discardRef.current?.getBoundingClientRect?.();
+    if (srcRect) {
+      setPlayedAnim({
+        sourceRect: srcRect,
+        targetRect: discardRect,
+        cardKey: card.key,
+        ts: Date.now()
+      });
+      setTimeout(() => setPlayedAnim(null), 1700);
+    }
+    emitFx(card.key, discardRect, { size: "lg", durationMs: 1500 });
+    try {
+      const res = await roomsApi.playCard(roomId, {
+        memberId: myId,
+        cardKey: card.key
+      });
+      audio.playSfx?.("buttonClick");
+      if (res?.RequiresTargetPick) {
+        setActionModal({ card, awaitingTarget: true });
+        return;
+      }
+      if (res?.RequiresDiscardPick) {
+        const gs2 = res?.Room?.gameState;
+        setComboModal({
+          kind: "FiveAny",
+          discardPile: gs2?.discardPile || []
+        });
+        return;
+      }
+      setRoom(res.Room);
+      setRecentDiscards((prev) => {
+        const next = [...prev, { key: card.key, by: myId, ts: Date.now() }];
+        return next.length > 6 ? next.slice(next.length - 6) : next;
+      });
+      if (res?.Toast) toast?.info?.(res.Toast);
+    } catch (e) {
+      toast?.error?.(e.message || "Không thể dùng lá bài.");
+    }
+  }, [actionModal, audio, emitFx, myId, roomId, toast]);
+  const onPickTargetForAction = reactExports.useCallback(
+    async (targetId) => {
+      const card = actionModal?.card;
+      if (!card) return;
+      setActionModal(null);
+      setSelectedCardIdx(null);
+      try {
+        const res = await roomsApi.playCard(roomId, {
+          memberId: myId,
+          cardKey: card.key,
+          targetMemberId: targetId
+        });
+        audio.playSfx?.("buttonClick");
+        if (res?.RequiresTargetPick) {
+          const targetHand = res?.Room?.myHand ? null : null;
+          setComboModal({
+            kind: card.key,
+            // combo card key same as the variant played
+            targetId,
+            targetName: members.find((m) => m.id === targetId)?.name || "?",
+            handCards: null
+            // server doesn't expose; for 3-same we need the list
+          });
+          return;
+        }
+        setRoom(res.Room);
+        if (res?.Toast) toast?.info?.(res.Toast);
+      } catch (e) {
+        toast?.error?.(e.message || "Không thể dùng lá bài.");
+      }
+    },
+    [actionModal, audio, members, myId, roomId, toast]
+  );
+  reactExports.useEffect(() => {
+    if (!comboModal) return;
+  }, [comboModal]);
+  const onPickComboCard = reactExports.useCallback(
+    async (key) => {
+      const modal = comboModal;
+      if (!modal) return;
+      try {
+        const isFiveAny = modal.kind === "FiveAny";
+        const fxKey = isFiveAny ? "5-any" : "combo";
+        emitFx(fxKey, discardRef.current?.getBoundingClientRect?.(), { size: "lg", durationMs: 1500 });
+        if (isFiveAny) {
+          const res = await roomsApi.playCard(roomId, {
+            memberId: myId,
+            cardKey: "hải-tặc",
+            // any combo card type
+            comboKind: "FiveAny",
+            discardPickKey: key
+          });
+          audio.playSfx?.("buttonClick");
+          setRoom(res.Room);
+          if (res?.Toast) toast?.info?.(res.Toast);
+        } else if (modal.kind === "ThreeSame") {
+          const res = await roomsApi.playCard(roomId, {
+            memberId: myId,
+            cardKey: modal.kind,
+            targetMemberId: modal.targetId,
+            comboKind: "ThreeSame",
+            discardPickKey: key
+          });
+          audio.playSfx?.("buttonClick");
+          setRoom(res.Room);
+          if (res?.Toast) toast?.info?.(res.Toast);
+        } else if (modal.kind === "TwoSame") {
+          const res = await roomsApi.playCard(roomId, {
+            memberId: myId,
+            cardKey: modal.kind,
+            targetMemberId: modal.targetId,
+            comboKind: "TwoSame",
+            discardPickKey: key
+          });
+          audio.playSfx?.("buttonClick");
+          setRoom(res.Room);
+          if (res?.Toast) toast?.info?.(res.Toast);
+        }
+        setComboModal(null);
+      } catch (e) {
+        toast?.error?.(e.message || "Combo thất bại.");
+      }
+    },
+    [comboModal, audio, emitFx, myId, roomId, toast]
+  );
+  const onDrawCard = reactExports.useCallback(async () => {
+    if (!isMyTurn || !isAlive || gameEnded) return;
+    if (drawInFlightRef.current) return;
+    drawInFlightRef.current = true;
+    setLocalDrawPending(true);
+    audio.playSfx?.("buttonClick");
+    const srcRect = deckRef.current?.getBoundingClientRect?.();
+    const tgtRect = handCenterRef.current?.getBoundingClientRect?.();
+    if (srcRect && tgtRect) {
+      setDrawAnim({ sourceRect: srcRect, targetRect: tgtRect, cardKey: "back", revealKey: null });
+    }
+    emitFx("draw", srcRect, { size: "md", durationMs: 800 });
+    try {
+      const res = await roomsApi.drawCard(roomId, myId);
+      setRoom(res.Room);
+      if (res?.DrawnCardKey) {
+        setDrawAnim((cur) => cur ? { ...cur, revealKey: res.DrawnCardKey } : cur);
+      }
+      if (res?.RequiresDefuse) {
+        setDefuseModal(true);
+        if (res?.Toast) toast?.warning?.(res.Toast);
+      } else if (res?.Toast) {
+        if (res?.DrawnCardKey === "bomb") {
+          toast?.error?.(res.Toast);
+        } else {
+          toast?.info?.(res.Toast);
+        }
+      }
+    } catch (e) {
+      toast?.error?.(e.message || "Không thể rút bài.");
+    } finally {
+      drawInFlightRef.current = false;
+      setLocalDrawPending(false);
+    }
+  }, [audio, emitFx, gameEnded, isAlive, isMyTurn, myId, roomId, toast]);
+  const onConfirmDefuse = reactExports.useCallback(
+    async (slotIndex) => {
+      try {
+        const res = await roomsApi.useDefuse(roomId, myId, slotIndex);
+        audio.playSfx?.("cardDefuse");
+        emitShake("sm", 350);
+        emitFx("defuse", discardRef.current?.getBoundingClientRect?.(), { size: "lg", durationMs: 1500 });
+        setRoom(res.Room);
+        if (res?.Toast) toast?.success?.(res.Toast);
+      } catch (e) {
+        toast?.error?.(e.message || "Không thể cứu bom.");
+      } finally {
+        setDefuseModal(false);
+      }
+    },
+    [audio, emitFx, emitShake, myId, roomId, toast]
+  );
+  const onNope = reactExports.useCallback(async () => {
+    try {
+      const res = await roomsApi.nope(roomId, myId);
+      audio.playSfx?.("cardNope");
+      emitFx("nope", discardRef.current?.getBoundingClientRect?.(), { size: "md", durationMs: 1200 });
+      setRoom(res.Room);
+      if (res?.Toast) toast?.info?.(res.Toast);
+    } catch (e) {
+      toast?.error?.(e.message || "Không thể cản.");
+    }
+  }, [audio, emitFx, myId, roomId, toast]);
+  const pendingAction = gs?.pendingAction || null;
+  const nopeRemaining = pendingAction ? Math.max(0, NOPE_WINDOW_MS - (now - new Date(pendingAction.createdAt).getTime())) : 0;
+  const canChainNope = pendingAction && nopeRemaining > 0 && !pendingAction.nopeChain.includes(myId) && myHand.includes("nope");
+  reactExports.useEffect(() => {
+    const key = pendingAction?.cardKey;
+    if (!key || key === "5-any") return;
+    setRecentDiscards((prev) => {
+      const last = prev[prev.length - 1];
+      if (last && last.key === key) return prev;
+      const next = [...prev, { key, by: pendingAction.initiatorId, ts: Date.now() }];
+      return next.length > 6 ? next.slice(next.length - 6) : next;
+    });
+  }, [pendingAction?.cardKey, pendingAction?.createdAt]);
+  reactExports.useEffect(() => {
+    if (!gs?.BombRevealActive || !gs?.LastDrawnAt || !gs?.LastDrawnBy) return;
+    if (gs.LastDrawnCardKey !== "bomb") return;
+    const stamp = `${gs.LastDrawnBy}::${gs.LastDrawnAt}`;
+    if (lastDrawnRef.current === stamp) return;
+    lastDrawnRef.current = stamp;
+    const member = members.find((m) => m.id === gs.LastDrawnBy);
+    const memberName = member?.name || "Bạn";
+    const willDefuse = gs.Alive?.get?.(gs.LastDrawnBy) !== false && (room?.myHand?.includes?.("defuse") || false);
+    const canDefuseLocally = gs.LastDrawnBy === myId ? (myHand || []).some((c) => ["ninja", "superman", "zombie", "robot", "hải-tặc"].includes(c)) : willDefuse;
+    setBombReveal({
+      memberId: gs.LastDrawnBy,
+      memberName,
+      willDefuse: canDefuseLocally,
+      key: stamp
+    });
+    const safety = setTimeout(() => setBombReveal(null), 4500);
+    return () => clearTimeout(safety);
+  }, [gs?.BombRevealActive, gs?.LastDrawnAt, gs?.LastDrawnBy, gs?.LastDrawnCardKey, gs?.Alive, members, myId, myHand, room?.myHand]);
+  if (!room) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("main", { className: "game-page", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(FloatingBackdrop, {}),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "arc-loading", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "arc-loading__spinner" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Đang tải ván chơi…" })
+      ] })
+    ] });
+  }
+  const deckCount = gs?.deckCount ?? 0;
+  const discardCount = gs?.discardCount ?? 0;
+  const elapsedSec = (() => {
+    if (!gs?.startedAt) return 0;
+    const start = new Date(gs.startedAt).getTime();
+    const end = gs.endedAt ? new Date(gs.endedAt).getTime() : Date.now();
+    return Math.max(0, Math.round((end - start) / 1e3));
+  })();
+  const mm = String(Math.floor(elapsedSec / 60)).padStart(2, "0");
+  const ss = String(elapsedSec % 60).padStart(2, "0");
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("main", { className: "game-page", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(FloatingBackdrop, {}),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "game-header", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "game-header__title", children: "Sân chơi" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "game-header__sub", children: [
+          "Phòng: ",
+          /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: room.code }),
+          " · Tối đa ",
+          room.maxPlayers,
+          " người · ",
+          statusToText(room.status)
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "game-header__elapsed", "aria-label": "Thời gian", children: [
+        mm,
+        ":",
+        ss
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "game-table", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-side game-side--left", children: opponents.left.map((m) => /* @__PURE__ */ jsxRuntimeExports.jsx(Seat, { member: m, gs }, m.id)) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "game-center", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { ref: discardRef, className: "discard-pile-wrap", children: /* @__PURE__ */ jsxRuntimeExports.jsx(DiscardPile, { count: discardCount, recentKeys: recentDiscards.map((d) => d.key) }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "div",
+          {
+            ref: deckRef,
+            className: `deck-pile ${isMyTurn && isAlive && !gameEnded ? "deck-pile--clickable" : ""}`,
+            onClick: isMyTurn && isAlive && !gameEnded ? onDrawCard : void 0,
+            title: isMyTurn ? "Bấm để rút bài" : void 0,
+            role: isMyTurn ? "button" : void 0,
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "deck-stack", children: [
+                [11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1].map((i) => /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "deck-stack__layer", style: { "--i": i } }, i)),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "deck-stack__layer deck-stack__layer--top", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: CARD_CLOUDINARY.cards.back, alt: "", draggable: false }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "deck-stack__layer--badge", children: deckCount })
+                ] })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "deck-pile__glow", "aria-hidden": "true" })
+            ]
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "game-actions", children: [
+          isMyTurn && isAlive && !gameEnded && /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              className: "game-action-btn game-action-btn--primary",
+              onClick: onDrawCard,
+              disabled: localDrawPending,
+              children: "Rút bài"
+            }
+          ),
+          canChainNope && /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "button",
+            {
+              type: "button",
+              className: "game-action-btn game-action-btn--nope",
+              onClick: onNope,
+              children: [
+                "Cản! (",
+                (nopeRemaining / 1e3).toFixed(1),
+                "s)"
+              ]
+            }
+          ),
+          !isMyTurn && !pendingAction && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "game-modal__sub", children: topPlayer ? `Đang chờ ${topPlayer.name}…` : "Đang chờ..." })
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-side game-side--right", children: opponents.right.map((m) => /* @__PURE__ */ jsxRuntimeExports.jsx(Seat, { member: m, gs }, m.id)) })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "game-you", ref: handCenterRef, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "game-you__header", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "game-you__name", children: myMember?.name || "Bạn" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "span",
+          {
+            className: `game-you__status${isMyTurn ? " game-you__status--your-turn" : ""}`,
+            children: isMyTurn ? "Lượt của bạn" : "Đợi"
+          }
+        )
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        HandArc,
+        {
+          hand: myHand,
+          selectedIndex: selectedCardIdx,
+          onSelectCard: onSelectHandCard
+        }
+      )
+    ] }),
+    actionModal && !actionModal.awaitingTarget && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      CardActionModal,
+      {
+        card: actionModal.card,
+        onClose: () => {
+          setActionModal(null);
+          setSelectedCardIdx(null);
+        },
+        onConfirm: onConfirmAction
+      }
+    ),
+    actionModal && actionModal.awaitingTarget && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      CardActionModal,
+      {
+        card: actionModal.card,
+        requiresTarget: true,
+        opponents: members.filter((m) => m.id !== myId).map((m) => ({ ...m, alive: gs?.alive?.[m.id] !== false })),
+        onClose: () => {
+          setActionModal(null);
+          setSelectedCardIdx(null);
+        },
+        onPickTarget: onPickTargetForAction
+      }
+    ),
+    comboModal && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ComboModal,
+      {
+        kind: ["ninja", "superman", "zombie", "robot", "hải-tặc"].includes(comboModal.kind) ? "ThreeSame" : comboModal.kind,
+        targetName: comboModal.targetName,
+        handCards: comboModal.handCards || [],
+        discardPile: comboModal.discardPile || [],
+        onPick: onPickComboCard,
+        onCancel: () => setComboModal(null)
+      }
+    ),
+    defuseModal && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      DefuseModal,
+      {
+        deckSize: deckCount,
+        onConfirm: onConfirmDefuse,
+        onSkip: () => onConfirmDefuse(deckCount)
+      }
+    ),
+    pendingAction && nopeRemaining > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "nope-react-toast", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "nope-react-toast__label", children: pendingAction.initiatorId === myId ? "Hành động của bạn" : "Hành động vừa xảy ra" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "nope-react-toast__timer", children: [
+        (nopeRemaining / 1e3).toFixed(1),
+        "s"
+      ] })
+    ] }),
+    drawAnim && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      DrawAnimation,
+      {
+        sourceRect: drawAnim.sourceRect,
+        targetRect: drawAnim.targetRect,
+        cardKey: drawAnim.cardKey,
+        onComplete: () => setDrawAnim(null)
+      }
+    ),
+    playedAnim && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      PlayCardAnimation,
+      {
+        cardKey: playedAnim.cardKey,
+        sourceRect: playedAnim.sourceRect
+      },
+      playedAnim.ts
+    ),
+    opponentDrawAnim && /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        className: "opponent-draw-toast",
+        role: "status",
+        "aria-live": "polite",
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "opponent-draw-toast__icon", "aria-hidden": "true", children: "✦" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+            members.find((m) => m.id === opponentDrawAnim.memberId)?.name || "Đối thủ",
+            " vừa rút bài"
+          ] })
+        ]
+      },
+      opponentDrawAnim.ts
+    ),
+    fxQueue.map((f) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+      FxBurst,
+      {
+        anchor: f.anchor,
+        fxKey: f.fxKey,
+        size: f.size,
+        id: f.id
+      },
+      f.id
+    )),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(FxScreenShake, { active: !!shake, intensity: shake?.intensity || "md" }),
+    bombReveal && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      BombReveal,
+      {
+        memberName: bombReveal.memberName,
+        memberId: bombReveal.memberId,
+        willDefuse: bombReveal.willDefuse,
+        onComplete: () => {
+          if (!bombReveal.willDefuse) {
+            setBombExplode({
+              memberName: bombReveal.memberName,
+              key: `${bombReveal.key}-explode`
+            });
+            emitShake("lg", 900);
+          }
+          setBombReveal(null);
+        }
+      },
+      bombReveal.key
+    ),
+    bombExplode && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      BombExplode,
+      {
+        memberName: bombExplode.memberName,
+        onComplete: () => setBombExplode(null)
+      },
+      bombExplode.key
+    ),
+    (() => {
+      const cardKey = gs?.LastPlayedCardKey;
+      const at = gs?.LastPlayedAt;
+      if (!cardKey || !at) return null;
+      const chain = gs?.PendingAction?.NopeChain?.length || 0;
+      const isNopeChain = !!gs?.LastPlayedByNope;
+      const memberId = isNopeChain ? gs?.LastPlayedByNope : gs?.LastPlayedBy;
+      const memberName = members.find((m) => m.id === memberId)?.name || "Bạn";
+      const remaining = nopeRemaining > 0 ? nopeRemaining : null;
+      return /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ActionCardReveal,
+        {
+          cardKey,
+          byMemberName: memberName,
+          isNopeChain,
+          chainCount: chain,
+          nopeRemainingMs: remaining,
+          onComplete: void 0
+        },
+        `${at}::${chain}::${cardKey}`
+      );
+    })(),
+    gameEnded && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      SummaryScreen,
+      {
+        room,
+        gameState: gs,
+        myId,
+        onContinue: onContinueFromSummary
+      }
+    )
+  ] });
+}
+function Seat({ member, gs }) {
+  const isCurrent = gs?.currentTurnMemberId === member.id;
+  const isAlive = gs ? gs.alive?.[member.id] !== false : true;
+  const handCount = gs?.handCounts?.[member.id] ?? 0;
+  const turns = gs?.turnsTaken?.[member.id] ?? 0;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: [
+        "game-seat",
+        isCurrent ? "game-seat--current" : "",
+        !isAlive ? "game-seat--dead" : ""
+      ].join(" ").trim(),
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-seat__avatar", "aria-hidden": "true", children: member.name?.[0]?.toUpperCase() || "?" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "game-seat__info", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-seat__name", children: member.name }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "game-seat__meta", children: [
+            turns,
+            " lượt"
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "game-seat__handcount", children: [
+            handCount,
+            " lá trên tay"
+          ] })
+        ] })
+      ]
+    }
+  );
+}
+function DiscardPile({ count, recentKeys }) {
+  const safeCount = count || 0;
+  const list = (recentKeys || []).slice(-6);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: `discard-pile${safeCount > 0 ? "" : " discard-pile--empty"}`,
+      "aria-label": `Chồng bỏ ${safeCount} lá`,
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "discard-pile__stack", children: [
+          list.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "discard-pile__placeholder", children: "Chồng bỏ" }),
+          list.map((key, i) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "span",
+            {
+              className: [
+                "discard-pile__card",
+                i === list.length - 1 ? "discard-pile__card--top" : "",
+                `discard-pile__card--${key}`
+              ].join(" "),
+              style: {
+                "--i": i,
+                "--total": list.length,
+                "--enter-delay": `${Math.max(0, (list.length - 1 - i) * 60)}ms`
+              },
+              title: key,
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: cardImageUrl(key), alt: key, draggable: false, loading: "lazy" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "discard-pile__card-glow", "aria-hidden": "true" })
+              ]
+            },
+            `${i}-${key}`
+          ))
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "discard-pile__count", children: safeCount })
+      ]
+    }
+  );
+}
+export {
+  GamePage as default
+};

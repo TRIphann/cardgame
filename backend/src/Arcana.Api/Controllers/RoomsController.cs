@@ -247,7 +247,15 @@ public class RoomsController : ControllerBase
                 gs.PendingAction.CardKey,
                 gs.PendingAction.TargetMemberId,
                 gs.PendingAction.NopeChain,
-                gs.PendingAction.CreatedAt.ToString("O")));
+                gs.PendingAction.CreatedAt.ToString("O")),
+            gs.LastDrawnBy,
+            gs.LastDrawnCardKey,
+            gs.LastDrawnAt?.ToString("O"),
+            gs.BombRevealActive,
+            gs.LastPlayedCardKey,
+            gs.LastPlayedBy,
+            gs.LastPlayedAt?.ToString("O"),
+            gs.LastPlayedByNope);
     }
 
     private static RoomMemberDto MapMemberDto(RoomMember m) => new(

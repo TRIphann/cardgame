@@ -1,68 +1,128 @@
-// DrawAnimation — a transient overlay that flies a "card" sprite from the
-// deck to your hand. Used when a player draws a non-bomb card so the deck
-// pile visibly loses a layer.
+// DrawAnimation — cinematic rút bài. Phiên bản nâng cấp:
+//   1. Card 3D xoay từ "nằm trong deck" → bay lên → vào tay
+//   2. Glow trail theo path
+//   3. Sparkles tỏa ra lúc cất vào tay (FxBurst)
+//   4. Magic-circle glow dưới deck + dưới tay để anchor
+//
+// Card back làm texture khi rút (vì người rút không biết lá gì). Sau khi
+// response về server, parent có thể re-mount với `revealKey` để card flip
+// mở mặt.
 
 import React, { useEffect, useState } from "react";
-import { CARD_CLOUDINARY } from "@games/exploding-cats/cardCloudinary.js";
+import { cardImageUrl } from "@games/exploding-cats/cardCloudinary.js";
+import { FxBurst } from "./FxBurst.jsx";
 
-function urlFor(key) {
-  return CARD_CLOUDINARY.cards[key] || "";
-}
+const FLIGHT_MS = 850;
+const REVEAL_FLIP_MS = 350;
 
-const FLIGHT_MS = 700;
-
-export function DrawAnimation({ sourceRect, targetRect, cardKey, onComplete }) {
+export function DrawAnimation({ sourceRect, targetRect, cardKey = "back", revealKey, onComplete }) {
+  const [phase, setPhase] = useState("flying"); // flying → landing → done
   const [mounted, setMounted] = useState(true);
 
   useEffect(() => {
-    const id = setTimeout(() => {
+    const t1 = setTimeout(() => setPhase("landing"), FLIGHT_MS - 80);
+    const t2 = setTimeout(() => setPhase("done"), FLIGHT_MS + 80);
+    const t3 = setTimeout(() => {
       setMounted(false);
       onComplete?.();
-    }, FLIGHT_MS);
-    return () => clearTimeout(id);
+    }, FLIGHT_MS + 140);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
   }, [onComplete]);
 
   if (!mounted || !sourceRect || !targetRect) return null;
 
-  const url = urlFor(cardKey);
-  // Compute the start/end in fixed coords. Because the player viewport is
-  // not always 100vh-tall we use viewport-relative coordinates.
   const startX = sourceRect.left + sourceRect.width / 2;
   const startY = sourceRect.top + sourceRect.height / 2;
   const endX = targetRect.left + targetRect.width / 2;
   const endY = targetRect.top + targetRect.height / 2;
 
-  const style = {
+  // Card 3D starts flat (matching the deck perspective), rotates upright
+  // mid-flight, then lands on the hand.
+  const cardStyle = {
     position: "fixed",
-    left: 0, top: 0,
-    width: 80, height: 116,
-    transform: `translate(${startX - 40}px, ${startY - 58}px)`,
-    transition: `transform ${FLIGHT_MS}ms cubic-bezier(0.5, 0.0, 0.4, 1)`,
+    left: 0,
+    top: 0,
+    width: 92,
+    height: 132,
     zIndex: 200,
     pointerEvents: "none",
+    "--start-x": `${startX - 46}px`,
+    "--start-y": `${startY - 66}px`,
+    "--end-x":   `${endX   - 46}px`,
+    "--end-y":   `${endY   - 66}px`,
   };
 
-  // After mount, kick the transition by mutating transform via a ref-less trick.
-  // Easiest: schedule the destination transform on next tick.
-  useEffect(() => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        const node = document.getElementById("draw-anim-node");
-        if (node) {
-          node.style.transform = `translate(${endX - 40}px, ${endY - 58}px) scale(0.6)`;
-          node.style.opacity = "0";
-        }
-      });
-    });
-  }, [endX, endY]);
+  const showFace = !!revealKey;
 
   return (
-    <div id="draw-anim-node" className="draw-anim" style={style}>
-      {url ? (
-        <img src={url} alt={cardKey} style={{ width: "100%", height: "100%", borderRadius: 9 }} />
-      ) : (
-        <div style={{ width: "100%", height: "100%", background: "#1a1a4e", borderRadius: 9 }} />
+    <>
+      {/* Magic circle under the deck while flying */}
+      <span
+        className="fx-magic-circle"
+        style={{
+          position: "fixed",
+          left: startX,
+          top: startY + sourceRect.height / 2 + 6,
+          transform: "translateX(-50%)",
+          zIndex: 198,
+          pointerEvents: "none",
+        }}
+        aria-hidden="true"
+      />
+
+      {/* Trailing glow */}
+      <span
+        className="fx-draw-trail"
+        style={{
+          position: "fixed",
+          left: startX,
+          top: startY,
+          width: 200,
+          height: 200,
+          transform: "translate(-50%, -50%)",
+          zIndex: 199,
+          pointerEvents: "none",
+        }}
+        aria-hidden="true"
+      />
+
+      {/* Flying card */}
+      <div className={`draw-anim draw-anim--${phase}${showFace ? " draw-anim--reveal" : ""}`} style={cardStyle}>
+        <div className="draw-anim__inner">
+          <div className="draw-anim__face draw-anim__face--back">
+            <img src={cardImageUrl("back")} alt="" draggable={false} />
+          </div>
+          {showFace && (
+            <div className="draw-anim__face draw-anim__face--front">
+              <img src={cardImageUrl(revealKey)} alt={revealKey} draggable={false} />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Magic ring under the receiving hand */}
+      <span
+        className="fx-magic-circle fx-magic-circle--target"
+        style={{
+          position: "fixed",
+          left: endX,
+          top: endY,
+          transform: "translate(-50%, -50%)",
+          zIndex: 197,
+          pointerEvents: "none",
+        }}
+        aria-hidden="true"
+      />
+
+      {/* Sparkles when the card "lands" */}
+      {phase === "landing" && (
+        <FxBurst
+          anchor={{ x: endX, y: endY }}
+          fxKey={showFace ? revealKey : "draw"}
+          size="lg"
+          id={`draw-${Date.now()}`}
+        />
       )}
-    </div>
+    </>
   );
 }

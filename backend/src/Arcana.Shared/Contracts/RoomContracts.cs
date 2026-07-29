@@ -37,7 +37,17 @@ public record GameStateDto(
     string? WinnerId,
     string? StartedAt,
     string? EndedAt,
-    PendingActionDto? PendingAction);
+    PendingActionDto? PendingAction,
+    // Cinematic broadcast fields — see GameState. Null when not relevant.
+    string? LastDrawnBy = null,
+    string? LastDrawnCardKey = null,
+    string? LastDrawnAt = null,
+    bool BombRevealActive = false,
+    // Action-card / nope cinematic fields
+    string? LastPlayedCardKey = null,
+    string? LastPlayedBy = null,
+    string? LastPlayedAt = null,
+    string? LastPlayedByNope = null);
 
 public record PendingActionDto(string InitiatorId, string CardKey, string? TargetMemberId, IReadOnlyList<string> NopeChain, string CreatedAt);
 

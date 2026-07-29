@@ -376,6 +376,13 @@ public class GameService
 
         var result = new GameActionResult { DrawnCardKey = drawn };
 
+        // Broadcast state for cinematic overlays. Every viewer will see
+        // "X rút trúng bom" + the reveal animation in sync.
+        gs.LastDrawnBy = memberId;
+        gs.LastDrawnCardKey = drawn;
+        gs.LastDrawnAt = DateTime.UtcNow;
+        gs.BombRevealActive = drawn == CardCatalog.Bomb;
+
         if (drawn == CardCatalog.Bomb)
         {
             var defuseIdx = -1;
@@ -391,7 +398,8 @@ public class GameService
                 result.Room = (await _repository.GetByIdAsync(roomId, ct))!;
                 return result;
             }
-            // No defuse → die.
+            // No defuse → die. Clear the reveal flag here so the explosion
+            // animation finishes; the snapshot will report Alive=false.
             gs.Alive[memberId] = false;
             gs.DiedAt[memberId] = DateTime.UtcNow;
             result.Toast = "Bạn đã chết.";
@@ -430,6 +438,7 @@ public class GameService
         hand.RemoveAt(defuseIdx);
         var safeSlot = Math.Clamp(slotIndex, 0, gs.Deck.Count);
         gs.Deck.Insert(safeSlot, CardCatalog.Bomb);
+        gs.BombRevealActive = false;
 
         gs.CardsPlayed[memberId] = gs.CardsPlayed.GetValueOrDefault(memberId) + 1;
         gs.TurnsTaken[memberId] = gs.TurnsTaken.GetValueOrDefault(memberId) + 1;
@@ -456,6 +465,7 @@ public class GameService
         {
             // Auto-clear stale pending — but the original action already executed.
             gs.PendingAction = null;
+            ClearActionCinematic(gs);
             await PersistAsync(roomId, gs, ct);
             throw new DomainException("nope_window_closed", "Đã hết thời gian Nope.");
         }
@@ -468,12 +478,21 @@ public class GameService
         hand.Remove(CardCatalog.Nope);
         pending.NopeChain.Add(memberId);
 
+        // Cinematic: each Nope resets the centre-screen reveal so the
+        // newly-played Nope card is what everyone sees.
+        gs.LastPlayedBy = memberId;
+        gs.LastPlayedCardKey = CardCatalog.Nope;
+        gs.LastPlayedAt = DateTime.UtcNow;
+        gs.LastPlayedByNope = memberId;
+
         if (pending.NopeChain.Count % 2 == 1)
         {
             // Last noper wins — cancel the action.
             // Restore initiator's hand (where possible).
             RefundInitiatorCard(gs, pending);
             gs.PendingAction = null;
+            // Action resolved (cancelled) — clear cinematic.
+            ClearActionCinematic(gs);
             // Advance turn because the action was cancelled — initiator is done.
             AdvanceTurn(gs);
         }
@@ -541,6 +560,19 @@ public class GameService
             CreatedAt = DateTime.UtcNow,
             NopeChain = new List<string>(),
         };
+        // Cinematic: surface the played card for everyone.
+        gs.LastPlayedBy = initiatorId;
+        gs.LastPlayedCardKey = cardKey;
+        gs.LastPlayedAt = DateTime.UtcNow;
+        gs.LastPlayedByNope = null;
+    }
+
+    private static void ClearActionCinematic(GameState gs)
+    {
+        gs.LastPlayedBy = null;
+        gs.LastPlayedCardKey = null;
+        gs.LastPlayedAt = null;
+        gs.LastPlayedByNope = null;
     }
 
     private static void RemoveFromHand(List<string> hand, string key) => hand.Remove(key);

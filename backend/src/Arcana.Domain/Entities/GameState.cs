@@ -23,4 +23,24 @@ public class GameState
     // While this is set, the active action is "pending nope" and other players
     // have a 3s window to chain nopes.
     public PendingAction? PendingAction { get; set; }
+
+    // ── Cinematic broadcast fields ─────────────────────────────────
+    // Set by DrawCardAsync so every viewer can show the bomb-reveal
+    // animation in sync. Cleared a few seconds later by the broadcaster
+    // (or by the next state mutation).
+    public string? LastDrawnBy { get; set; }
+    public string? LastDrawnCardKey { get; set; }
+    public DateTime? LastDrawnAt { get; set; }
+    // True while the bomb-reveal overlay is showing (drawn bomb, not yet
+    // exploded or defused). Drives a 3s cinematic for everyone in the room.
+    public bool BombRevealActive { get; set; } = false;
+
+    // ── Action-card cinematic fields ────────────────────────
+    // Most recent action / nope card that should appear centre-screen for
+    // everyone. Reset each time someone chains a Nope. Cleared when the
+    // action resolves (window expires or chain even).
+    public string? LastPlayedCardKey { get; set; }
+    public string? LastPlayedBy { get; set; }
+    public DateTime? LastPlayedAt { get; set; }
+    public string? LastPlayedByNope { get; set; } // memberId who most recently played Nope (if last entry is Nope)
 }

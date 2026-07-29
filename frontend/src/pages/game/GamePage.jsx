@@ -15,13 +15,19 @@ import { useSession } from "../../app/session.jsx";
 import { useAudio } from "@shared/audio/AudioManager.jsx";
 import { useToast } from "@shared/ui/toast.jsx";
 import { useGameChannel } from "@shared/realtime/useGameChannel.js";
-import { CARD_CLOUDINARY } from "@games/exploding-cats/cardCloudinary.js";
+import { CARD_CLOUDINARY, cardImageUrl } from "@games/exploding-cats/cardCloudinary.js";
+import { CARD_LABELS, getCardLabel } from "./cardLabels.js";
 import { FloatingBackdrop } from "./FloatingBackdrop.jsx";
 import { HandArc } from "./HandArc.jsx";
 import { CardActionModal } from "./CardActionModal.jsx";
 import { ComboModal } from "./ComboModal.jsx";
 import { DefuseModal } from "./DefuseModal.jsx";
 import { DrawAnimation } from "./DrawAnimation.jsx";
+import { PlayCardAnimation } from "./PlayCardAnimation.jsx";
+import { BombReveal, BombExplode } from "./BombReveal.jsx";
+import { ActionCardReveal } from "./ActionCardReveal.jsx";
+import { FxBurst } from "./FxBurst.jsx";
+import { FxScreenShake } from "./FxScreenShake.jsx";
 import { SummaryScreen } from "./SummaryScreen.jsx";
 
 function readSessionRoomId() {
@@ -33,22 +39,6 @@ function readSessionRoomId() {
     return null;
   }
 }
-
-const CARD_LABELS = {
-  bomb: { label: "Bom", description: "Lá cứu được dùng để vứt bom vào chồng bài." },
-  defuse: { label: "Cứu", description: "Tự động kích hoạt khi rút trúng bom." },
-  attack: { label: "Tấn công", description: "Đối phương phải chơi thêm 1 lượt, bạn không phải rút." },
-  skip: { label: "Bỏ lượt", description: "Kết thúc lượt của bạn. Nếu đang chịu tấn công thì tiêu hao lượt đó." },
-  favor: { label: "Xin", description: "Lấy 1 lá ngẫu nhiên từ 1 đối thủ." },
-  future: { label: "Xem trước", description: "Xem 3 lá trên cùng chồng bài rồi úp xuống lại." },
-  shuffle: { label: "Xáo bài", description: "Trộn lại chồng bài." },
-  nope: { label: "Cản", description: "Huỷ hành động vừa được thực hiện trong 3 giây." },
-  "ninja": { label: "Ninja", description: "Combo 2 lá: lấy 1 lá úp từ tay đối thủ." },
-  "superman": { label: "Siêu nhân", description: "Combo 2/3 lá tuỳ số lượng." },
-  "zombie": { label: "Xác sống", description: "Combo 2/3 lá tuỳ số lượng." },
-  "robot": { label: "Robot", description: "Combo 2/3 lá tuỳ số lượng." },
-  "hải-tặc": { label: "Hải tặc", description: "Combo 2/3 lá tuỳ số lượng." },
-};
 
 const NOPE_WINDOW_MS = 3000;
 
@@ -85,7 +75,21 @@ export default function GamePage() {
   const [pendingTarget, setPendingTarget] = useState(null); // member id
   const [comboModal, setComboModal] = useState(null); // { kind, targetId, targetName, handCards, discardPile }
   const [defuseModal, setDefuseModal] = useState(false);
-  const [drawAnim, setDrawAnim] = useState(null); // { sourceRect, targetRect, cardKey }
+  const [drawAnim, setDrawAnim] = useState(null); // { sourceRect, targetRect, cardKey, viewer, revealKey }
+  const [recentDiscards, setRecentDiscards] = useState([]); // [{ key, by }] — last played cards
+  const [opponentDrawAnim, setOpponentDrawAnim] = useState(null); // { memberId, cardKey }
+  const [playedAnim, setPlayedAnim] = useState(null); // card flying from hand to discard
+  // Cinematic overlays queue. Mỗi entry { fxKey, anchor, size, durationMs }.
+  // Cứ 1 entry bị pop ra → render FxBurst, sau đó auto-clean sau `durationMs`.
+  const [fxQueue, setFxQueue] = useState([]);
+  const [shake, setShake] = useState(null); // { intensity, until }
+  const [turnHighlight, setTurnHighlight] = useState(null); // { memberId, key }
+  // Bomb reveal — sync across the room. { memberId, memberName, willDefuse, key }
+  const [bombReveal, setBombReveal] = useState(null);
+  // Bomb explode overlay — runs AFTER reveal if no defuse.
+  const [bombExplode, setBombExplode] = useState(null);
+  const lastTurnRef = useRef(null);
+  const lastDrawnRef = useRef(null); // dedupe by `(memberId, lastDrawnAt)`
 
   // ── Optimistic local state overlay (mirrors LobbyPage pattern) ──
   const [localDrawPending, setLocalDrawPending] = useState(false);
@@ -94,6 +98,7 @@ export default function GamePage() {
   // Refs to the deck & hand center for the draw animation source/target.
   const deckRef = useRef(null);
   const handCenterRef = useRef(null);
+  const discardRef = useRef(null);
 
   // Track which playerId we've already rotated back to (avoid loops).
   const rotatingRef = useRef(false);
@@ -106,6 +111,29 @@ export default function GamePage() {
   const isMyTurn = gs && myId && gs.currentTurnMemberId === myId;
   const isAlive = !myMember || (gs && gs.alive?.[myId] !== false);
   const gameEnded = gs && gs.endedAt;
+
+  // Helper: enqueue 1 FxBurst overlay. anchor có thể là DOMRect hoặc {x,y}.
+  const emitFx = useCallback((fxKey, anchor, opts = {}) => {
+    if (!anchor) return;
+    let cx, cy;
+    if (typeof anchor.left === "number") {
+      cx = anchor.left + (anchor.width || 0) / 2;
+      cy = anchor.top + (anchor.height || 0) / 2;
+    } else {
+      cx = anchor.x;
+      cy = anchor.y;
+    }
+    const id = `${fxKey}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    setFxQueue((q) => [...q, { id, fxKey, anchor: { x: cx, y: cy }, size: opts.size || "md" }]);
+    setTimeout(() => {
+      setFxQueue((q) => q.filter((f) => f.id !== id));
+    }, opts.durationMs || 1300);
+  }, []);
+
+  const emitShake = useCallback((intensity = "md", durationMs = 600) => {
+    setShake({ intensity, until: Date.now() + durationMs });
+    setTimeout(() => setShake(null), durationMs);
+  }, []);
 
   // Slice players into left/right stacks for the layout. We put the local
   // player at the bottom (not in the side lists).
@@ -152,6 +180,28 @@ export default function GamePage() {
       return;
     }
   }, [roomId, session?.session?.roomId, navigate]);
+
+  // Track opponent draw events for the cross-table animation. When the turn
+  // pointer flips to another player AND their hand count went UP, that's a
+  // draw. We fire a flying-card overlay from the deck toward their seat so
+  // the player can see "they just drew something".
+  useEffect(() => {
+    const prevTurn = lastTurnRef.current;
+    const curTurn = gs?.currentTurnMemberId;
+    const cardCounts = gs?.handCounts || {};
+    if (prevTurn && curTurn && prevTurn !== curTurn) {
+      // The player whose turn just ended probably drew.
+      const drewCount = (cardCounts[prevTurn] ?? 0);
+      // We don't know exactly which key they drew — animation is generic
+      // (face-down card flying out). That's intentional: we hide opponent's
+      // hand contents.
+      if (drewCount > 0 && prevTurn !== myId) {
+        setOpponentDrawAnim({ memberId: prevTurn, ts: Date.now() });
+        setTimeout(() => setOpponentDrawAnim(null), 1100);
+      }
+    }
+    lastTurnRef.current = curTurn;
+  }, [gs?.currentTurnMemberId, gs?.handCounts, myId]);
 
   // Tick the "now" clock once per second so elapsed timer moves + the nope
   // window countdown updates.
@@ -200,7 +250,7 @@ export default function GamePage() {
     (idx, key) => {
       if (!isMyTurn || !isAlive || gameEnded) return;
       setSelectedCardIdx(idx);
-      const meta = CARD_LABELS[key] || { label: key };
+      const meta = getCardLabel(key);
       setActionModal({ card: { key, ...meta }, handIdx: idx });
     },
     [isMyTurn, isAlive, gameEnded],
@@ -212,6 +262,22 @@ export default function GamePage() {
     setActionModal(null);
     setSelectedCardIdx(null);
 
+    // Capture source position for the "card flew out of hand to discard"
+    // animation. We pick the bottom of the player seat so the card visually
+    // travels upward to the table centre.
+    const srcRect = handCenterRef.current?.getBoundingClientRect?.();
+    const discardRect = discardRef.current?.getBoundingClientRect?.();
+    if (srcRect) {
+      setPlayedAnim({
+        sourceRect: srcRect,
+        targetRect: discardRect,
+        cardKey: card.key,
+        ts: Date.now(),
+      });
+      setTimeout(() => setPlayedAnim(null), 1700);
+    }
+    emitFx(card.key, discardRect, { size: "lg", durationMs: 1500 });
+
     try {
       const res = await roomsApi.playCard(roomId, {
         memberId: myId,
@@ -220,7 +286,6 @@ export default function GamePage() {
       audio.playSfx?.("buttonClick");
       // If server says more input is required, open the right modal.
       if (res?.RequiresTargetPick) {
-        const target = res?.toast ? null : null; // placeholder
         setActionModal({ card, awaitingTarget: true });
         return;
       }
@@ -234,11 +299,17 @@ export default function GamePage() {
         return;
       }
       setRoom(res.Room);
+      // Pop the just-played card visually on top of the discard pile so the
+      // other players can see what was just dropped.
+      setRecentDiscards((prev) => {
+        const next = [...prev, { key: card.key, by: myId, ts: Date.now() }];
+        return next.length > 6 ? next.slice(next.length - 6) : next;
+      });
       if (res?.Toast) toast?.info?.(res.Toast);
     } catch (e) {
       toast?.error?.(e.message || "Không thể dùng lá bài.");
     }
-  }, [actionModal, audio, myId, roomId, toast]);
+  }, [actionModal, audio, emitFx, myId, roomId, toast]);
 
   const onPickTargetForAction = useCallback(
     async (targetId) => {
@@ -291,7 +362,10 @@ export default function GamePage() {
       const modal = comboModal;
       if (!modal) return;
       try {
-        if (modal.kind === "FiveAny") {
+        const isFiveAny = modal.kind === "FiveAny";
+        const fxKey = isFiveAny ? "5-any" : "combo";
+        emitFx(fxKey, discardRef.current?.getBoundingClientRect?.(), { size: "lg", durationMs: 1500 });
+        if (isFiveAny) {
           const res = await roomsApi.playCard(roomId, {
             memberId: myId,
             cardKey: "hải-tặc", // any combo card type
@@ -329,7 +403,7 @@ export default function GamePage() {
         toast?.error?.(e.message || "Combo thất bại.");
       }
     },
-    [comboModal, audio, myId, roomId, toast],
+    [comboModal, audio, emitFx, myId, roomId, toast],
   );
 
   // ── Draw card ──────────────────────────────────────────────
@@ -344,17 +418,28 @@ export default function GamePage() {
     const srcRect = deckRef.current?.getBoundingClientRect?.();
     const tgtRect = handCenterRef.current?.getBoundingClientRect?.();
     if (srcRect && tgtRect) {
-      setDrawAnim({ sourceRect: srcRect, targetRect: tgtRect, cardKey: "back" });
+      setDrawAnim({ sourceRect: srcRect, targetRect: tgtRect, cardKey: "back", revealKey: null });
     }
+
+    // Pre-fire a small sparkle on the deck to telegraph the action.
+    emitFx("draw", srcRect, { size: "md", durationMs: 800 });
 
     try {
       const res = await roomsApi.drawCard(roomId, myId);
       setRoom(res.Room);
+      // Reveal the drawn card by feeding revealKey to the animation.
+      if (res?.DrawnCardKey) {
+        setDrawAnim((cur) => cur ? { ...cur, revealKey: res.DrawnCardKey } : cur);
+      }
+      // NOTE: bomb reveal animation is broadcast by server (BombRevealActive
+      // flag in snapshot) — do NOT fire a local fx here or it will double-up.
       if (res?.RequiresDefuse) {
         setDefuseModal(true);
         if (res?.Toast) toast?.warning?.(res.Toast);
       } else if (res?.Toast) {
         if (res?.DrawnCardKey === "bomb") {
+          // Player died by drawing a bomb. The BombReveal → BombExplode
+          // cinematic plays automatically via the server flag.
           toast?.error?.(res.Toast);
         } else {
           toast?.info?.(res.Toast);
@@ -366,13 +451,15 @@ export default function GamePage() {
       drawInFlightRef.current = false;
       setLocalDrawPending(false);
     }
-  }, [audio, gameEnded, isAlive, isMyTurn, myId, roomId, toast]);
+  }, [audio, emitFx, gameEnded, isAlive, isMyTurn, myId, roomId, toast]);
 
   const onConfirmDefuse = useCallback(
     async (slotIndex) => {
       try {
         const res = await roomsApi.useDefuse(roomId, myId, slotIndex);
         audio.playSfx?.("cardDefuse");
+        emitShake("sm", 350);
+        emitFx("defuse", discardRef.current?.getBoundingClientRect?.(), { size: "lg", durationMs: 1500 });
         setRoom(res.Room);
         if (res?.Toast) toast?.success?.(res.Toast);
       } catch (e) {
@@ -381,7 +468,7 @@ export default function GamePage() {
         setDefuseModal(false);
       }
     },
-    [audio, myId, roomId, toast],
+    [audio, emitFx, emitShake, myId, roomId, toast],
   );
 
   // ── Nope chain ────────────────────────────────────────────
@@ -389,12 +476,13 @@ export default function GamePage() {
     try {
       const res = await roomsApi.nope(roomId, myId);
       audio.playSfx?.("cardNope");
+      emitFx("nope", discardRef.current?.getBoundingClientRect?.(), { size: "md", durationMs: 1200 });
       setRoom(res.Room);
       if (res?.Toast) toast?.info?.(res.Toast);
     } catch (e) {
       toast?.error?.(e.message || "Không thể cản.");
     }
-  }, [audio, myId, roomId, toast]);
+  }, [audio, emitFx, myId, roomId, toast]);
 
   const pendingAction = gs?.pendingAction || null;
   const nopeRemaining = pendingAction
@@ -405,6 +493,53 @@ export default function GamePage() {
     nopeRemaining > 0 &&
     !pendingAction.nopeChain.includes(myId) &&
     myHand.includes("nope");
+
+  // Track the most recent played card on top of the discard pile. We push
+  // whenever a new pendingAction appears (= someone just played a card). We
+  // cap at 6 entries so the visual stack stays small and natural.
+  useEffect(() => {
+    const key = pendingAction?.cardKey;
+    if (!key || key === "5-any") return;
+    setRecentDiscards((prev) => {
+      const last = prev[prev.length - 1];
+      if (last && last.key === key) return prev; // avoid double-render
+      const next = [...prev, { key, by: pendingAction.initiatorId, ts: Date.now() }];
+      return next.length > 6 ? next.slice(next.length - 6) : next;
+    });
+  }, [pendingAction?.cardKey, pendingAction?.createdAt]);
+
+  // ── Bomb reveal detection ──────────────────────────────
+  // Whenever a snapshot arrives with `BombRevealActive=true` AND a fresh
+  // `LastDrawnAt`, fire the cinematic bomb overlay for everyone. We dedupe
+  // by (memberId, lastDrawnAt) so re-renders of the same snapshot don't
+  // re-trigger.
+  useEffect(() => {
+    if (!gs?.BombRevealActive || !gs?.LastDrawnAt || !gs?.LastDrawnBy) return;
+    if (gs.LastDrawnCardKey !== "bomb") return;
+    const stamp = `${gs.LastDrawnBy}::${gs.LastDrawnAt}`;
+    if (lastDrawnRef.current === stamp) return;
+    lastDrawnRef.current = stamp;
+
+    const member = members.find((m) => m.id === gs.LastDrawnBy);
+    const memberName = member?.name || "Bạn";
+    const willDefuse = gs.Alive?.get?.(gs.LastDrawnBy) !== false
+      && (room?.myHand?.includes?.("defuse") || false);
+    // For local viewer, peek at own hand to know if THEY can defuse.
+    const canDefuseLocally = gs.LastDrawnBy === myId
+      ? (myHand || []).some((c) => ["ninja", "superman", "zombie", "robot", "hải-tặc"].includes(c))
+      : willDefuse;
+
+    setBombReveal({
+      memberId: gs.LastDrawnBy,
+      memberName,
+      willDefuse: canDefuseLocally,
+      key: stamp,
+    });
+
+    // Hard timeout safety net so the overlay never gets stuck.
+    const safety = setTimeout(() => setBombReveal(null), 4500);
+    return () => clearTimeout(safety);
+  }, [gs?.BombRevealActive, gs?.LastDrawnAt, gs?.LastDrawnBy, gs?.LastDrawnCardKey, gs?.Alive, members, myId, myHand, room?.myHand]);
 
   // ── Render ────────────────────────────────────────────────
   if (!room) {
@@ -458,7 +593,9 @@ export default function GamePage() {
 
         <div className="game-center">
           {/* Discard pile (top) */}
-          <DiscardPile count={discardCount} top={discardTop} />
+          <div ref={discardRef} className="discard-pile-wrap">
+            <DiscardPile count={discardCount} recentKeys={recentDiscards.map((d) => d.key)} />
+          </div>
 
           {/* Deck pile */}
           <div
@@ -590,6 +727,100 @@ export default function GamePage() {
         />
       )}
 
+      {/* Played-card animation — local card flying up to the table centre */}
+      {playedAnim && (
+        <PlayCardAnimation
+          key={playedAnim.ts}
+          cardKey={playedAnim.cardKey}
+          sourceRect={playedAnim.sourceRect}
+        />
+      )}
+
+      {/* Opponent drew a card — small "swoosh" indicator on their seat */}
+      {opponentDrawAnim && (
+        <div
+          className="opponent-draw-toast"
+          role="status"
+          aria-live="polite"
+          key={opponentDrawAnim.ts}
+        >
+          <span className="opponent-draw-toast__icon" aria-hidden="true">✦</span>
+          <span>
+            {members.find((m) => m.id === opponentDrawAnim.memberId)?.name || "Đối thủ"} vừa rút bài
+          </span>
+        </div>
+      )}
+
+      {/* Fx overlay queue — particle bursts for each gameplay event */}
+      {fxQueue.map((f) => (
+        <FxBurst
+          key={f.id}
+          anchor={f.anchor}
+          fxKey={f.fxKey}
+          size={f.size}
+          id={f.id}
+        />
+      ))}
+
+      {/* Screen shake for big-impact events (bomb defuse/detonate) */}
+      <FxScreenShake active={!!shake} intensity={shake?.intensity || "md"} />
+
+      {/* Bomb reveal — center card for 3s, everyone sees */}
+      {bombReveal && (
+        <BombReveal
+          key={bombReveal.key}
+          memberName={bombReveal.memberName}
+          memberId={bombReveal.memberId}
+          willDefuse={bombReveal.willDefuse}
+          onComplete={() => {
+            // If player couldn't defuse, queue the explosion overlay.
+            if (!bombReveal.willDefuse) {
+              setBombExplode({
+                memberName: bombReveal.memberName,
+                key: `${bombReveal.key}-explode`,
+              });
+              emitShake("lg", 900);
+            }
+            setBombReveal(null);
+          }}
+        />
+      )}
+
+      {/* Bomb explode overlay — fires AFTER reveal when no defuse */}
+      {bombExplode && (
+        <BombExplode
+          key={bombExplode.key}
+          memberName={bombExplode.memberName}
+          onComplete={() => setBombExplode(null)}
+        />
+      )}
+
+      {/* Action-card centre reveal — shows played action card or latest
+          Nope during the 3s window. Mounted/reset every time LastPlayedAt
+          changes or chain length grows. Hides when pendingAction closes. */}
+      {(() => {
+        const cardKey = gs?.LastPlayedCardKey;
+        const at = gs?.LastPlayedAt;
+        if (!cardKey || !at) return null;
+        const chain = gs?.PendingAction?.NopeChain?.length || 0;
+        const isNopeChain = !!gs?.LastPlayedByNope;
+        const memberId = isNopeChain ? gs?.LastPlayedByNope : gs?.LastPlayedBy;
+        const memberName = members.find((m) => m.id === memberId)?.name || "Bạn";
+        // Nope remaining window (mirror server countdown)
+        const remaining = nopeRemaining > 0 ? nopeRemaining : null;
+        return (
+          <ActionCardReveal
+            key={`${at}::${chain}::${cardKey}`}
+            cardKey={cardKey}
+            byMemberName={memberName}
+            isNopeChain={isNopeChain}
+            chainCount={chain}
+            nopeRemainingMs={remaining}
+            onComplete={undefined}
+          />
+        );
+      })()}
+
       {/* Summary */}
       {gameEnded && (
         <SummaryScreen
@@ -630,15 +861,42 @@ function Seat({ member, gs }) {
 }
 
 // ── Discard pile visual ──────────────────────────────────
-function DiscardPile({ count }) {
+// Cinematic stack: mỗi lá vừa được đánh sẽ bounce-in với glow riêng theo
+// loại card (attack → red, defuse → green, bomb → red danger, etc.). Stack
+// xếp lệch tự nhiên như rơi trên mặt bàn.
+function DiscardPile({ count, recentKeys }) {
+  const safeCount = count || 0;
+  const list = (recentKeys || []).slice(-6);
   return (
-    <div className={`discard-pile${count > 0 ? "" : " discard-pile--empty"}`} aria-label={`Chồng bỏ ${count} lá`}>
-      {count > 0 ? (
-        <>
-          <span className="card-title">Đã bỏ</span>
-        </>
-      ) : null}
-      <span className="discard-pile__count">{count}</span>
+    <div
+      className={`discard-pile${safeCount > 0 ? "" : " discard-pile--empty"}`}
+      aria-label={`Chồng bỏ ${safeCount} lá`}
+    >
+      <div className="discard-pile__stack">
+        {list.length === 0 && (
+          <span className="discard-pile__placeholder">Chồng bỏ</span>
+        )}
+        {list.map((key, i) => (
+          <span
+            key={`${i}-${key}`}
+            className={[
+              "discard-pile__card",
+              i === list.length - 1 ? "discard-pile__card--top" : "",
+              `discard-pile__card--${key}`,
+            ].join(" ")}
+            style={{
+              "--i": i,
+              "--total": list.length,
+              "--enter-delay": `${Math.max(0, (list.length - 1 - i) * 60)}ms`,
+            }}
+            title={key}
+          >
+            <img src={cardImageUrl(key)} alt={key} draggable={false} loading="lazy" />
+            <span className="discard-pile__card-glow" aria-hidden="true" />
+          </span>
+        ))}
+      </div>
+      <span className="discard-pile__count">{safeCount}</span>
     </div>
   );
 }

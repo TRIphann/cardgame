@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/GamePage-D9FmLs_H.js","assets/react-BhVOh7S1.js","assets/vendor-DcE7maHo.js","assets/router-DRJyKT9H.js","assets/react-dom-HPixZcWd.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/GamePage-7cQkxNj_.js","assets/react-BhVOh7S1.js","assets/vendor-DcE7maHo.js","assets/router-DRJyKT9H.js","assets/react-dom-HPixZcWd.js"])))=>i.map(i=>d[i]);
 var __defProp = Object.defineProperty;
 var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
 var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
@@ -1822,21 +1822,34 @@ function AvatarPicker({ initial, onSelect, onClose }) {
 const CARD_CLOUDINARY = {
   cards: {
     "back": "https://res.cloudinary.com/ssoic87m/image/upload/v1785156350/back_knmzmp.svg",
+    "attack": "https://res.cloudinary.com/ssoic87m/image/upload/v1785156350/attack-1_mmeqna.svg",
     "attack-1": "https://res.cloudinary.com/ssoic87m/image/upload/v1785156350/attack-1_mmeqna.svg",
+    "bomb": "https://res.cloudinary.com/ssoic87m/image/upload/v1785156350/bomb-1_beeqmk.svg",
     "bomb-1": "https://res.cloudinary.com/ssoic87m/image/upload/v1785156350/bomb-1_beeqmk.svg",
+    "defuse": "https://res.cloudinary.com/ssoic87m/image/upload/v1785156350/defuse-1_kezwhy.svg",
     "defuse-1": "https://res.cloudinary.com/ssoic87m/image/upload/v1785156350/defuse-1_kezwhy.svg",
+    "favor": "https://res.cloudinary.com/ssoic87m/image/upload/v1785156350/favor-1_wuf8qh.svg",
     "favor-1": "https://res.cloudinary.com/ssoic87m/image/upload/v1785156350/favor-1_wuf8qh.svg",
+    "future": "https://res.cloudinary.com/ssoic87m/image/upload/v1785156351/future-1_spt8eo.svg",
     "future-1": "https://res.cloudinary.com/ssoic87m/image/upload/v1785156351/future-1_spt8eo.svg",
+    "nope": "https://res.cloudinary.com/ssoic87m/image/upload/v1785156352/nope-1_nestwa.svg",
     "nope-1": "https://res.cloudinary.com/ssoic87m/image/upload/v1785156352/nope-1_nestwa.svg",
     "robot": "https://res.cloudinary.com/ssoic87m/image/upload/v1785156352/robot_admqff.svg",
+    "shuffle": "https://res.cloudinary.com/ssoic87m/image/upload/v1785156353/shuffle-1_qhmijp.svg",
     "shuffle-1": "https://res.cloudinary.com/ssoic87m/image/upload/v1785156353/shuffle-1_qhmijp.svg",
+    "skip": "https://res.cloudinary.com/ssoic87m/image/upload/v1785156353/skip-1_bdunf1.svg",
     "skip-1": "https://res.cloudinary.com/ssoic87m/image/upload/v1785156353/skip-1_bdunf1.svg",
     "ninja": "https://res.cloudinary.com/ssoic87m/image/upload/v1785156353/ninja_geqbzr.svg",
     "superman": "https://res.cloudinary.com/ssoic87m/image/upload/v1785156354/superman_by7urw.svg",
     "zombie": "https://res.cloudinary.com/ssoic87m/image/upload/v1785156354/zombie_zlgrvj.svg",
+    "hải tặc": "https://res.cloudinary.com/ssoic87m/image/upload/v1785156352/h%E1%BA%A3i_t%E1%BA%B7c_psrudy.svg",
     "hải-tặc": "https://res.cloudinary.com/ssoic87m/image/upload/v1785156352/h%E1%BA%A3i_t%E1%BA%B7c_psrudy.svg"
   }
 };
+function cardImageUrl(key) {
+  if (!key) return CARD_CLOUDINARY.cards.back;
+  return CARD_CLOUDINARY.cards[key] || CARD_CLOUDINARY.cards.back;
+}
 const CARD_URLS = Object.entries(CARD_CLOUDINARY.cards || {}).filter(([key]) => key !== "back").map(([, url]) => url);
 const CARD_BACK_URL = CARD_CLOUDINARY.cards?.back;
 function readSessionRoomId() {
@@ -2343,7 +2356,7 @@ function LobbyPage() {
     roomError && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lobby-error", role: "alert", children: String(roomError.message || roomError) })
   ] });
 }
-const GamePage = reactExports.lazy(() => __vitePreload(() => import("./GamePage-D9FmLs_H.js"), true ? __vite__mapDeps([0,1,2,3,4]) : void 0));
+const GamePage = reactExports.lazy(() => __vitePreload(() => import("./GamePage-7cQkxNj_.js"), true ? __vite__mapDeps([0,1,2,3,4]) : void 0));
 function App() {
   const location = useLocation();
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(ErrorBoundary, { children: [
@@ -2382,6 +2395,7 @@ export {
   ROUTES as R,
   useToast as a,
   useAudio as b,
+  cardImageUrl as c,
   roomsApi as r,
   useSession as u
 };
