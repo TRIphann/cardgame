@@ -159,11 +159,15 @@ export default function GamePage() {
   // player at the bottom (not in the side lists).
   const opponents = useMemo(() => {
     const alive = members.filter((m) => m.id !== myId);
+    // Seat placement policy: the first opponent (index 0) goes on the
+    // RIGHT, then alternates RIGHT → LEFT → RIGHT → LEFT. This keeps the
+    // table visually balanced when there's an even number of opponents
+    // (1 vs 1, 2 vs 2, etc.) instead of stacking everyone on one side.
     const left = [];
     const right = [];
     alive.forEach((m, i) => {
-      if (i % 2 === 0) left.push(m);
-      else right.push(m);
+      if (i % 2 === 0) right.push(m);
+      else left.push(m);
     });
     return { left, right };
   }, [members, myId]);

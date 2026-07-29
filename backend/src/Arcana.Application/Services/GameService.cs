@@ -39,10 +39,13 @@ public class GameService
         if (room.Status != RoomStatus.Waiting)
             throw new DomainException("game_already_started", "Ván chơi đã bắt đầu hoặc kết thúc.");
 
-        var players = room.Members.Where(m => m.IsOnline || m.IsHost).ToList();
-        if (!players.Any(m => m.Id == room.HostId))
-            players.Add(room.Members.First(m => m.Id == room.HostId));
-
+        // Everyone who's actually IN the room can start. We used to filter
+        // by `IsOnline || IsHost` but that broke multi-tab testers: member
+        // #2 might have just joined and their heartbeat hadn't propagated
+        // yet, so the host would see "cannot_start" with 2 members on the
+        // screen. Counting every room member is safer — if someone really
+        // left, RoomService will have removed them.
+        var players = room.Members.ToList();
         if (players.Count < 2)
             throw new DomainException("cannot_start", "Cần ít nhất 2 người chơi để bắt đầu.");
 
