@@ -98,10 +98,22 @@ export default function GamePage() {
   const [bombExplode, setBombExplode] = useState(null);
   const lastTurnRef = useRef(null);
   const lastDrawnRef = useRef(null); // dedupe by `(memberId, lastDrawnAt)`
+  // Track the last card the local player drew. We pass this into HandArc
+  // so the freshly-drawn card can animate in (scale-up + glow) instead of
+  // just popping into existence.
+  const [lastDrawnKey, setLastDrawnKey] = useState(null);
+  // Track which TurnOrder we've already surfaced to the local player as
+  // "Bạn sẽ đi thứ X". Reset when the room changes.
+  const lastTurnOrderRef = useRef(null);
+  const [turnIntro, setTurnIntro] = useState(null); // { order, total, memberId }
 
   // ── Optimistic local state overlay (mirrors LobbyPage pattern) ──
   const [localDrawPending, setLocalDrawPending] = useState(false);
   const drawInFlightRef = useRef(false);
+  // While a play-card request is in flight we lock the action modal so a
+  // double-click doesn't fire two HTTP requests (which causes the second
+  // one to come back as `action_pending` HTTP 409).
+  const actionInFlightRef = useRef(false);
 
   // Refs to the deck & hand center for the draw animation source/target.
   const deckRef = useRef(null);
@@ -218,6 +230,22 @@ export default function GamePage() {
     return () => clearInterval(id);
   }, []);
 
+  // When the game starts (or a new game is loaded), surface "Bạn sẽ đi
+  // thứ X". We dedupe by the TurnOrder array reference so each new game
+  // shows the intro once but re-renders of the same snapshot don't.
+  useEffect(() => {
+    const order = gs?.turnOrder;
+    if (!order || order.length === 0) {
+      lastTurnOrderRef.current = null;
+      return;
+    }
+    if (lastTurnOrderRef.current === order) return;
+    lastTurnOrderRef.current = order;
+    const myIdx = order.indexOf(myId);
+    if (myIdx < 0) return;
+    setTurnIntro({ order: myIdx + 1, total: order.length, memberId: myId });
+  }, [gs?.turnOrder, myId]);
+
   // When game ends, navigate to summary screen state (kept inside this
   // component, not router change). We also rotate the room after the player
   // hits "Về sảnh chờ".
@@ -288,6 +316,9 @@ export default function GamePage() {
   //   4) combo 3 (after target chosen) → server returns RequiresDiscardPick → open card picker
   const onConfirmAction = useCallback(async () => {
     if (!actionModal) return;
+    if (actionInFlightRef.current) return;
+    actionInFlightRef.current = true;
+    try {
     const card = actionModal.card;
     setActionModal(null);
     setSelectedCardIdx(null);
@@ -400,6 +431,9 @@ export default function GamePage() {
       if (res?.Toast) toast?.info?.(res.Toast);
     } catch (e) {
       toast?.error?.(e.message || "Không thể dùng lá bài.");
+    }
+    } finally {
+      actionInFlightRef.current = false;
     }
   }, [actionModal, audio, detectComboFor, emitFx, isComboCard, myHand, myId, roomId, toast]);
 
@@ -529,6 +563,8 @@ export default function GamePage() {
         }
       } catch (e) {
         toast?.error?.(e.message || "Combo thất bại.");
+      } finally {
+        actionInFlightRef.current = false;
       }
     },
     [audio, myId, pickModal, roomId, toast],
@@ -574,9 +610,14 @@ export default function GamePage() {
     try {
       const res = await roomsApi.drawCard(roomId, myId);
       setRoom(res.Room);
-      // Reveal the drawn card by feeding revealKey to the animation.
-      if (res?.DrawnCardKey) {
+      // Reveal the drawn card by feeding revealKey to the animation, and
+      // tag the card so HandArc knows which slot to animate-in.
+      if (res?.DrawnCardKey && res.DrawnCardKey !== "bomb") {
         setDrawAnim((cur) => cur ? { ...cur, revealKey: res.DrawnCardKey } : cur);
+        setLastDrawnKey(res.DrawnCardKey);
+        // Clear highlight after the animation finishes so it doesn't
+        // persist across multiple draws.
+        setTimeout(() => setLastDrawnKey(null), 1400);
       }
       // NOTE: bomb reveal animation is broadcast by server (BombRevealActive
       // flag in snapshot) — do NOT fire a local fx here or it will double-up.
@@ -839,7 +880,7 @@ export default function GamePage() {
                 aria-disabled={!canChainNope}
                 title={canChainNope ? "Dùng lá Cản" : "Bạn không có lá Cản"}
               >
-                {canChainNope ? "Cản!" : "Cản"} ({(nopeRemaining / 1000).toFixed(1)}s)
+                {canChainNope ? "Cản!" : "Đợi cản"} ({(nopeRemaining / 1000).toFixed(1)}s)
               </button>
             )}
             {!isMyTurn && !pendingAction && (
@@ -871,6 +912,7 @@ export default function GamePage() {
           hand={myHand}
           selectedIndex={selectedCardIdx}
           onSelectCard={onSelectHandCard}
+          lastDrawnKey={lastDrawnKey}
         />
       </section>
 
@@ -989,12 +1031,12 @@ export default function GamePage() {
         </div>
       )}
 
-      {/* Nope countdown toast */}
-      {pendingAction && nopeRemaining > 0 && (
+      {/* Nope countdown toast — only show for non-initiators. The person who
+          played the card already knows they did; the toast was redundant
+          noise for them. */}
+      {pendingAction && nopeRemaining > 0 && pendingAction.initiatorId !== myId && (
         <div className="nope-react-toast">
-          <span className="nope-react-toast__label">
-            {pendingAction.initiatorId === myId ? "Hành động của bạn" : "Hành động vừa xảy ra"}
-          </span>
+          <span className="nope-react-toast__label">Hành động vừa xảy ra</span>
           <span className="nope-react-toast__timer">{(nopeRemaining / 1000).toFixed(1)}s</span>
         </div>
       )}
@@ -1111,6 +1153,27 @@ export default function GamePage() {
           myId={myId}
           onContinue={onContinueFromSummary}
         />
+      )}
+
+      {/* Turn intro — "Bạn sẽ đi thứ X" — shown once when a new game starts. */}
+      {turnIntro && !gameEnded && (
+        <div className="turn-intro-overlay" role="dialog" aria-modal="true">
+          <div className="turn-intro">
+            <div className="turn-intro__label">Ván mới bắt đầu</div>
+            <div className="turn-intro__order">
+              Bạn sẽ đi <strong>thứ {turnIntro.order}</strong>
+              <span className="turn-intro__total"> / {turnIntro.total}</span>
+            </div>
+            <button
+              type="button"
+              className="turn-intro__btn"
+              onClick={() => setTurnIntro(null)}
+              autoFocus
+            >
+              Sẵn sàng
+            </button>
+          </div>
+        </div>
       )}
     </main>
   );

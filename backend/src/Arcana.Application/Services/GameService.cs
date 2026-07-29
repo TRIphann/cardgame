@@ -14,12 +14,14 @@ public class GameService
     private readonly IRoomRepository _repository;
     private readonly IGameBroadcaster _broadcaster;
     private readonly ITurnClockRegistry _turnClock;
+    private readonly INopeWindowRegistry _nopeWindow;
 
-    public GameService(IRoomRepository repository, IGameBroadcaster broadcaster, ITurnClockRegistry turnClock)
+    public GameService(IRoomRepository repository, IGameBroadcaster broadcaster, ITurnClockRegistry turnClock, INopeWindowRegistry nopeWindow)
     {
         _repository = repository;
         _broadcaster = broadcaster;
         _turnClock = turnClock;
+        _nopeWindow = nopeWindow;
     }
 
     // ──────────────────────────────────────────────────────────────────
@@ -51,54 +53,78 @@ public class GameService
             StartedAt = DateTime.UtcNow,
         };
 
-        // ── Safe dealing protocol ────────────────────────────────────
+        // ── Dealing protocol (per user-confirmed spec) ────────────────────
         //
-        // Deck starts with N+1 Defuse cards. We:
-        //   1) Extract N Defuse from the deck (one per player).
-        //   2) The last N players to receive a Defuse in this loop are the
-        //      "survivor candidates" — whoever draws a bomb later still has their
-        //      starting Defuse as a safety net.
-        //   3) Deal 4 non-bomb cards to each player from a shuffled safe pool.
-        //   4) The N-th (last) player gets the last Defuse → guaranteed survivor.
-        //   5) Any leftover Defuse goes back into the deck.
+        //   1) Extract all bombs from the deck and stash them aside. The deck
+        //      we're about to shuffle has ZERO bombs in it.
+        //   2) Shuffle the bomb-free deck.
+        //   3) Deal 5 cards to each player: 1 of them is a Defuse variant,
+        //      the other 4 come from the top of the shuffled deck. This means
+        //      each player's hand contains exactly one "cứu" card + 4 action
+        //      cards — the leftover defuse variants stay in the deck and get
+        //      either drawn or stacked later.
+        //   4) Insert all N-1 bombs at random positions into the remaining
+        //      deck. They can land anywhere, including clustered together or
+        //      on top (first card drawn). That's intentional.
         //
-        // The result: every player starts with Defuse, NO bombs dealt, and exactly
+        // Result: every player starts with a defuse, NO bombs dealt, exactly
         // 1 player can dodge every bomb and win.
 
-        // Step 1: extract N defuses from the deck.
-        var defuseReserve = new List<string>();
-        for (var i = 0; i < players.Count; i++)
+        // Step 1: pull all bombs out of the deck first.
+        var bombs = new List<string>();
+        for (var i = state.Deck.Count - 1; i >= 0; i--)
         {
-            var idx = state.Deck.LastIndexOf(CardCatalog.Defuse);
-            if (idx < 0) break;
-            defuseReserve.Add(state.Deck[idx]);
-            state.Deck.RemoveAt(idx);
+            if (state.Deck[i] == CardCatalog.Bomb)
+            {
+                bombs.Add(state.Deck[i]);
+                state.Deck.RemoveAt(i);
+            }
         }
 
-        // Step 2: shuffle the non-bomb cards for dealing.
-        var safePool = state.Deck.Where(c => c != CardCatalog.Bomb).ToList();
-        for (var i = safePool.Count - 1; i > 0; i--)
+        // Step 2: shuffle the bomb-free deck.
+        for (var i = state.Deck.Count - 1; i > 0; i--)
         {
             var j = Random.Shared.Next(i + 1);
-            (safePool[i], safePool[j]) = (safePool[j], safePool[i]);
+            (state.Deck[i], state.Deck[j]) = (state.Deck[j], state.Deck[i]);
         }
 
-        // Step 3: deal to each player.
-        var safeIdx = 0;
+        // Step 3: deal 5 cards to each player. The first card we hand them is
+        // always a Defuse variant (combo defuse); the next 4 come from the
+        // top of the shuffled deck.
         foreach (var p in players)
         {
             var hand = new List<string>();
 
-            // Deal 4 non-bomb cards.
-            for (var i = 0; i < 4 && safeIdx < safePool.Count; i++, safeIdx++)
-                hand.Add(safePool[safeIdx]);
-
-            // Give the player a Defuse (reverse order so last player gets last defuse).
-            var defuseToGive = defuseReserve.Count > 0
-                ? defuseReserve[defuseReserve.Count - 1]
-                : CardCatalog.RollDefuseVariant();
-            if (defuseReserve.Count > 0) defuseReserve.RemoveAt(defuseReserve.Count - 1);
+            // Hand them a defuse variant from the deck so even their cứu is
+            // a random one of the 5 combo types (and may be a base "defuse"
+            // card if the deck runs out of variants). This way the "1 cứu
+            // per player" rule is satisfied without needing a separate deck
+            // of variants — the variant cards ARE in the main deck.
+            var defuseIdx = state.Deck.IndexOf(CardCatalog.Defuse);
+            for (var i = 0; i < state.Deck.Count; i++)
+            {
+                if (CardCatalog.IsComboDefuse(state.Deck[i])) { defuseIdx = i; break; }
+            }
+            string defuseToGive;
+            if (defuseIdx >= 0)
+            {
+                defuseToGive = state.Deck[defuseIdx];
+                state.Deck.RemoveAt(defuseIdx);
+            }
+            else
+            {
+                // No defuse variant left in the deck — fall back to a freshly
+                // rolled one (shouldn't normally happen given N+1 copies).
+                defuseToGive = CardCatalog.RollDefuseVariant();
+            }
             hand.Add(defuseToGive);
+
+            // Then deal 4 cards from the top of the shuffled deck.
+            for (var i = 0; i < 4 && state.Deck.Count > 0; i++)
+            {
+                hand.Add(state.Deck[0]);
+                state.Deck.RemoveAt(0);
+            }
 
             state.Hands[p.Id] = hand;
             state.Alive[p.Id] = true;
@@ -107,22 +133,24 @@ public class GameService
             state.CardsPlayed[p.Id] = 0;
         }
 
-        // Step 4: put leftover Defuse back into the deck.
-        foreach (var d in defuseReserve) state.Deck.Add(d);
-
-        // Step 5: rebuild final deck (remaining safe + all bombs, shuffled).
-        var bombs = state.Deck.Where(c => c == CardCatalog.Bomb).ToList();
-        state.Deck = state.Deck.Where(c => c != CardCatalog.Bomb).ToList();
-        // safePool[safeIdx..] are the undelt safe cards — state.Deck already has them.
-        state.Deck.AddRange(bombs);
-        for (var i = state.Deck.Count - 1; i > 0; i--)
+        // Step 4: insert all N-1 bombs at random positions into the remaining
+        // deck. Anywhere means anywhere — top, bottom, clustered, solitary.
+        foreach (var _ in bombs)
         {
-            var j = Random.Shared.Next(i + 1);
-            (state.Deck[i], state.Deck[j]) = (state.Deck[j], state.Deck[i]);
+            var pos = Random.Shared.Next(state.Deck.Count + 1); // 0..Count
+            state.Deck.Insert(pos, CardCatalog.Bomb);
         }
 
         state.CurrentTurnMemberId = players[Random.Shared.Next(players.Count)].Id;
         state.TurnStartedAt = DateTime.UtcNow;
+        // Turn order: shuffle a copy of the players list once. This is the
+        // order we surface to clients ("Bạn sẽ đi thứ X").
+        state.TurnOrder = players.Select(p => p.Id).ToList();
+        for (var i = state.TurnOrder.Count - 1; i > 0; i--)
+        {
+            var j = Random.Shared.Next(i + 1);
+            (state.TurnOrder[i], state.TurnOrder[j]) = (state.TurnOrder[j], state.TurnOrder[i]);
+        }
 
         var updated = await _repository.UpdateGameStateAsync(roomId, state, RoomStatus.Playing, ct);
         return updated ?? throw new DomainException("room_not_found", "Phòng không tồn tại.");
@@ -660,15 +688,66 @@ public class GameService
         };
     }
 
+    /// <summary>
+    /// When a Nope chain resolves (cancelled or committed), the original
+    /// action's card is now in the discard pile — per the user-confirmed
+    /// spec the card does NOT bounce back to the initiator's hand. For
+    /// combo cards we only spent the visible 2 copies (the canonical
+    /// "minimum" combo size); if the original play was 3-same or 5-any,
+    /// we put those 2 cards into the discard and let the remaining copies
+    /// stay in the initiator's hand.
+    /// </summary>
     private static void RefundInitiatorCard(GameState gs, PendingAction pending)
     {
-        if (!gs.Hands.TryGetValue(pending.InitiatorId, out var hand)) return;
         var card = pending.CardKey;
-        // Combo refund is tricky — we only re-add the most-likely-spent set.
-        // For MVP simplicity, refund 2 cards for combos (works for 2/3/5
-        // because the smallest count is 2; 5-any refunds 5).
         var refundCount = CardCatalog.IsComboDefuse(card) ? 2 : 1;
-        for (var i = 0; i < refundCount; i++) hand.Add(card);
+        for (var i = 0; i < refundCount; i++) gs.DiscardPile.Add(card);
+    }
+
+    /// <summary>
+    /// Background hook: the Nope window for <paramref name="roomId"/> expired
+    /// without any player chaining a Nope (or the chain ended on an EVEN
+    /// length, which is impossible from this code path but guarded against).
+    /// We commit the original action: Skip/Attack advance turn (Attack also
+    /// adds to the attack counter), Future/Future peek is preserved, Shuffle
+    /// already ran the shuffle on play. Then we clear PendingAction and
+    /// advance the turn if it hasn't been already.
+    /// </summary>
+    public async Task<GameActionResult> ResolveExpiredNopeAsync(string roomId, CancellationToken ct = default)
+    {
+        var room = await LoadPlayingRoomAsync(roomId, ct);
+        var gs = room.GameState!;
+        var pending = gs.PendingAction;
+        if (pending is null) return new GameActionResult { Room = room };
+
+        // Edge case: if the chain ended on an odd number (i.e. someone noped
+        // and the action was cancelled), the ChainNopeAsync already cleared
+        // PendingAction. Nothing to do.
+        var initiatorHand = gs.Hands.TryGetValue(pending.InitiatorId, out var h) ? h : null;
+        if (initiatorHand is null)
+        {
+            gs.PendingAction = null;
+            ClearActionCinematic(gs);
+            await PersistAsync(roomId, gs, ct);
+            return new GameActionResult { Room = (await _repository.GetByIdAsync(roomId, ct))! };
+        }
+
+        // Commit the original action's effect — for the cards that take
+        // effect immediately we already removed them from hand on play; for
+        // the cards that ADVANCE the turn conditionally (Skip during Attack,
+        // Skip alone) the logic in PlayCardAsync already ran BEFORE the Nope
+        // window opened. So nothing further to do except clear the window
+        // and make sure the next turn's clock is armed.
+        gs.PendingAction = null;
+        ClearActionCinematic(gs);
+
+        CheckWinCondition(gs);
+        await PersistAsync(roomId, gs, ct);
+        return new GameActionResult
+        {
+            Room = (await _repository.GetByIdAsync(roomId, ct))!,
+            Toast = $"Hết thời gian cản — {CardCatalog.Names.GetValueOrDefault(pending.CardKey, pending.CardKey)} đã có hiệu lực.",
+        };
     }
 
     // ──────────────────────────────────────────────────────────────────
@@ -695,9 +774,20 @@ public class GameService
         if (gs.EndedAt is not null)
         {
             _turnClock.Unregister(roomId);
+            _nopeWindow.Unregister(roomId);
         }
-        else if (gs.PendingAction is null && gs.TurnStartedAt is not null)
+        else if (gs.PendingAction is not null)
         {
+            // Nope window is open — track so the background service can
+            // auto-resolve it after 3s. While pending we don't arm the
+            // turn clock (the original action's effect hasn't been
+            // committed yet, so the next turn player isn't on the clock).
+            _turnClock.Unregister(roomId);
+            _nopeWindow.Register(roomId, gs.PendingAction.CreatedAt);
+        }
+        else if (gs.TurnStartedAt is not null)
+        {
+            _nopeWindow.Unregister(roomId);
             _turnClock.Register(roomId, gs.TurnStartedAt.Value);
         }
         // Server-push: every mutation fans out to every tab subscribed to

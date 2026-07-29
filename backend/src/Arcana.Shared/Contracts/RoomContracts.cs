@@ -52,7 +52,9 @@ public record GameStateDto(
     // Turn timer — when the current player's turn started (UTC ISO-8601)
     // and how many seconds they have until the server auto-draws.
     string? TurnStartedAt = null,
-    int TurnTimeLimitSec = 60);
+    int TurnTimeLimitSec = 60,
+    // Frozen turn order for the current game. Index 0 = first player.
+    IReadOnlyList<string>? TurnOrder = null);
 
 public record PendingActionDto(string InitiatorId, string CardKey, string? TargetMemberId, IReadOnlyList<string> NopeChain, string CreatedAt);
 

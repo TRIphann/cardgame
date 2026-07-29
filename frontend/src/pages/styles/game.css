@@ -8,7 +8,10 @@
 
 .game-page {
   position: relative;
+  /* Fill the viewport without scrolling. 100svh = small viewport so the
+     bottom isn't cut off by mobile browser chrome. */
   min-height: 100vh;
+  min-height: 100svh;
   overflow: hidden;
   display: grid;
   grid-template-rows: auto 1fr auto;
@@ -184,11 +187,90 @@
   50% { transform: scale(1.06); }
 }
 
+/* Turn intro modal — shown when a game starts. Surfaces the local
+   player's position in the turn order. */
+.turn-intro-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  background: rgba(6, 3, 20, 0.78);
+  backdrop-filter: blur(6px);
+  animation: turn-intro-fade-in 240ms ease-out both;
+}
+@keyframes turn-intro-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.turn-intro {
+  min-width: 320px;
+  max-width: 90vw;
+  padding: 28px 36px;
+  background:
+    linear-gradient(135deg, rgba(40, 28, 84, 0.95), rgba(20, 12, 52, 0.95));
+  border: 1px solid rgba(255, 215, 130, 0.55);
+  border-radius: 18px;
+  box-shadow:
+    0 0 36px rgba(255, 200, 100, 0.35),
+    0 18px 48px rgba(0, 0, 0, 0.6);
+  text-align: center;
+  animation: turn-intro-pop 320ms cubic-bezier(0.16, 1.08, 0.34, 1) both;
+}
+@keyframes turn-intro-pop {
+  from { transform: scale(0.7); opacity: 0; }
+  to   { transform: scale(1); opacity: 1; }
+}
+.turn-intro__label {
+  font-family: "Cinzel", serif;
+  letter-spacing: 0.18em;
+  font-size: 12px;
+  color: rgba(255, 215, 130, 0.85);
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+.turn-intro__order {
+  font-size: 22px;
+  color: rgba(255, 240, 220, 0.95);
+  line-height: 1.35;
+  margin-bottom: 20px;
+}
+.turn-intro__order strong {
+  font-size: 34px;
+  color: #ffd86b;
+  text-shadow: 0 0 18px rgba(255, 215, 100, 0.7);
+}
+.turn-intro__total {
+  color: rgba(220, 200, 255, 0.7);
+  font-size: 18px;
+  margin-left: 4px;
+}
+.turn-intro__btn {
+  padding: 10px 24px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 215, 130, 0.6);
+  background: linear-gradient(135deg, rgba(255, 215, 130, 0.95), rgba(255, 180, 80, 0.95));
+  color: #1a0a30;
+  font-weight: 700;
+  font-family: "Cinzel", serif;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+  transition: transform 150ms ease, box-shadow 150ms ease;
+  box-shadow: 0 6px 20px rgba(255, 200, 100, 0.4);
+}
+.turn-intro__btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 28px rgba(255, 200, 100, 0.55);
+}
+
 /* ── Table ──────────────────────────────────────── */
 .game-table {
   position: relative;
   display: grid;
-  grid-template-columns: 220px 1fr 220px;
+  /* Each side column auto-sizes: when 0 opponents, column collapses to 0.
+     When 1+ opponents, each side is capped at 240px so the centre stays
+     wide. */
+  grid-template-columns: minmax(0, 240px) 1fr minmax(0, 240px);
   grid-template-rows: 1fr;
   gap: 18px;
   align-items: stretch;
@@ -202,6 +284,15 @@
   justify-content: center;
   align-items: stretch;
   padding: 14px 8px;
+  min-width: 0;
+}
+.game-side--left,
+.game-side--right {
+  /* Empty side → 0 width; populated side stays inside its cap. */
+  align-items: center;
+}
+.game-side:empty {
+  display: none;
 }
 
 .game-center {
@@ -519,9 +610,10 @@
   border-radius: 8px;
   font-family: "Cinzel", serif;
   letter-spacing: 0.12em;
-  z-index: 2;
+  z-index: 1;
   box-shadow: 0 4px 14px rgba(255, 200, 100, 0.5);
   animation: game-seat-badge-bounce 1.6s ease-in-out infinite;
+  pointer-events: none;
 }
 @keyframes game-seat-badge-bounce {
   0%, 100% { transform: translateY(0); }
@@ -563,6 +655,8 @@
     0 6px 16px rgba(0, 0, 0, 0.5),
     inset 0 1px 0 rgba(255, 255, 255, 0.15);
   transition: all 0.3s ease;
+  position: relative;
+  z-index: 2;
 }
 .game-seat--current .game-seat__avatar {
   border-color: rgba(255, 215, 130, 0.85);
@@ -694,6 +788,19 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.12);
   filter: brightness(1.2) saturate(1.15);
   z-index: 1000;
+}
+.hand-card--fresh {
+  animation: hand-card-fresh 1.2s cubic-bezier(0.16, 1.08, 0.34, 1) both;
+  box-shadow:
+    0 18px 44px rgba(0, 0, 0, 0.6),
+    0 0 48px rgba(255, 215, 130, 0.85),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+@keyframes hand-card-fresh {
+  0%   { transform: scale(0.3) translateY(60px); opacity: 0; filter: brightness(2) saturate(1.4); }
+  35%  { transform: scale(1.18) translateY(-18px); opacity: 1; filter: brightness(1.4) saturate(1.25); }
+  60%  { transform: scale(0.95) translateY(2px); }
+  100% { transform: scale(1) translateY(0); opacity: 1; filter: brightness(1) saturate(1); }
 }
 .hand-card:hover::before,
 .hand-card--hovered::before {
@@ -1384,6 +1491,16 @@
   animation: draw-flight 850ms cubic-bezier(0.5, 0, 0.4, 1) forwards;
 }
 .draw-anim--reveal .draw-anim__inner { animation: card-flip 350ms ease forwards; }
+.draw-anim--done {
+  /* Fade the back-of-card silhouette out and shrink it so it doesn't
+     linger on top of the freshly-spawned hand card. */
+  animation: draw-vanish 220ms ease forwards;
+}
+.draw-anim--done .draw-anim__face--back { opacity: 0; }
+@keyframes draw-vanish {
+  from { transform: translate(var(--end-x), var(--end-y)) scale(0.7); opacity: 0.9; }
+  to   { transform: translate(var(--end-x), var(--end-y)) scale(0.45); opacity: 0; }
+}
 @keyframes draw-flight {
   0%   { transform: translate(var(--start-x), var(--start-y)) scale(0.6) rotateX(60deg) rotateZ(-10deg); opacity: 0; }
   20%  { opacity: 1; }

@@ -14,6 +14,7 @@ import { FxBurst } from "./FxBurst.jsx";
 
 const FLIGHT_MS = 850;
 const REVEAL_FLIP_MS = 350;
+const VANISH_MS = 280;
 
 export function DrawAnimation({ sourceRect, targetRect, cardKey = "back", revealKey, onComplete }) {
   const [phase, setPhase] = useState("flying"); // flying → landing → done
@@ -21,11 +22,12 @@ export function DrawAnimation({ sourceRect, targetRect, cardKey = "back", reveal
 
   useEffect(() => {
     const t1 = setTimeout(() => setPhase("landing"), FLIGHT_MS - 80);
-    const t2 = setTimeout(() => setPhase("done"), FLIGHT_MS + 80);
+    const t2 = setTimeout(() => setPhase("done"), FLIGHT_MS + 40);
+    // Wait long enough for the vanish animation to finish before unmounting.
     const t3 = setTimeout(() => {
       setMounted(false);
       onComplete?.();
-    }, FLIGHT_MS + 140);
+    }, FLIGHT_MS + 40 + VANISH_MS);
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
   }, [onComplete]);
 

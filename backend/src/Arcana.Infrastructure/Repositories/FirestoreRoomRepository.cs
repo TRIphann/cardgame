@@ -267,6 +267,7 @@ public class FirestoreRoomRepository : IRoomRepository
             ["turnStartedAt"] = gs.TurnStartedAt.HasValue
                 ? (object?)Timestamp.FromDateTime(gs.TurnStartedAt.Value.ToUniversalTime())
                 : null,
+            ["turnOrder"] = gs.TurnOrder,
         };
         return doc;
     }
@@ -388,6 +389,9 @@ public class FirestoreRoomRepository : IRoomRepository
         gs.TurnStartedAt = doc.TryGetValue("turnStartedAt", out var tsa) && tsa is Timestamp tsats
             ? tsats.ToDateTime().ToUniversalTime()
             : (DateTime?)null;
+
+        if (doc.TryGetValue("turnOrder", out var tor) && tor is IEnumerable<object> torList)
+            gs.TurnOrder = torList.Select(t => t as string ?? string.Empty).Where(s => s.Length > 0).ToList();
 
         if (doc.TryGetValue("pendingAction", out var pa) && pa is Dictionary<string, object> paDict)
         {

@@ -32,6 +32,13 @@ public class GameState
     // draw that advances the turn).
     public DateTime? TurnStartedAt { get; set; }
 
+    // ── Turn order ────────────────────────────────────────────
+    // Frozen memberId list in the order players take their first turn. The
+    // first entry is "thứ 1" (người đi trước), the last entry is "thứ N".
+    // We expose this so the client can show "Bạn sẽ đi thứ X" the moment
+    // a game starts.
+    public List<string> TurnOrder { get; set; } = new();
+
     // ── Cinematic broadcast fields ─────────────────────────────────
     // Set by DrawCardAsync so every viewer can show the bomb-reveal
     // animation in sync. Cleared a few seconds later by the broadcaster

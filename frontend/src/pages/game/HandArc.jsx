@@ -35,7 +35,7 @@ function slotTransform(index, total) {
   };
 }
 
-export function HandArc({ hand, selectedIndex, onSelectCard, onHoverCard }) {
+export function HandArc({ hand, selectedIndex, onSelectCard, onHoverCard, lastDrawnKey }) {
   const [hoveredIdx, setHoveredIdx] = useState(null);
   const total = hand?.length || 0;
   if (total === 0) {
@@ -52,6 +52,10 @@ export function HandArc({ hand, selectedIndex, onSelectCard, onHoverCard }) {
         const { tx, tr, ty } = slotTransform(idx, total);
         const selected = selectedIndex === idx;
         const hovered = hoveredIdx === idx;
+        // Find the index of the freshly-drawn card. We match the LAST
+        // occurrence so re-drawing the same card type still pulses.
+        const isFresh = !!lastDrawnKey && key === lastDrawnKey &&
+          !hand.slice(idx + 1).includes(lastDrawnKey);
         const offset = (idx - (total - 1) / 2) * step;
         const styleVars = {
           left: `calc(50% + ${offset.toFixed(1)}px)`,
@@ -73,6 +77,7 @@ export function HandArc({ hand, selectedIndex, onSelectCard, onHoverCard }) {
               "hand-card",
               selected ? "hand-card--selected" : "",
               hovered ? "hand-card--hovered" : "",
+              isFresh ? "hand-card--fresh" : "",
             ].filter(Boolean).join(" ")}
             style={styleVars}
             onClick={() => onSelectCard?.(idx, key)}

@@ -66,51 +66,48 @@ public static class CardCatalog
     };
 
     /// <summary>
-    /// Build the deck (Fisher-Yates shuffled) for the given player count.
-    ///
-    /// Card counts per player count (Exploding Kittens variant):
-    ///   4 players: 3 bombs (winner is the 1 player who avoids all 3)
-    ///   5 players: 4 bombs (winner is the 1 player who avoids all 4)
-    ///   N players: N-1 bombs (guarantees at least 1 survivor)
-    ///
-    /// For N players the composition is:
-    ///   Bombs        = N - 1
-    ///   Attack      = N
-    ///   Future      = N
-    ///   Defuse      = N + 1  (1 per player at start + 1 leftover in deck)
-    ///   Shuffle     = N - 1
+    /// Build the full set of cards BEFORE dealing and BEFORE inserting bombs.
+    /// Card counts for N players (per the user-confirmed spec):
+    ///   Bombs       = N - 1   (the last survivor dodges all)
+    ///   Future      = N       ("Xem 1 tí")
+    ///   Defuse      = N + 1   (combo defuse variants + 5 base types)
+    ///   Combo N-1 each (robot, zombie, ninja, superman, hải-tặc)  = 5(N-1)
+    ///   Attack      = N       ("Bốc đi")
+    ///   Favor       = N       ("Cho xin")
     ///   Skip        = N - 1
-    ///   Favor       = N
+    ///   Shuffle     = N - 1   ("Xào xáo")
     ///   Nope        = N - 1
-    ///   Combo defuse variants: each = N - 1 (split evenly across 5 types if needed)
     /// </summary>
     public static List<string> BuildDeck(int playerCount)
     {
         if (playerCount < 2) playerCount = 2;
         if (playerCount > 8) playerCount = 8;
 
-        var rng = Random.Shared;
         var deck = new List<string>();
 
-        // Bombs: N - 1 so the last player CAN win if they dodge all.
+        // Bombs separated out — they're inserted AFTER the rest is shuffled
+        // and dealt. BuildDeck returns the deck without bombs; StartGame
+        // takes bombs from here and stashes them aside.
         var bombCount = playerCount - 1;
         for (var i = 0; i < bombCount; i++) deck.Add(Bomb);
 
-        // Core action cards: exactly N copies each.
+        // N copies each.
         AddCopies(deck, Attack, playerCount);
         AddCopies(deck, Favor, playerCount);
         AddCopies(deck, Future, playerCount);
 
-        // Defuse: N + 1 (1 per player for starting hands + 1 extra in deck).
+        // Defuse base card + 5 combo variants = N + 1 total "cứu" cards.
+        // StartGame gives 1 to each player (N dealt) and the 1 leftover
+        // sits in the deck — except for N=4 where the 5th goes to whoever
+        // happens to receive it during the 4-card deal.
         AddCopies(deck, Defuse, playerCount + 1);
 
-        // Cards that appear N - 1 times.
+        // N - 1 copies each for the "consumable" action cards.
         AddCopies(deck, Shuffle, playerCount - 1);
         AddCopies(deck, Skip, playerCount - 1);
         AddCopies(deck, Nope, playerCount - 1);
 
-        // Combo defuse variants (5 types): N - 1 total copies distributed evenly.
-        // These are the cards players USE in combos (2/3/5 same).
+        // Combo defuse variants: N - 1 total distributed across the 5 types.
         var comboCopies = playerCount - 1;
         var comboPerType = comboCopies / ComboDefuses.Count;
         var comboRemainder = comboCopies % ComboDefuses.Count;
@@ -120,12 +117,6 @@ public static class CardCatalog
             AddCopies(deck, ComboDefuses[i], count);
         }
 
-        // Fisher-Yates shuffle.
-        for (var i = deck.Count - 1; i > 0; i--)
-        {
-            var j = rng.Next(i + 1);
-            (deck[i], deck[j]) = (deck[j], deck[i]);
-        }
         return deck;
     }
 

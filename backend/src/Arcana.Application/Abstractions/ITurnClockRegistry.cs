@@ -1,6 +1,16 @@
 namespace Arcana.Application.Abstractions;
 
 /// <summary>
+/// Handles a Nope window that expired without any player chaining a Nope
+/// (or with an even-length chain, where the original action still goes
+/// through). Used by the background <c>NopeTimeoutService</c>.
+/// </summary>
+public interface INopeTimeoutHandler
+{
+    Task HandleAsync(string roomId, CancellationToken ct = default);
+}
+
+/// <summary>
 /// Handles the case where a player lets their turn timer expire. The default
 /// implementation is provided by the API layer; tests can swap in a stub that
 /// records the call without hitting the repository.
@@ -47,3 +57,18 @@ public interface ITurnClockRegistry
 }
 
 public readonly record struct TurnClockEntry(string RoomId, DateTime StartedAtUtc);
+
+/// <summary>
+/// Registry of rooms whose Nope window is currently open. Lets the
+/// <c>NopeTimeoutService</c> background loop auto-resolve a stale window
+/// (commit the action, advance the turn) so a slow or disconnected player
+/// doesn't hang the game forever.
+/// </summary>
+public interface INopeWindowRegistry
+{
+    void Register(string roomId, DateTime createdAtUtc);
+    void Unregister(string roomId);
+    IReadOnlyList<NopeWindowEntry> Snapshot();
+}
+
+public readonly record struct NopeWindowEntry(string RoomId, DateTime CreatedAtUtc);

@@ -30,6 +30,7 @@ builder.Services.AddSwaggerGen(c =>
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<IGameBroadcaster, SignalRGameBroadcaster>();
 builder.Services.AddHostedService<TurnClockService>();
+builder.Services.AddHostedService<NopeTimeoutService>();
 
 builder.Services.AddArcanaInfrastructure(builder.Configuration);
 
