@@ -13,20 +13,19 @@ const BACK_URL = cardImageUrl("back");
 // large so 20-card hands still fit on a phone. Outer cards tilt toward
 // the centre for a fan look.
 function arcStep(total) {
-  if (total <= 5) return 64;
-  if (total <= 8) return 48;
-  if (total <= 12) return 36;
-  if (total <= 16) return 28;
-  return 22;
+  if (total <= 5) return 72;
+  if (total <= 8) return 56;
+  if (total <= 12) return 42;
+  if (total <= 16) return 32;
+  return 26;
 }
 
 function slotTransform(index, total) {
   const t = total <= 1 ? 0.5 : index / (total - 1);
-  // As the hand grows, outer tilt gets gentler so adjacent cards don't crash
-  // into each other.
-  const totalRot = Math.max(8, 28 - (total - 5) * 1.2);
+  // Premium fan: outer tilt gentler so cards spread beautifully.
+  const totalRot = Math.max(10, 32 - (total - 5) * 1.4);
   const rot = (t - 0.5) * totalRot;
-  const lift = Math.sin(t * Math.PI) * Math.min(18, 30 / Math.sqrt(total));
+  const lift = Math.sin(t * Math.PI) * Math.min(28, 38 / Math.sqrt(total));
   const step = arcStep(total);
   const tx = (t - 0.5) * step * (total - 1);
   return {
@@ -59,7 +58,8 @@ export function HandArc({ hand, selectedIndex, onSelectCard, onHoverCard }) {
           "--arc-tx": tx,
           "--arc-tr": tr,
           "--arc-ty": ty,
-          transform: `${tx} ${tr} ${ty}`,
+          "--hover-lift": hovered ? "translateY(-30px)" : ty,
+          transform: hovered ? `${tx} ${tr} ${ty} translateY(-30px) scale(1.1)` : `${tx} ${tr} ${ty}`,
           zIndex: 10 + idx + (hovered ? 1000 : 0),
         };
         const url = cardImageUrl(key);

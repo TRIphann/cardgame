@@ -1,17 +1,27 @@
-// DefuseModal — cinematic Cứu bom! Modal hiển thị với hiệu ứng rung nhẹ,
-// bomb glyph nhịp đập cảnh báo, và sparkles bay ra từ rìa modal. Player chọn
-// slot (0..5) để đặt bom trở lại chồng bài.
+// DefuseModal — premium cinematic "Cứu bom!" Modal.
+// Hiệu ứng nâng cấp toàn diện:
+//   • Bomb glow pulse + screen tint
+//   • 6 slot buttons dạng radial carousel — chọn vị trí đặt bom
+//   • Hover/select glow cường đại cao
+//   • Sparkle bursts liên tục quanh modal
 
 import React, { useEffect, useState } from "react";
 import { FxBurst } from "./FxBurst.jsx";
 import { cardImageUrl } from "@games/exploding-cats/cardCloudinary.js";
 
-const SLOTS = [0, 1, 2, 3, 4, 5];
+const SLOTS = [
+  { idx: 0, label: "Đỉnh", sub: "Rút tiếp", tint: "#ff8a7a" },
+  { idx: 1, label: "", sub: "+1", tint: "#ff8a4a" },
+  { idx: 2, label: "", sub: "+2", tint: "#ffaa5a" },
+  { idx: 3, label: "", sub: "+3", tint: "#ffce7a" },
+  { idx: 4, label: "", sub: "+4", tint: "#ffd86b" },
+  { idx: 5, label: "Đáy", sub: "Sâu nhất", tint: "#ffeaa3" },
+];
 
 export function DefuseModal({ onConfirm, onSkip }) {
-  // Always show slots 0–5. Server clamps the value anyway.
   const [tickKey, setTickKey] = useState(0);
-  // Trigger sparkle bursts periodically (every ~1.4s) on the modal edge.
+  const [selectedSlot, setSelectedSlot] = useState(null);
+
   useEffect(() => {
     const id = setInterval(() => setTickKey((k) => k + 1), 1400);
     return () => clearInterval(id);
@@ -19,12 +29,34 @@ export function DefuseModal({ onConfirm, onSkip }) {
 
   return (
     <div className="game-modal__scrim defuse-scrim">
+      {/* Massive red flash scrim */}
+      <div className="defuse-scrim__danger" aria-hidden="true" />
+
+      {/* Sparkle bursts at modal corners */}
+      {[0, 1].map((corner) => (
+        <FxBurst
+          key={`${corner}-${tickKey}`}
+          anchor={
+            corner === 0
+              ? { x: window.innerWidth / 2 - 240, y: window.innerHeight / 2 - 140 }
+              : { x: window.innerWidth / 2 + 240, y: window.innerHeight / 2 + 140 }
+          }
+          fxKey="bomb"
+          size="md"
+          id={`defuse-tick-${corner}`}
+        />
+      ))}
+
       <div className="game-modal defuse-modal">
+        {/* Bomb icon top of modal with pulsing halo */}
         <div className="defuse-modal__bomb" aria-hidden="true">
+          <div className="defuse-modal__bomb-halo" />
           <img src={cardImageUrl("bomb")} alt="" draggable={false} />
           <span className="defuse-modal__bomb-pulse" />
           <span className="defuse-modal__bomb-pulse defuse-modal__bomb-pulse--late" />
+          <span className="defuse-modal__bomb-pulse defuse-modal__bomb-pulse--late2" />
         </div>
+
         <h3 className="game-modal__title defuse-modal__title">
           <span className="defuse-modal__title-glyph" aria-hidden="true">💣</span>
           Cứu bom!
@@ -32,45 +64,35 @@ export function DefuseModal({ onConfirm, onSkip }) {
         <p className="game-modal__sub">
           Chọn vị trí đặt bom trở lại vào chồng bài (0 = trên cùng, 5 = sâu hơn).
         </p>
+
         <div className="defuse-slots">
           {SLOTS.map((s) => {
-            const usable = true; // server clamps; always show all slots
+            const usable = true; // server clamps
+            const isSelected = selectedSlot === s.idx;
             return (
               <button
-                key={s}
+                key={s.idx}
                 type="button"
-                className={`defuse-slot${usable ? "" : " defuse-slot--disabled"}`}
-                disabled={!usable ? true : undefined}
-                onClick={usable ? () => onConfirm(s) : undefined}
+                className={`defuse-slot${isSelected ? " defuse-slot--selected" : ""}`}
+                onMouseEnter={() => setSelectedSlot(s.idx)}
+                onMouseLeave={() => setSelectedSlot(null)}
+                onClick={usable ? () => onConfirm(s.idx) : undefined}
               >
-                <span className="defuse-slot__num">{s}</span>
-                <span className="defuse-slot__hint">{s === 0 ? "Đỉnh" : s === 5 ? "Đáy" : ""}</span>
+                <span className="defuse-slot__num">{s.idx}</span>
+                <span className="defuse-slot__hint">{s.label || s.sub}</span>
                 <span className="defuse-slot__beam" aria-hidden="true" />
+                <span className="defuse-slot__ring" aria-hidden="true" />
               </button>
             );
           })}
         </div>
+
         <div className="game-modal__actions">
           <button type="button" className="game-action-btn" onClick={onSkip}>
-            Đặt cuối
+            Đặt cuối bộ bài
           </button>
         </div>
       </div>
-
-      {/* Periodic sparkle bursts at random modal corners */}
-      {[0, 1].map((corner) => (
-        <FxBurst
-          key={`${corner}-${tickKey}`}
-          anchor={
-            corner === 0
-              ? { x: window.innerWidth / 2 - 220, y: window.innerHeight / 2 - 120 }
-              : { x: window.innerWidth / 2 + 220, y: window.innerHeight / 2 + 120 }
-          }
-          fxKey="bomb"
-          size="md"
-          id={`defuse-tick-${corner}`}
-        />
-      ))}
     </div>
   );
 }

@@ -917,11 +917,14 @@ export default function GamePage() {
       {concedeConfirm && (
         <div className="game-modal__scrim concede-scrim">
           <div className="game-modal concede-modal">
-            <h3 className="game-modal__title">Xác nhận đầu hàng</h3>
-            <p className="game-modal__sub">
-              Bạn sẽ bị loại khỏi ván chơi. Hành động này không thể hoàn tác.
+            <div className="concede-modal__icon" aria-hidden="true">⚠️</div>
+            <h3 className="concede-modal__title">Xác nhận đầu hàng?</h3>
+            <p className="concede-modal__sub">
+              Bạn sẽ bị loại khỏi ván chơi và trở về trang chính.
+              <br />
+              Hành động này <strong>không thể hoàn tác</strong>.
             </p>
-            <div className="game-modal__actions">
+            <div className="concede-modal__actions">
               <button
                 type="button"
                 className="game-action-btn"

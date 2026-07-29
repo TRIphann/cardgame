@@ -1,24 +1,24 @@
-// FuturePeekModal — hiển thị 3 lá trên cùng bộ bài mà chỉ player này nhìn
-// được. Theo luật Exploding Kittens: future xem trước thì thấy top-3, đặt
-// úp lại theo đúng thứ tự. Thứ tự hiển thị:
-//   trái   = lá player sẽ rút nếu rút ngay (ĐẦU bộ bài, tức TakeLast(3)[2])
-//   giữa   = lá người tiếp theo sẽ rút nếu player BỎ LƯỢT
-//   phải   = lá người 2 lượt sau rút (cuối bộ bài hiện tại)
-// Hệ thống không xáo lại — người chơi tự quyết định Skip/Attack dựa trên
-// thông tin này.
-//
-// Lưu ý quan trọng về thứ tự thẻ: server trả `Deck.TakeLast(3).Reverse()`.
-// `TakeLast(3)` lấy 3 phần tử CUỐI (top of stack). `Reverse()` đảo lại
-// để [0] = lá sẽ rút đầu tiên (trên cùng deck), [1] = lá tiếp theo, [2] = lá
-// cuối trong peek. Đây là thứ tự player RÚT.
+// FuturePeekModal — premium cinematic reveal của 3 lá trên cùng bộ bài mà
+// chỉ player này nhìn được. Cards xuất hiện lần lượt với magical eye reveal
+// sequence. Player thấy được từng lá một với hiệu ứng glow + flip.
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { cardImageUrl } from "@games/exploding-cats/cardCloudinary.js";
 import { getCardLabel } from "./cardLabels.js";
 
 export function FuturePeekModal({ peek, onClose }) {
+  const [revealedCount, setRevealedCount] = useState(0);
+
+  useEffect(() => {
+    if (!peek || peek.length === 0) return;
+    const timers = peek.map((_, idx) =>
+      setTimeout(() => setRevealedCount((c) => Math.max(c, idx + 1)), 400 + idx * 600)
+    );
+    return () => timers.forEach(clearTimeout);
+  }, [peek]);
+
   if (!peek || peek.length === 0) return null;
-  // peek is already in RÚT order: [next, after next, after after next]
+
   const positions = [
     { idx: 0, label: "Rút tiếp",  sub: "Lá bạn sẽ rút nếu rút ngay" },
     { idx: 1, label: "Lượt sau",  sub: "Lá người kế tiếp rút (nếu bạn bỏ)" },
@@ -27,6 +27,12 @@ export function FuturePeekModal({ peek, onClose }) {
 
   return (
     <div className="game-modal__scrim future-peek-scrim" onClick={onClose}>
+      <div className="future-peek-magical-bg" aria-hidden="true">
+        <span className="future-peek-magical-bg__orb future-peek-magical-bg__orb--1" />
+        <span className="future-peek-magical-bg__orb future-peek-magical-bg__orb--2" />
+        <span className="future-peek-magical-bg__orb future-peek-magical-bg__orb--3" />
+      </div>
+
       <div
         className="game-modal future-peek-modal"
         onClick={(e) => e.stopPropagation()}
@@ -51,14 +57,25 @@ export function FuturePeekModal({ peek, onClose }) {
             const key = peek[p.idx];
             if (!key) return null;
             const meta = getCardLabel(key);
+            const revealed = p.idx < revealedCount;
             return (
-              <div key={p.idx} className="future-peek-modal__slot">
-                <div className="future-peek-modal__card">
-                  <img src={cardImageUrl(key)} alt={meta.label} draggable={false} />
-                  <span className="future-peek-modal__card-glow" aria-hidden="true" />
-                  <span className="future-peek-modal__card-position">
-                    {p.idx + 1}
-                  </span>
+              <div
+                key={p.idx}
+                className={`future-peek-modal__slot${revealed ? " future-peek-modal__slot--revealed" : ""}`}
+                style={{ "--reveal-delay": `${p.idx * 0.6}s` }}
+              >
+                <div className="future-peek-modal__card-wrap">
+                  <div className="future-peek-modal__card-back" aria-hidden="true">
+                    <img src={cardImageUrl("back")} alt="" />
+                  </div>
+                  <div className="future-peek-modal__card">
+                    <img src={cardImageUrl(key)} alt={meta.label} draggable={false} />
+                    <span className="future-peek-modal__card-glow" aria-hidden="true" />
+                    <span className="future-peek-modal__card-shine" aria-hidden="true" />
+                    <span className="future-peek-modal__card-position">
+                      {p.idx + 1}
+                    </span>
+                  </div>
                 </div>
                 <div className="future-peek-modal__slot-label">
                   <strong>{p.label}</strong>

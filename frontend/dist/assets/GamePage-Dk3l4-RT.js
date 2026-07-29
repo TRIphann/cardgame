@@ -1,5 +1,5 @@
 import { r as reactExports, j as jsxRuntimeExports } from "./react-BhVOh7S1.js";
-import { r as roomsApi, A as API_BASE_URL, c as cardImageUrl, u as useSession, a as useToast, b as useAudio, R as ROUTES, C as CARD_CLOUDINARY } from "./index-CWe6VjL0.js";
+import { r as roomsApi, A as API_BASE_URL, c as cardImageUrl, u as useSession, a as useToast, b as useAudio, R as ROUTES, C as CARD_CLOUDINARY } from "./index-tyb92DLA.js";
 import { H as HubConnectionBuilder, L as LogLevel } from "./vendor-DcE7maHo.js";
 import { c as useParams, a as useNavigate } from "./router-DRJyKT9H.js";
 import "./react-dom-HPixZcWd.js";
@@ -239,17 +239,17 @@ function FloatingBackdrop() {
 }
 const BACK_URL = cardImageUrl("back");
 function arcStep(total) {
-  if (total <= 5) return 64;
-  if (total <= 8) return 48;
-  if (total <= 12) return 36;
-  if (total <= 16) return 28;
-  return 22;
+  if (total <= 5) return 72;
+  if (total <= 8) return 56;
+  if (total <= 12) return 42;
+  if (total <= 16) return 32;
+  return 26;
 }
 function slotTransform(index, total) {
   const t = total <= 1 ? 0.5 : index / (total - 1);
-  const totalRot = Math.max(8, 28 - (total - 5) * 1.2);
+  const totalRot = Math.max(10, 32 - (total - 5) * 1.4);
   const rot = (t - 0.5) * totalRot;
-  const lift = Math.sin(t * Math.PI) * Math.min(18, 30 / Math.sqrt(total));
+  const lift = Math.sin(t * Math.PI) * Math.min(28, 38 / Math.sqrt(total));
   const step = arcStep(total);
   const tx = (t - 0.5) * step * (total - 1);
   return {
@@ -275,7 +275,8 @@ function HandArc({ hand, selectedIndex, onSelectCard, onHoverCard }) {
       "--arc-tx": tx,
       "--arc-tr": tr,
       "--arc-ty": ty,
-      transform: `${tx} ${tr} ${ty}`,
+      "--hover-lift": hovered ? "translateY(-30px)" : ty,
+      transform: hovered ? `${tx} ${tr} ${ty} translateY(-30px) scale(1.1)` : `${tx} ${tr} ${ty}`,
       zIndex: 10 + idx + (hovered ? 1e3 : 0)
     };
     const url = cardImageUrl(key);
@@ -530,19 +531,19 @@ function CardPickModal({
     }
   ) });
 }
-const PARTICLE_COUNT = 18;
+const PARTICLE_COUNT = 20;
 function seedAngle(i, n) {
   return i / n * Math.PI * 2 + Math.sin(i * 11.3) * 0.18;
 }
 function seedDistance(i) {
-  return 60 + Math.sin(i * 7.7) * 20;
+  return 80 + Math.sin(i * 7.7) * 30;
 }
 function seedSize(i) {
-  return 6 + Math.sin(i * 3.1) * 2.5;
+  return 7 + Math.sin(i * 3.1) * 3;
 }
 function FxBurst({ anchor, fxKey = "general", size = "md", id = "burst" }) {
   const fx = fxFor(fxKey);
-  const count = Math.min(PARTICLE_COUNT, fx.count || 12);
+  const count = Math.min(PARTICLE_COUNT, fx.count || 14);
   const variant = fxKey;
   const seeds = reactExports.useMemo(() => {
     const arr = [];
@@ -553,7 +554,7 @@ function FxBurst({ anchor, fxKey = "general", size = "md", id = "burst" }) {
         dist: seedDistance(i),
         size: seedSize(i),
         delay: Math.random() * 80,
-        dur: 700 + Math.random() * 280,
+        dur: 800 + Math.random() * 320,
         glyph: i % 3 === 0 ? fx.glyph : fx.particle
       });
     }
@@ -562,7 +563,7 @@ function FxBurst({ anchor, fxKey = "general", size = "md", id = "burst" }) {
   if (!anchor) return null;
   const cx = "left" in anchor ? anchor.left + anchor.width / 2 : anchor.x;
   const cy = "top" in anchor ? anchor.top + anchor.height / 2 : anchor.y;
-  const scale = size === "lg" ? 1.6 : size === "sm" ? 0.6 : 1;
+  const scale = size === "lg" ? 1.7 : size === "sm" ? 0.6 : 1;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "div",
     {
@@ -581,10 +582,19 @@ function FxBurst({ anchor, fxKey = "general", size = "md", id = "burst" }) {
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           "span",
           {
+            className: "fx-burst__flash",
+            style: {
+              background: `radial-gradient(circle, ${fx.color} 0%, ${fx.accent} 50%, transparent 80%)`
+            }
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "span",
+          {
             className: "fx-burst__glyph",
             style: {
               color: fx.accent,
-              textShadow: `0 0 18px ${fx.color}, 0 0 32px ${fx.color}`
+              textShadow: `0 0 22px ${fx.color}, 0 0 44px ${fx.color}`
             },
             children: fx.glyph
           }
@@ -594,16 +604,36 @@ function FxBurst({ anchor, fxKey = "general", size = "md", id = "burst" }) {
             "span",
             {
               className: "fx-burst__ring",
-              style: { borderColor: fx.color, boxShadow: `0 0 28px ${fx.color}` }
+              style: {
+                borderColor: fx.color,
+                boxShadow: `0 0 36px ${fx.color}, inset 0 0 24px ${fx.color}40`
+              }
             }
           ),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             "span",
             {
               className: "fx-burst__ring fx-burst__ring--delay",
-              style: { borderColor: fx.accent, boxShadow: `0 0 22px ${fx.accent}` }
+              style: {
+                borderColor: fx.accent,
+                boxShadow: `0 0 28px ${fx.accent}`
+              }
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "span",
+            {
+              className: "fx-burst__ring fx-burst__ring--late",
+              style: {
+                borderColor: fx.color,
+                boxShadow: `0 0 24px ${fx.color}`
+              }
             }
           )
+        ] }),
+        fxKey === "attack" && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "fx-burst__beam fx-burst__beam--h", style: { background: fx.color } }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "fx-burst__beam fx-burst__beam--v", style: { background: fx.accent } })
         ] }),
         seeds.map((p) => /* @__PURE__ */ jsxRuntimeExports.jsx(
           "span",
@@ -611,7 +641,7 @@ function FxBurst({ anchor, fxKey = "general", size = "md", id = "burst" }) {
             className: "fx-burst__particle",
             style: {
               color: p.i % 2 === 0 ? fx.color : fx.accent,
-              textShadow: `0 0 12px ${fx.color}, 0 0 22px ${fx.accent}`,
+              textShadow: `0 0 14px ${fx.color}, 0 0 26px ${fx.accent}`,
               fontSize: `${p.size * 4 * scale}px`,
               "--ang": `${p.angle}rad`,
               "--dist": `${p.dist * scale}px`,
@@ -621,24 +651,57 @@ function FxBurst({ anchor, fxKey = "general", size = "md", id = "burst" }) {
             children: p.glyph
           },
           p.i
+        )),
+        Array.from({ length: 4 }).map((_, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "span",
+          {
+            className: "fx-burst__streak",
+            style: {
+              "--ang": `${i / 4 * Math.PI * 2 + 0.4}rad`,
+              "--dist": `${120 * scale}px`,
+              background: i % 2 === 0 ? fx.color : fx.accent
+            }
+          },
+          `streak-${i}`
         ))
       ]
     }
   );
 }
-const SLOTS = [0, 1, 2, 3, 4, 5];
+const SLOTS = [
+  { idx: 0, label: "Đỉnh", sub: "Rút tiếp", tint: "#ff8a7a" },
+  { idx: 1, label: "", sub: "+1", tint: "#ff8a4a" },
+  { idx: 2, label: "", sub: "+2", tint: "#ffaa5a" },
+  { idx: 3, label: "", sub: "+3", tint: "#ffce7a" },
+  { idx: 4, label: "", sub: "+4", tint: "#ffd86b" },
+  { idx: 5, label: "Đáy", sub: "Sâu nhất", tint: "#ffeaa3" }
+];
 function DefuseModal({ onConfirm, onSkip }) {
   const [tickKey, setTickKey] = reactExports.useState(0);
+  const [selectedSlot, setSelectedSlot] = reactExports.useState(null);
   reactExports.useEffect(() => {
     const id = setInterval(() => setTickKey((k) => k + 1), 1400);
     return () => clearInterval(id);
   }, []);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "game-modal__scrim defuse-scrim", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "defuse-scrim__danger", "aria-hidden": "true" }),
+    [0, 1].map((corner) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+      FxBurst,
+      {
+        anchor: corner === 0 ? { x: window.innerWidth / 2 - 240, y: window.innerHeight / 2 - 140 } : { x: window.innerWidth / 2 + 240, y: window.innerHeight / 2 + 140 },
+        fxKey: "bomb",
+        size: "md",
+        id: `defuse-tick-${corner}`
+      },
+      `${corner}-${tickKey}`
+    )),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "game-modal defuse-modal", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "defuse-modal__bomb", "aria-hidden": "true", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "defuse-modal__bomb-halo" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: cardImageUrl("bomb"), alt: "", draggable: false }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "defuse-modal__bomb-pulse" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "defuse-modal__bomb-pulse defuse-modal__bomb-pulse--late" })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "defuse-modal__bomb-pulse defuse-modal__bomb-pulse--late" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "defuse-modal__bomb-pulse defuse-modal__bomb-pulse--late2" })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "game-modal__title defuse-modal__title", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "defuse-modal__title-glyph", "aria-hidden": "true", children: "💣" }),
@@ -646,84 +709,105 @@ function DefuseModal({ onConfirm, onSkip }) {
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "game-modal__sub", children: "Chọn vị trí đặt bom trở lại vào chồng bài (0 = trên cùng, 5 = sâu hơn)." }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "defuse-slots", children: SLOTS.map((s) => {
+        const isSelected = selectedSlot === s.idx;
         return /* @__PURE__ */ jsxRuntimeExports.jsxs(
           "button",
           {
             type: "button",
-            className: `defuse-slot${""}`,
-            disabled: void 0,
-            onClick: () => onConfirm(s),
+            className: `defuse-slot${isSelected ? " defuse-slot--selected" : ""}`,
+            onMouseEnter: () => setSelectedSlot(s.idx),
+            onMouseLeave: () => setSelectedSlot(null),
+            onClick: () => onConfirm(s.idx),
             children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "defuse-slot__num", children: s }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "defuse-slot__hint", children: s === 0 ? "Đỉnh" : s === 5 ? "Đáy" : "" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "defuse-slot__beam", "aria-hidden": "true" })
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "defuse-slot__num", children: s.idx }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "defuse-slot__hint", children: s.label || s.sub }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "defuse-slot__beam", "aria-hidden": "true" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "defuse-slot__ring", "aria-hidden": "true" })
             ]
           },
-          s
+          s.idx
         );
       }) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-modal__actions", children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "game-action-btn", onClick: onSkip, children: "Đặt cuối" }) })
-    ] }),
-    [0, 1].map((corner) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-      FxBurst,
-      {
-        anchor: corner === 0 ? { x: window.innerWidth / 2 - 220, y: window.innerHeight / 2 - 120 } : { x: window.innerWidth / 2 + 220, y: window.innerHeight / 2 + 120 },
-        fxKey: "bomb",
-        size: "md",
-        id: `defuse-tick-${corner}`
-      },
-      `${corner}-${tickKey}`
-    ))
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-modal__actions", children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "game-action-btn", onClick: onSkip, children: "Đặt cuối bộ bài" }) })
+    ] })
   ] });
 }
 function FuturePeekModal({ peek, onClose }) {
+  const [revealedCount, setRevealedCount] = reactExports.useState(0);
+  reactExports.useEffect(() => {
+    if (!peek || peek.length === 0) return;
+    const timers = peek.map(
+      (_, idx) => setTimeout(() => setRevealedCount((c) => Math.max(c, idx + 1)), 400 + idx * 600)
+    );
+    return () => timers.forEach(clearTimeout);
+  }, [peek]);
   if (!peek || peek.length === 0) return null;
   const positions = [
     { idx: 0, label: "Rút tiếp", sub: "Lá bạn sẽ rút nếu rút ngay" },
     { idx: 1, label: "Lượt sau", sub: "Lá người kế tiếp rút (nếu bạn bỏ)" },
     { idx: 2, label: "2 lượt sau", sub: "Lá người 2 turn sau rút" }
   ];
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-modal__scrim future-peek-scrim", onClick: onClose, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "div",
-    {
-      className: "game-modal future-peek-modal",
-      onClick: (e) => e.stopPropagation(),
-      style: { "--fx-color": "#9a78ff", "--fx-accent": "#cdb9ff" },
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            className: "game-modal__close",
-            type: "button",
-            onClick: onClose,
-            "aria-label": "Đóng",
-            children: "×"
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "future-peek-modal__icon", "aria-hidden": "true", children: "◉" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "game-modal__title", children: "Xem trước 3 lá" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "game-modal__sub", children: "Chỉ bạn mới thấy — đếm từ đầu bộ bài (lá sẽ rút tiếp)." }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "future-peek-modal__row", children: positions.map((p) => {
-          const key = peek[p.idx];
-          if (!key) return null;
-          const meta = getCardLabel(key);
-          return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "future-peek-modal__slot", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "future-peek-modal__card", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: cardImageUrl(key), alt: meta.label, draggable: false }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "future-peek-modal__card-glow", "aria-hidden": "true" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "future-peek-modal__card-position", children: p.idx + 1 })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "future-peek-modal__slot-label", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: p.label }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: p.sub })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "future-peek-modal__slot-key", children: key })
-          ] }, p.idx);
-        }) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-modal__actions", children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "game-action-btn game-action-btn--primary", onClick: onClose, children: "Úp xuống & đặt lại theo thứ tự" }) })
-      ]
-    }
-  ) });
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "game-modal__scrim future-peek-scrim", onClick: onClose, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "future-peek-magical-bg", "aria-hidden": "true", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "future-peek-magical-bg__orb future-peek-magical-bg__orb--1" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "future-peek-magical-bg__orb future-peek-magical-bg__orb--2" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "future-peek-magical-bg__orb future-peek-magical-bg__orb--3" })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        className: "game-modal future-peek-modal",
+        onClick: (e) => e.stopPropagation(),
+        style: { "--fx-color": "#9a78ff", "--fx-accent": "#cdb9ff" },
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              className: "game-modal__close",
+              type: "button",
+              onClick: onClose,
+              "aria-label": "Đóng",
+              children: "×"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "future-peek-modal__icon", "aria-hidden": "true", children: "◉" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "game-modal__title", children: "Xem trước 3 lá" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "game-modal__sub", children: "Chỉ bạn mới thấy — đếm từ đầu bộ bài (lá sẽ rút tiếp)." }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "future-peek-modal__row", children: positions.map((p) => {
+            const key = peek[p.idx];
+            if (!key) return null;
+            const meta = getCardLabel(key);
+            const revealed = p.idx < revealedCount;
+            return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "div",
+              {
+                className: `future-peek-modal__slot${revealed ? " future-peek-modal__slot--revealed" : ""}`,
+                style: { "--reveal-delay": `${p.idx * 0.6}s` },
+                children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "future-peek-modal__card-wrap", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "future-peek-modal__card-back", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: cardImageUrl("back"), alt: "" }) }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "future-peek-modal__card", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: cardImageUrl(key), alt: meta.label, draggable: false }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "future-peek-modal__card-glow", "aria-hidden": "true" }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "future-peek-modal__card-shine", "aria-hidden": "true" }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "future-peek-modal__card-position", children: p.idx + 1 })
+                    ] })
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "future-peek-modal__slot-label", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: p.label }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: p.sub })
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "future-peek-modal__slot-key", children: key })
+                ]
+              },
+              p.idx
+            );
+          }) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-modal__actions", children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "game-action-btn game-action-btn--primary", onClick: onClose, children: "Úp xuống & đặt lại theo thứ tự" }) })
+        ]
+      }
+    )
+  ] });
 }
 const FLIGHT_MS$1 = 850;
 function DrawAnimation({ sourceRect, targetRect, cardKey = "back", revealKey, onComplete }) {
@@ -879,20 +963,20 @@ function PlayCardAnimation({ sourceRect, cardKey, targetRect }) {
   ] });
 }
 const REVEAL_DURATION_MS = 3e3;
-const FLIP_DELAY_MS = 320;
+const FLIP_DELAY_MS = 280;
 function BombReveal({ memberName, memberId, willDefuse, onComplete }) {
   const [phase, setPhase] = reactExports.useState("back");
   const [mounted, setMounted] = reactExports.useState(true);
   reactExports.useEffect(() => {
     const t1 = setTimeout(() => setPhase("flip"), FLIP_DELAY_MS);
-    const t2 = setTimeout(() => setPhase("face"), FLIP_DELAY_MS + 380);
+    const t2 = setTimeout(() => setPhase("face"), FLIP_DELAY_MS + 400);
     const t3 = setTimeout(() => {
       if (willDefuse) {
         setPhase("fadeout");
         const t4 = setTimeout(() => {
           setMounted(false);
           onComplete?.();
-        }, 360);
+        }, 400);
         return () => clearTimeout(t4);
       }
       setPhase("explode");
@@ -907,19 +991,69 @@ function BombReveal({ memberName, memberId, willDefuse, onComplete }) {
   const backUrl = cardImageUrl("back");
   const faceUrl = cardImageUrl("bomb");
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "div",
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `bomb-reveal-scrim bomb-reveal-scrim--${phase}`, "aria-hidden": "true" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-reveal-sparks", "aria-hidden": "true", children: Array.from({ length: 18 }).map((_, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "span",
       {
-        className: `bomb-reveal-scrim bomb-reveal-scrim--${phase}`,
-        "aria-hidden": "true"
-      }
-    ),
+        className: "bomb-reveal-sparks__spark",
+        style: {
+          "--angle": `${i / 18 * 360}deg`,
+          "--dist": `${280 + i % 4 * 80}px`,
+          "--delay": `${(phase === "face" || phase === "hold" ? 0 : 200) + i % 3 * 80}ms`
+        }
+      },
+      `s-${i}`
+    )) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-reveal-rings", "aria-hidden": "true", children: [0, 1, 2, 3, 4, 5].map((i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "span",
+      {
+        className: "bomb-reveal-rings__ring",
+        style: { animationDelay: `${i * 0.4}s` }
+      },
+      i
+    )) }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `bomb-reveal bomb-reveal--${phase}`, children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-reveal__halo", "aria-hidden": "true" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-reveal__aura", "aria-hidden": "true" }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bomb-reveal__inner", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-reveal__face bomb-reveal__face--back", children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: backUrl, alt: "", draggable: false }) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-reveal__face bomb-reveal__face--front", children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: faceUrl, alt: "", draggable: false }) })
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bomb-reveal__face bomb-reveal__face--front", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: faceUrl, alt: "", draggable: false }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "bomb-reveal__pulse-ring", "aria-hidden": "true" })
+        ] })
       ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-reveal__countdown", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("svg", { viewBox: "0 0 100 100", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "circle",
+          {
+            cx: "50",
+            cy: "50",
+            r: "46",
+            fill: "none",
+            stroke: "rgba(255,255,255,0.12)",
+            strokeWidth: "6"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "circle",
+          {
+            cx: "50",
+            cy: "50",
+            r: "46",
+            fill: "none",
+            stroke: "url(#bomb-countdown-grad)",
+            strokeWidth: "6",
+            strokeLinecap: "round",
+            transform: "rotate(-90 50 50)",
+            strokeDasharray: `${2 * Math.PI * 46} ${2 * Math.PI * 46}`,
+            className: "bomb-reveal__countdown-bar"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("defs", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("linearGradient", { id: "bomb-countdown-grad", x1: "0%", y1: "0%", x2: "100%", y2: "100%", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "0%", stopColor: "#ff8a4a" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "100%", stopColor: "#ff3030" })
+        ] }) })
+      ] }) }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bomb-reveal__label", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "bomb-reveal__name", children: memberName || "Bạn" }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "bomb-reveal__text", children: [
@@ -929,11 +1063,6 @@ function BombReveal({ memberName, memberId, willDefuse, onComplete }) {
           phase === "fadeout" && "An toàn — có lá Cứu"
         ] })
       ] })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bomb-reveal-rings", "aria-hidden": "true", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "bomb-reveal-rings__ring" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "bomb-reveal-rings__ring bomb-reveal-rings__ring--delay" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "bomb-reveal-rings__ring bomb-reveal-rings__ring--late" })
     ] })
   ] });
 }
@@ -943,7 +1072,7 @@ function BombExplode({ memberName, onComplete }) {
     const id = setTimeout(() => {
       setMounted(false);
       onComplete?.();
-    }, 2200);
+    }, 2400);
     return () => clearTimeout(id);
   }, [onComplete]);
   if (!mounted) return null;
@@ -954,30 +1083,42 @@ function BombExplode({ memberName, onComplete }) {
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-explode__ring bomb-explode__ring--1" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-explode__ring bomb-explode__ring--2" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-explode__ring bomb-explode__ring--3" }),
-      Array.from({ length: 14 }).map((_, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-explode__flame-ring" }),
+      Array.from({ length: 16 }).map((_, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
         "span",
         {
           className: "bomb-explode__shard",
           style: {
-            "--angle": `${i / 14 * 360}deg`,
-            "--dist": `${280 + i % 3 * 70}px`,
-            "--delay": `${100 + i % 4 * 60}ms`
+            "--angle": `${i / 16 * 360}deg`,
+            "--dist": `${320 + i % 3 * 80}px`,
+            "--delay": `${80 + i % 4 * 50}ms`
           }
         },
         i
       )),
-      Array.from({ length: 24 }).map((_, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+      Array.from({ length: 28 }).map((_, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
         "span",
         {
           className: "bomb-explode__spark",
           style: {
             "--angle": `${i * 17.3 % 360}deg`,
-            "--dist": `${160 + i * 13 % 200}px`,
-            "--delay": `${50 + i % 5 * 40}ms`,
+            "--dist": `${200 + i * 13 % 220}px`,
+            "--delay": `${30 + i % 5 * 30}ms`,
             color: i % 3 === 0 ? "#ffeb6b" : i % 3 === 1 ? "#ff8a4a" : "#ff4242"
           }
         },
         `s-${i}`
+      )),
+      Array.from({ length: 8 }).map((_, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "span",
+        {
+          className: "bomb-explode__puff",
+          style: {
+            "--angle": `${i / 8 * 360}deg`,
+            "--delay": `${120 + i % 4 * 80}ms`
+          }
+        },
+        `p-${i}`
       ))
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bomb-explode-label", children: [
@@ -988,25 +1129,22 @@ function BombExplode({ memberName, onComplete }) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-explode-vignette", "aria-hidden": "true" })
   ] });
 }
-const ENTER_MS = 360;
-const EXIT_MS = 280;
+const ENTER_MS = 420;
+const EXIT_MS = 360;
 function ActionCardReveal({
   cardKey,
   byMemberName,
   isNopeChain,
-  // boolean — true nếu lần này là do Nope chain (label khác)
   chainCount,
-  // nopeChain.length hiện tại
   nopeRemainingMs,
-  // thời gian còn lại của nope window (ms); null khi không có pendingAction
   onComplete
 }) {
   const [phase, setPhase] = reactExports.useState("enter");
   const [mounted, setMounted] = reactExports.useState(true);
-  const [resetKey, setResetKey] = reactExports.useState(0);
   const fx = fxFor(cardKey || "general");
   const safeCardKey = cardKey || "general";
   const url = cardImageUrl(safeCardKey);
+  const meta = getCardLabel(safeCardKey);
   reactExports.useEffect(() => {
     setPhase("enter");
     const t1 = setTimeout(() => setPhase("hold"), ENTER_MS);
@@ -1034,18 +1172,35 @@ function ActionCardReveal({
         style: { "--fx-color": fx.color, "--fx-accent": fx.accent }
       }
     ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        className: `action-reveal__rays action-reveal__rays--${phase}`,
+        "aria-hidden": "true",
+        style: { "--fx-color": fx.color }
+      }
+    ),
     /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "div",
       {
         className: `action-reveal action-reveal--${phase} action-reveal--${safeCardKey}`,
         style: { "--fx-color": fx.color, "--fx-accent": fx.accent },
         children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "action-reveal__pulse-ring", "aria-hidden": "true" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "action-reveal__pulse-ring action-reveal__pulse-ring--2", "aria-hidden": "true" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "action-reveal__glyph", "aria-hidden": "true", children: fx.glyph }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "action-reveal__halo", "aria-hidden": "true" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "action-reveal__card", children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: url, alt: cardKey, draggable: false }) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "action-reveal__beam action-reveal__beam--1", "aria-hidden": "true" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "action-reveal__beam action-reveal__beam--2", "aria-hidden": "true" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "action-reveal__beam action-reveal__beam--3", "aria-hidden": "true" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "action-reveal__card", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: url, alt: meta.label, draggable: false }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "action-reveal__card-shine", "aria-hidden": "true" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "action-reveal__card-glow", "aria-hidden": "true" })
+          ] }),
           nopeRemainingMs != null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "action-reveal__countdown", "aria-hidden": "true", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("svg", { viewBox: "0 0 120 120", className: "action-reveal__countdown-svg", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("defs", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("linearGradient", { id: "ac-grad", x1: "0%", y1: "0%", x2: "100%", y2: "100%", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("svg", { viewBox: "0 0 160 160", className: "action-reveal__countdown-svg", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("defs", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("linearGradient", { id: `ac-grad-${safeCardKey}`, x1: "0%", y1: "0%", x2: "100%", y2: "100%", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "0%", stopColor: fx.color }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "100%", stopColor: fx.accent })
               ] }) }),
@@ -1053,27 +1208,27 @@ function ActionCardReveal({
                 "circle",
                 {
                   className: "action-reveal__countdown-track",
-                  cx: "60",
-                  cy: "60",
-                  r: "52",
+                  cx: "80",
+                  cy: "80",
+                  r: "72",
                   fill: "none",
-                  stroke: "rgba(255,255,255,0.08)",
-                  strokeWidth: "6"
+                  stroke: "rgba(255,255,255,0.1)",
+                  strokeWidth: "8"
                 }
               ),
               /* @__PURE__ */ jsxRuntimeExports.jsx(
                 "circle",
                 {
                   className: "action-reveal__countdown-bar",
-                  cx: "60",
-                  cy: "60",
-                  r: "52",
+                  cx: "80",
+                  cy: "80",
+                  r: "72",
                   fill: "none",
-                  stroke: "url(#ac-grad)",
-                  strokeWidth: "6",
+                  stroke: `url(#ac-grad-${safeCardKey})`,
+                  strokeWidth: "8",
                   strokeLinecap: "round",
-                  transform: "rotate(-90 60 60)",
-                  strokeDasharray: `${2 * Math.PI * 52 * ringPct} ${2 * Math.PI * 52}`
+                  transform: "rotate(-90 80 80)",
+                  strokeDasharray: `${2 * Math.PI * 72 * ringPct} ${2 * Math.PI * 72}`
                 }
               )
             ] }),
@@ -1084,15 +1239,14 @@ function ActionCardReveal({
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "action-reveal__label", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "action-reveal__name", children: byMemberName || (isNopeChain ? "Ai đó" : "Bạn") }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "action-reveal__action", children: isNopeChain ? `${chainCount > 1 ? `lần ${chainCount}` : "vừa"} dùng "Cản"!` : `đã dùng "${cardKey}"` })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "action-reveal__action", children: isNopeChain ? `đã dùng "Cản"${chainCount > 1 ? ` × ${chainCount}` : ""}!` : `đã dùng "${meta.label}"` })
           ] }),
-          chainCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "action-reveal__chain-badge", "aria-hidden": "true", children: [
+          chainCount > 1 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "action-reveal__chain-badge", "aria-hidden": "true", children: [
             "×",
             chainCount
           ] })
         ]
-      },
-      resetKey
+      }
     )
   ] });
 }
@@ -1896,9 +2050,16 @@ function GamePage() {
       }
     ),
     concedeConfirm && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-modal__scrim concede-scrim", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "game-modal concede-modal", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "game-modal__title", children: "Xác nhận đầu hàng" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "game-modal__sub", children: "Bạn sẽ bị loại khỏi ván chơi. Hành động này không thể hoàn tác." }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "game-modal__actions", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "concede-modal__icon", "aria-hidden": "true", children: "⚠️" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "concede-modal__title", children: "Xác nhận đầu hàng?" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "concede-modal__sub", children: [
+        "Bạn sẽ bị loại khỏi ván chơi và trở về trang chính.",
+        /* @__PURE__ */ jsxRuntimeExports.jsx("br", {}),
+        "Hành động này ",
+        /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "không thể hoàn tác" }),
+        "."
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "concede-modal__actions", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           "button",
           {

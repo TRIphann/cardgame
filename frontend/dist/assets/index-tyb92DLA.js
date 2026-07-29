@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/GamePage-DuhzOCbQ.js","assets/react-BhVOh7S1.js","assets/vendor-DcE7maHo.js","assets/router-DRJyKT9H.js","assets/react-dom-HPixZcWd.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/GamePage-Dk3l4-RT.js","assets/react-BhVOh7S1.js","assets/vendor-DcE7maHo.js","assets/router-DRJyKT9H.js","assets/react-dom-HPixZcWd.js"])))=>i.map(i=>d[i]);
 var __defProp = Object.defineProperty;
 var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
 var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
@@ -2372,7 +2372,7 @@ function LobbyPage() {
     roomError && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lobby-error", role: "alert", children: String(roomError.message || roomError) })
   ] });
 }
-const GamePage = reactExports.lazy(() => __vitePreload(() => import("./GamePage-DuhzOCbQ.js"), true ? __vite__mapDeps([0,1,2,3,4]) : void 0));
+const GamePage = reactExports.lazy(() => __vitePreload(() => import("./GamePage-Dk3l4-RT.js"), true ? __vite__mapDeps([0,1,2,3,4]) : void 0));
 function App() {
   const location = useLocation();
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(ErrorBoundary, { children: [

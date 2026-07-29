@@ -199,7 +199,15 @@ public class GameService
             throw new DomainException("action_pending", "Đang chờ phản ứng Nope.");
 
         var hand = gs.Hands.TryGetValue(memberId, out var h) ? h : new List<string>();
-        CardCatalog.ValidateHandCard(hand, cardKey);
+
+        // Special case: Favor phase 2 — player already spent Favor in phase 1
+        // and is now picking which card to take. We skip the hand check.
+        var isFavorPhase2 = cardKey == CardCatalog.Favor
+            && !string.IsNullOrEmpty(targetMemberId)
+            && !string.IsNullOrEmpty(discardPickKey);
+
+        if (!isFavorPhase2)
+            CardCatalog.ValidateHandCard(hand, cardKey);
 
         var result = new GameActionResult();
 
