@@ -264,6 +264,9 @@ public class FirestoreRoomRepository : IRoomRepository
             ["pendingAction"] = gs.PendingAction is null
                 ? null
                 : BuildPendingActionDoc(gs.PendingAction),
+            ["turnStartedAt"] = gs.TurnStartedAt.HasValue
+                ? (object?)Timestamp.FromDateTime(gs.TurnStartedAt.Value.ToUniversalTime())
+                : null,
         };
         return doc;
     }
@@ -381,6 +384,10 @@ public class FirestoreRoomRepository : IRoomRepository
         gs.EndedAt = doc.TryGetValue("endedAt", out var ea) && ea is Timestamp eats ? eats.ToDateTime().ToUniversalTime() : (DateTime?)null;
         gs.WinnerId = doc.TryGetValue("winnerId", out var wi) ? wi as string : null;
         if (string.IsNullOrEmpty(gs.WinnerId)) gs.WinnerId = null;
+
+        gs.TurnStartedAt = doc.TryGetValue("turnStartedAt", out var tsa) && tsa is Timestamp tsats
+            ? tsats.ToDateTime().ToUniversalTime()
+            : (DateTime?)null;
 
         if (doc.TryGetValue("pendingAction", out var pa) && pa is Dictionary<string, object> paDict)
         {

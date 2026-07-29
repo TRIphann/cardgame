@@ -1,4 +1,5 @@
 using Arcana.Api.Hubs;
+using Arcana.Api.HostedServices;
 using Arcana.Api.Middleware;
 using Arcana.Application.Abstractions;
 using Arcana.Infrastructure;
@@ -28,6 +29,7 @@ builder.Services.AddSwaggerGen(c =>
 // ~50ms instead of waiting up to POLL_MS for the next snapshot fetch.
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<IGameBroadcaster, SignalRGameBroadcaster>();
+builder.Services.AddHostedService<TurnClockService>();
 
 builder.Services.AddArcanaInfrastructure(builder.Configuration);
 

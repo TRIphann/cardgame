@@ -619,7 +619,21 @@ export default function GamePage() {
   );
 
   // ── Nope chain ────────────────────────────────────────────
+  // Last time we surfaced the "no Nope card" toast. We debounce so a player
+  // who mashes the button only sees the message once per 1.5s — the user
+  // asked for this so the UI doesn't spam toasts on every click.
+  const lastNoNopeToastRef = useRef(0);
+
   const onNope = useCallback(async () => {
+    const hasNopeCard = (myHand || []).includes("nope");
+    if (!hasNopeCard) {
+      const now = Date.now();
+      if (now - lastNoNopeToastRef.current > 1500) {
+        lastNoNopeToastRef.current = now;
+        toast?.error?.("Bạn không có lá Cản.");
+      }
+      return;
+    }
     try {
       const res = await roomsApi.nope(roomId, myId);
       audio.playSfx?.("cardNope");
@@ -629,17 +643,23 @@ export default function GamePage() {
     } catch (e) {
       toast?.error?.(e.message || "Không thể cản.");
     }
-  }, [audio, emitFx, myId, roomId, toast]);
+  }, [audio, emitFx, myHand, myId, roomId, toast]);
 
   const pendingAction = gs?.pendingAction || null;
   const nopeRemaining = pendingAction
     ? Math.max(0, NOPE_WINDOW_MS - (now - new Date(pendingAction.createdAt).getTime()))
     : 0;
-  const canChainNope =
+  const hasNopeCard = (myHand || []).includes("nope");
+  // Window open = someone just played an action card; everyone can SEE the
+  // 3s countdown. Only members with a Nope card in hand can actually play.
+  const nopeWindowOpen =
     pendingAction &&
     nopeRemaining > 0 &&
-    !pendingAction.nopeChain.includes(myId) &&
-    myHand.includes("nope");
+    !pendingAction.nopeChain.includes(myId);
+  // True when this player can actually click "Cản!".
+  const canChainNope = nopeWindowOpen && hasNopeCard;
+  // True when the button is shown but disabled (no Nope card in hand).
+  const nopeWindowButNoCard = nopeWindowOpen && !hasNopeCard;
 
   // Track the most recent played card on top of the discard pile. We push
   // whenever a new pendingAction appears (= someone just played a card). We
@@ -715,6 +735,19 @@ export default function GamePage() {
   const mm = String(Math.floor(elapsedSec / 60)).padStart(2, "0");
   const ss = String(elapsedSec % 60).padStart(2, "0");
 
+  // Turn timer — how many seconds the current player has left until the
+  // server auto-draws on their behalf. We compute it client-side from the
+  // server-provided turnStartedAt; the server's own clock is the source of
+  // truth but this gives the UI a smooth countdown between snapshots.
+  const turnLimitSec = gs?.turnTimeLimitSec ?? 60;
+  const turnRemainingSec = (() => {
+    if (gameEnded || !gs?.turnStartedAt) return null;
+    const start = new Date(gs.turnStartedAt).getTime();
+    const remaining = turnLimitSec * 1000 - (now - start);
+    if (remaining <= 0) return 0;
+    return Math.ceil(remaining / 1000);
+  })();
+
   return (
     <main className="game-page">
       <FloatingBackdrop />
@@ -729,6 +762,15 @@ export default function GamePage() {
         <span className="game-header__elapsed" aria-label="Thời gian">
           {mm}:{ss}
         </span>
+        {turnRemainingSec !== null && (
+          <span
+            className={`game-header__turn-timer${turnRemainingSec <= 10 ? " game-header__turn-timer--urgent" : ""}`}
+            aria-label="Thời gian lượt"
+            title={`Còn ${turnRemainingSec}s trước khi hệ thống tự động rút bài`}
+          >
+            ⏱ {turnRemainingSec}s
+          </span>
+        )}
         <div className="game-header__actions">
           {!gameEnded && (
             <button
@@ -788,13 +830,16 @@ export default function GamePage() {
                 Rút bài
               </button>
             )}
-            {canChainNope && (
+            {(canChainNope || nopeWindowButNoCard) && (
               <button
                 type="button"
-                className="game-action-btn game-action-btn--nope"
-                onClick={onNope}
+                className={`game-action-btn game-action-btn--nope${canChainNope ? "" : " game-action-btn--nope-disabled"}`}
+                onClick={canChainNope ? onNope : undefined}
+                disabled={!canChainNope}
+                aria-disabled={!canChainNope}
+                title={canChainNope ? "Dùng lá Cản" : "Bạn không có lá Cản"}
               >
-                Cản! ({(nopeRemaining / 1000).toFixed(1)}s)
+                {canChainNope ? "Cản!" : "Cản"} ({(nopeRemaining / 1000).toFixed(1)}s)
               </button>
             )}
             {!isMyTurn && !pendingAction && (

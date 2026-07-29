@@ -154,6 +154,36 @@
   box-shadow: inset 0 0 12px rgba(168, 124, 245, 0.2);
 }
 
+/* Turn timer — countdown until the server auto-draws for the current player.
+   Sits beside the elapsed clock and turns red as it runs low. */
+.game-header__turn-timer {
+  font-family: ui-monospace, monospace;
+  font-size: 18px;
+  font-weight: 700;
+  padding: 8px 14px;
+  background: linear-gradient(135deg, rgba(20, 30, 8, 0.7), rgba(40, 30, 10, 0.7));
+  border-radius: 10px;
+  border: 1px solid rgba(255, 216, 107, 0.4);
+  color: #ffe48a;
+  text-shadow: 0 0 8px rgba(255, 216, 107, 0.5);
+  box-shadow: inset 0 0 12px rgba(255, 216, 107, 0.18);
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  transition: color 200ms ease, border-color 200ms ease, box-shadow 200ms ease;
+}
+.game-header__turn-timer--urgent {
+  color: #ff6b6b;
+  border-color: rgba(255, 107, 107, 0.7);
+  text-shadow: 0 0 10px rgba(255, 107, 107, 0.7);
+  box-shadow: inset 0 0 14px rgba(255, 107, 107, 0.25),
+              0 0 18px rgba(255, 107, 107, 0.25);
+  animation: game-turn-timer-pulse 1s ease-in-out infinite;
+}
+@keyframes game-turn-timer-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.06); }
+}
+
 /* ── Table ──────────────────────────────────────── */
 .game-table {
   position: relative;
@@ -1121,6 +1151,22 @@
   border-color: rgba(255, 100, 100, 0.85);
   animation: nope-pulse 0.8s ease-in-out infinite;
   box-shadow: 0 0 24px rgba(255, 100, 100, 0.55);
+}
+.game-action-btn--nope-disabled,
+.game-action-btn--nope-disabled:hover {
+  /* Window is open but the local viewer doesn't hold a Nope card. Show it
+     so they can SEE the countdown, but make it look unplayable. */
+  background: linear-gradient(135deg, rgba(80, 70, 90, 0.7), rgba(50, 40, 60, 0.85));
+  border-color: rgba(168, 124, 245, 0.3);
+  color: #a59bb8;
+  cursor: not-allowed;
+  animation: nope-disabled-pulse 0.8s ease-in-out infinite;
+  box-shadow: none;
+  text-shadow: none;
+}
+@keyframes nope-disabled-pulse {
+  0%, 100% { opacity: 0.65; }
+  50% { opacity: 0.85; }
 }
 @keyframes nope-pulse {
   0%, 100% { transform: scale(1); box-shadow: 0 0 10px rgba(255,100,100,0.4); }

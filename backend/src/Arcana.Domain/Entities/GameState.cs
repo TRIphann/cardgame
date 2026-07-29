@@ -24,6 +24,14 @@ public class GameState
     // have a 3s window to chain nopes.
     public PendingAction? PendingAction { get; set; }
 
+    // ── Turn timer ────────────────────────────────────────────
+    // When the current player's turn started (UTC). Reset on every turn
+    // advance. If null, the game hasn't started or the game has ended.
+    // Players get TurnTimeLimitSec to act; if they don't, the server
+    // background service auto-draws on their behalf (treated as a normal
+    // draw that advances the turn).
+    public DateTime? TurnStartedAt { get; set; }
+
     // ── Cinematic broadcast fields ─────────────────────────────────
     // Set by DrawCardAsync so every viewer can show the bomb-reveal
     // animation in sync. Cleared a few seconds later by the broadcaster

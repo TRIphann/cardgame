@@ -48,7 +48,11 @@ public record GameStateDto(
     string? LastPlayedCardKey = null,
     string? LastPlayedBy = null,
     string? LastPlayedAt = null,
-    string? LastPlayedByNope = null);
+    string? LastPlayedByNope = null,
+    // Turn timer — when the current player's turn started (UTC ISO-8601)
+    // and how many seconds they have until the server auto-draws.
+    string? TurnStartedAt = null,
+    int TurnTimeLimitSec = 60);
 
 public record PendingActionDto(string InitiatorId, string CardKey, string? TargetMemberId, IReadOnlyList<string> NopeChain, string CreatedAt);
 

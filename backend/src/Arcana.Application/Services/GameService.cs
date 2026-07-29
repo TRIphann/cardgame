@@ -13,11 +13,13 @@ public class GameService
 
     private readonly IRoomRepository _repository;
     private readonly IGameBroadcaster _broadcaster;
+    private readonly ITurnClockRegistry _turnClock;
 
-    public GameService(IRoomRepository repository, IGameBroadcaster broadcaster)
+    public GameService(IRoomRepository repository, IGameBroadcaster broadcaster, ITurnClockRegistry turnClock)
     {
         _repository = repository;
         _broadcaster = broadcaster;
+        _turnClock = turnClock;
     }
 
     // ──────────────────────────────────────────────────────────────────
@@ -120,6 +122,7 @@ public class GameService
         }
 
         state.CurrentTurnMemberId = players[Random.Shared.Next(players.Count)].Id;
+        state.TurnStartedAt = DateTime.UtcNow;
 
         var updated = await _repository.UpdateGameStateAsync(roomId, state, RoomStatus.Playing, ct);
         return updated ?? throw new DomainException("room_not_found", "Phòng không tồn tại.");
@@ -685,6 +688,18 @@ public class GameService
     {
         var status = gs.EndedAt is null ? (RoomStatus?)null : RoomStatus.Finished;
         await _repository.UpdateGameStateAsync(roomId, gs, status, ct);
+        // Turn clock: while the game is live and the nope window is closed,
+        // the current player is on the clock. While PendingAction is set we
+        // leave the entry untouched so a chain-Nope timeout doesn't draw on
+        // behalf of a player whose action is still being decided on.
+        if (gs.EndedAt is not null)
+        {
+            _turnClock.Unregister(roomId);
+        }
+        else if (gs.PendingAction is null && gs.TurnStartedAt is not null)
+        {
+            _turnClock.Register(roomId, gs.TurnStartedAt.Value);
+        }
         // Server-push: every mutation fans out to every tab subscribed to
         // this room. Clients now get sub-100ms updates instead of waiting
         // for the next polling tick.
@@ -748,16 +763,22 @@ public class GameService
         if (gs.AttackCounter > 0)
         {
             gs.AttackCounter -= 1;
+            // Attack plays don't refresh the turn clock — the next "real" turn
+            // is still owed time. The player still has the original window
+            // they started with for the whole attack chain.
             return;
         }
         var currentIdx = aliveIds.IndexOf(gs.CurrentTurnMemberId);
         if (currentIdx < 0)
         {
             gs.CurrentTurnMemberId = aliveIds[0];
-            return;
         }
-        var nextIdx = (currentIdx + 1) % aliveIds.Count;
-        gs.CurrentTurnMemberId = aliveIds[nextIdx];
+        else
+        {
+            var nextIdx = (currentIdx + 1) % aliveIds.Count;
+            gs.CurrentTurnMemberId = aliveIds[nextIdx];
+        }
+        gs.TurnStartedAt = DateTime.UtcNow;
     }
 
     private static void CheckWinCondition(GameState gs)

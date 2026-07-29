@@ -57,6 +57,8 @@ public static class DependencyInjection
 
         services.AddSingleton<ICloudinaryService, CloudinaryService>();
         services.AddSingleton<IInvitationCodeGenerator, InvitationCodeGenerator>();
+        services.AddSingleton<ITurnClockRegistry, InMemoryTurnClockRegistry>();
+        services.AddScoped<ITurnTimeoutHandler, TurnTimeoutHandler>();
         services.AddScoped<IRoomRepository, FirestoreRoomRepository>();
         services.AddScoped<IRoomService, RoomService>();
         services.AddScoped<GameService>();
