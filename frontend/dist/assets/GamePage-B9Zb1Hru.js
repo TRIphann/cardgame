@@ -1,5 +1,5 @@
 import { r as reactExports, j as jsxRuntimeExports } from "./react-BhVOh7S1.js";
-import { r as roomsApi, A as API_BASE_URL, c as cardImageUrl, C as CARD_CLOUDINARY, u as useSession, a as useToast, b as useAudio, R as ROUTES } from "./index-BHF95ZSs.js";
+import { r as roomsApi, A as API_BASE_URL, c as cardImageUrl, u as useSession, a as useToast, b as useAudio, R as ROUTES, C as CARD_CLOUDINARY } from "./index-8rxDvRYa.js";
 import { H as HubConnectionBuilder, L as LogLevel } from "./vendor-DcE7maHo.js";
 import { c as useParams, a as useNavigate } from "./router-DRJyKT9H.js";
 import "./react-dom-HPixZcWd.js";
@@ -422,82 +422,113 @@ function CardActionModal({
     )
   ] });
 }
-function urlFor(key) {
-  return CARD_CLOUDINARY.cards[key] || "";
-}
-function ComboModal({ kind, targetName, handCards, discardPile, onPick, onCancel }) {
-  if (kind === "TwoSame") {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-modal__scrim", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "game-modal", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "game-modal__title", children: [
-        "Lấy 1 lá từ ",
-        targetName
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "game-modal__sub", children: "Mặt bài úp xuống. Bạn chọn 1, các lá còn lại quay về tay đối thủ." }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "combo-grid", children: handCards.map((key, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "button",
-        {
-          type: "button",
-          className: "combo-card combo-card--face-down",
-          onClick: () => onPick(key),
-          "aria-label": `Lá ${i + 1}`,
-          children: "?"
-        },
-        i
-      )) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-modal__actions", children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "game-action-btn", onClick: onCancel, children: "Huỷ" }) })
-    ] }) });
-  }
-  if (kind === "ThreeSame") {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-modal__scrim", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "game-modal", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "game-modal__title", children: [
-        "Chỉ định lá muốn lấy từ ",
-        targetName
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "game-modal__sub", children: "Nếu đối thủ không có lá đó thì hành động không có tác dụng." }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "combo-grid", children: handCards.map((key, i) => {
-        const url = urlFor(key);
-        return /* @__PURE__ */ jsxRuntimeExports.jsx(
+function PlayerPickerModal({
+  title = "Chọn đối thủ",
+  sub,
+  opponents,
+  myId,
+  onPick,
+  onCancel
+}) {
+  const list = (opponents || []).filter((o) => o.alive && o.id !== myId);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-modal__scrim player-pick-scrim", onClick: onCancel, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: "game-modal player-pick-modal",
+      onClick: (e) => e.stopPropagation(),
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
           "button",
           {
+            className: "game-modal__close",
             type: "button",
-            className: "combo-card",
-            onClick: () => onPick(key),
-            children: url ? /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: url, alt: key }) : key
-          },
-          i
-        );
-      }) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-modal__actions", children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "game-action-btn", onClick: onCancel, children: "Bỏ qua" }) })
-    ] }) });
-  }
-  if (kind === "FiveAny") {
-    if (!discardPile || discardPile.length === 0) {
-      return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-modal__scrim", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "game-modal", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "game-modal__title", children: "Chọn 1 lá từ chồng bỏ" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "game-modal__sub", children: "Chồng bỏ trống — không thể dùng combo 5-any." }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-modal__actions", children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "game-action-btn", onClick: onCancel, children: "Đóng" }) })
-      ] }) });
+            onClick: onCancel,
+            "aria-label": "Đóng",
+            children: "×"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "game-modal__title", children: title }),
+        sub && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "game-modal__sub", children: sub }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "player-pick-grid", children: [
+          list.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "game-modal__sub", style: { textAlign: "center" }, children: "Không có đối thủ hợp lệ." }),
+          list.map((o) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "button",
+            {
+              type: "button",
+              className: "player-pick-card",
+              onClick: () => onPick(o.id),
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "player-pick-card__avatar", children: o.name?.[0]?.toUpperCase() || "?" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "player-pick-card__name", children: o.name }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "player-pick-card__meta", children: [
+                  o.handCount || 0,
+                  " lá"
+                ] })
+              ]
+            },
+            o.id
+          ))
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-modal__actions", children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "game-action-btn", onClick: onCancel, children: "Huỷ" }) })
+      ]
     }
-    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-modal__scrim", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "game-modal", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "game-modal__title", children: "Chọn 1 lá từ chồng bỏ" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "game-modal__sub", children: "Lá bạn chọn sẽ về tay bạn." }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "discard-picker", children: discardPile.map((key, i) => {
-        const url = urlFor(key);
-        return /* @__PURE__ */ jsxRuntimeExports.jsx(
+  ) });
+}
+function CardPickModal({
+  title,
+  sub,
+  candidates,
+  onPick,
+  onCancel,
+  fxColor = "#ffd86b",
+  fxAccent = "#a4f2dc"
+}) {
+  if (!candidates) return null;
+  const list = Array.from(new Set(candidates));
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-modal__scrim card-pick-scrim", onClick: onCancel, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: "game-modal card-pick-modal",
+      onClick: (e) => e.stopPropagation(),
+      style: { "--fx-color": fxColor, "--fx-accent": fxAccent },
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
           "button",
           {
+            className: "game-modal__close",
             type: "button",
-            className: "combo-card",
-            onClick: () => onPick(key),
-            children: url ? /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: url, alt: key }) : key
-          },
-          `${i}-${key}`
-        );
-      }) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-modal__actions", children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "game-action-btn", onClick: onCancel, children: "Bỏ qua" }) })
-    ] }) });
-  }
-  return null;
+            onClick: onCancel,
+            "aria-label": "Đóng",
+            children: "×"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "game-modal__title", children: title || "Chọn 1 lá" }),
+        sub && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "game-modal__sub", children: sub }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "card-pick-grid", children: [
+          list.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "game-modal__sub", style: { textAlign: "center" }, children: "Không có lá nào khả dụng." }),
+          list.map((key) => {
+            const meta = getCardLabel(key);
+            return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "button",
+              {
+                type: "button",
+                className: `card-pick-card card-pick-card--${key}`,
+                onClick: () => onPick(key),
+                title: meta.label,
+                children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: cardImageUrl(key), alt: meta.label, draggable: false }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "card-pick-card__glow", "aria-hidden": "true" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "card-pick-card__name", children: meta.label })
+                ]
+              },
+              key
+            );
+          })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-modal__actions", children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "game-action-btn", onClick: onCancel, children: "Huỷ" }) })
+      ]
+    }
+  ) });
 }
 const PARTICLE_COUNT = 18;
 function seedAngle(i, n) {
@@ -646,6 +677,55 @@ function DefuseModal({ deckSize, onConfirm, onSkip }) {
       `${corner}-${tickKey}`
     ))
   ] });
+}
+function FuturePeekModal({ peek, onClose }) {
+  if (!peek || peek.length === 0) return null;
+  const positions = [
+    { idx: 0, label: "Rút tiếp", sub: "Lá bạn sẽ rút nếu rút ngay" },
+    { idx: 1, label: "Lượt sau", sub: "Lá người kế tiếp rút (nếu bạn bỏ)" },
+    { idx: 2, label: "2 lượt sau", sub: "Lá người 2 turn sau rút" }
+  ];
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-modal__scrim future-peek-scrim", onClick: onClose, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: "game-modal future-peek-modal",
+      onClick: (e) => e.stopPropagation(),
+      style: { "--fx-color": "#9a78ff", "--fx-accent": "#cdb9ff" },
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            className: "game-modal__close",
+            type: "button",
+            onClick: onClose,
+            "aria-label": "Đóng",
+            children: "×"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "future-peek-modal__icon", "aria-hidden": "true", children: "◉" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "game-modal__title", children: "Xem trước 3 lá" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "game-modal__sub", children: "Chỉ bạn mới thấy — đếm từ đầu bộ bài (lá sẽ rút tiếp)." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "future-peek-modal__row", children: positions.map((p) => {
+          const key = peek[p.idx];
+          if (!key) return null;
+          const meta = getCardLabel(key);
+          return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "future-peek-modal__slot", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "future-peek-modal__card", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: cardImageUrl(key), alt: meta.label, draggable: false }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "future-peek-modal__card-glow", "aria-hidden": "true" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "future-peek-modal__card-position", children: p.idx + 1 })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "future-peek-modal__slot-label", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: p.label }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: p.sub })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "future-peek-modal__slot-key", children: key })
+          ] }, p.idx);
+        }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-modal__actions", children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "game-action-btn game-action-btn--primary", onClick: onClose, children: "Úp xuống & đặt lại theo thứ tự" }) })
+      ]
+    }
+  ) });
 }
 const FLIGHT_MS$1 = 850;
 function DrawAnimation({ sourceRect, targetRect, cardKey = "back", revealKey, onComplete }) {
@@ -1097,6 +1177,7 @@ function SummaryScreen({ room, gameState, myId, onContinue }) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-modal__actions", style: { justifyContent: "center", marginTop: 24 }, children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "game-action-btn game-action-btn--primary", onClick: onContinue, children: "Về sảnh chờ" }) })
   ] }) });
 }
+const COMBO_KEYS = ["ninja", "superman", "zombie", "robot", "hải-tặc"];
 function readSessionRoomId() {
   try {
     const raw = sessionStorage.getItem("arcana.session.v1");
@@ -1127,8 +1208,8 @@ function GamePage() {
   const [now, setNow] = reactExports.useState(Date.now());
   const [selectedCardIdx, setSelectedCardIdx] = reactExports.useState(null);
   const [actionModal, setActionModal] = reactExports.useState(null);
-  const [pendingTarget, setPendingTarget] = reactExports.useState(null);
-  const [comboModal, setComboModal] = reactExports.useState(null);
+  const [pickModal, setPickModal] = reactExports.useState(null);
+  const [futurePeek, setFuturePeek] = reactExports.useState(null);
   const [defuseModal, setDefuseModal] = reactExports.useState(false);
   const [drawAnim, setDrawAnim] = reactExports.useState(null);
   const [recentDiscards, setRecentDiscards] = reactExports.useState([]);
@@ -1259,6 +1340,18 @@ function GamePage() {
     },
     [isMyTurn, isAlive, gameEnded]
   );
+  const isComboCard = reactExports.useCallback((k) => COMBO_KEYS.includes(k), []);
+  const detectComboFor = reactExports.useCallback(
+    (hand, cardKey) => {
+      const comboCount = (hand || []).filter(isComboCard).length;
+      if (comboCount >= 5) return "FiveAny";
+      const sameCount = (hand || []).filter((c) => c === cardKey).length;
+      if (sameCount >= 3) return "ThreeSame";
+      if (sameCount >= 2) return "TwoSame";
+      return null;
+    },
+    [isComboCard]
+  );
   const onConfirmAction = reactExports.useCallback(async () => {
     if (!actionModal) return;
     const card = actionModal.card;
@@ -1277,6 +1370,45 @@ function GamePage() {
     }
     emitFx(card.key, discardRect, { size: "lg", durationMs: 1500 });
     try {
+      if (isComboCard(card.key)) {
+        const combo = detectComboFor(myHand, card.key);
+        if (!combo) {
+          toast?.error?.("Cần ít nhất 2 lá combo để dùng.");
+          return;
+        }
+        if (combo === "FiveAny") {
+          const res2 = await roomsApi.playCard(roomId, {
+            memberId: myId,
+            cardKey: card.key,
+            comboKind: "FiveAny"
+          });
+          audio.playSfx?.("buttonClick");
+          setRoom(res2.Room);
+          if (res2?.RequiresDiscardPick) {
+            setPickModal({
+              kind: "cardPick",
+              purpose: "FiveAny",
+              cardKey: card.key,
+              title: "Chọn 1 lá từ chồng bỏ",
+              sub: "Các lá đã đánh (trùng nhau chỉ hiện 1 lần).",
+              candidates: res2.FavorCandidates || [],
+              fxColor: "#ffd86b",
+              fxAccent: "#a4f2dc"
+            });
+            return;
+          }
+          if (res2?.Toast) toast?.info?.(res2.Toast);
+          return;
+        }
+        setPickModal({
+          kind: "playerPick",
+          purpose: combo,
+          cardKey: card.key,
+          title: combo === "TwoSame" ? "Combo 2 — Chọn đối thủ" : "Combo 3 — Chọn đối thủ",
+          sub: combo === "TwoSame" ? "Lấy 1 lá ngẫu nhiên từ tay đối thủ." : "Yêu cầu đối thủ đưa 1 lá chỉ định (nếu có)."
+        });
+        return;
+      }
       const res = await roomsApi.playCard(roomId, {
         memberId: myId,
         cardKey: card.key
@@ -1286,12 +1418,24 @@ function GamePage() {
         setActionModal({ card, awaitingTarget: true });
         return;
       }
-      if (res?.RequiresDiscardPick) {
-        const gs2 = res?.Room?.gameState;
-        setComboModal({
-          kind: "FiveAny",
-          discardPile: gs2?.discardPile || []
+      if (res?.RequiresFavorPick) {
+        setPickModal({
+          kind: "cardPick",
+          purpose: "Favor",
+          cardKey: card.key,
+          title: "Chọn 1 lá từ tay đối thủ",
+          sub: "Hệ thống đã xáo các lá trên tay đối thủ — chọn 1.",
+          candidates: res.FavorCandidates || [],
+          fxColor: "#ffd86b",
+          fxAccent: "#ffeaa3"
         });
+        setRoom(res.Room);
+        return;
+      }
+      if (res?.FuturePeek && res.FuturePeek.length > 0) {
+        setRoom(res.Room);
+        setFuturePeek(res.FuturePeek);
+        if (res?.Toast) toast?.info?.(res.Toast);
         return;
       }
       setRoom(res.Room);
@@ -1303,91 +1447,130 @@ function GamePage() {
     } catch (e) {
       toast?.error?.(e.message || "Không thể dùng lá bài.");
     }
-  }, [actionModal, audio, emitFx, myId, roomId, toast]);
-  const onPickTargetForAction = reactExports.useCallback(
+  }, [actionModal, audio, detectComboFor, emitFx, isComboCard, myHand, myId, roomId, toast]);
+  const onPickPlayer = reactExports.useCallback(
     async (targetId) => {
-      const card = actionModal?.card;
-      if (!card) return;
-      setActionModal(null);
-      setSelectedCardIdx(null);
+      const ctx = pickModal;
+      if (!ctx) return;
+      setPickModal(null);
       try {
-        const res = await roomsApi.playCard(roomId, {
-          memberId: myId,
-          cardKey: card.key,
-          targetMemberId: targetId
-        });
-        audio.playSfx?.("buttonClick");
-        if (res?.RequiresTargetPick) {
-          const targetHand = res?.Room?.myHand ? null : null;
-          setComboModal({
-            kind: card.key,
-            // combo card key same as the variant played
-            targetId,
-            targetName: members.find((m) => m.id === targetId)?.name || "?",
-            handCards: null
-            // server doesn't expose; for 3-same we need the list
-          });
-          return;
-        }
-        setRoom(res.Room);
-        if (res?.Toast) toast?.info?.(res.Toast);
-      } catch (e) {
-        toast?.error?.(e.message || "Không thể dùng lá bài.");
-      }
-    },
-    [actionModal, audio, members, myId, roomId, toast]
-  );
-  reactExports.useEffect(() => {
-    if (!comboModal) return;
-  }, [comboModal]);
-  const onPickComboCard = reactExports.useCallback(
-    async (key) => {
-      const modal = comboModal;
-      if (!modal) return;
-      try {
-        const isFiveAny = modal.kind === "FiveAny";
-        const fxKey = isFiveAny ? "5-any" : "combo";
-        emitFx(fxKey, discardRef.current?.getBoundingClientRect?.(), { size: "lg", durationMs: 1500 });
-        if (isFiveAny) {
+        if (ctx.purpose === "TwoSame") {
           const res = await roomsApi.playCard(roomId, {
             memberId: myId,
-            cardKey: "hải-tặc",
-            // any combo card type
-            comboKind: "FiveAny",
+            cardKey: ctx.cardKey,
+            targetMemberId: targetId,
+            comboKind: "TwoSame"
+          });
+          audio.playSfx?.("buttonClick");
+          setRoom(res.Room);
+          if (res?.Toast) toast?.info?.(res.Toast);
+          return;
+        }
+        if (ctx.purpose === "ThreeSame") {
+          const res = await roomsApi.playCard(roomId, {
+            memberId: myId,
+            cardKey: ctx.cardKey,
+            targetMemberId: targetId,
+            comboKind: "ThreeSame"
+          });
+          audio.playSfx?.("buttonClick");
+          setRoom(res.Room);
+          if (res?.RequiresDiscardPick) {
+            setPickModal({
+              kind: "cardPick",
+              purpose: "ThreeSame",
+              cardKey: ctx.cardKey,
+              title: "Combo 3 — Yêu cầu đối thủ đưa lá",
+              sub: "Chọn 1 lá bất kỳ. Nếu đối thủ có lá này bạn sẽ nhận được, nếu không combo vô hiệu.",
+              candidates: res.FavorCandidates || [],
+              fxColor: "#9a78ff",
+              fxAccent: "#cdb9ff",
+              targetId
+            });
+            return;
+          }
+          if (res?.Toast) toast?.info?.(res.Toast);
+          return;
+        }
+        if (ctx.purpose === "Favor") {
+          const res = await roomsApi.playCard(roomId, {
+            memberId: myId,
+            cardKey: ctx.cardKey,
+            targetMemberId: targetId
+          });
+          audio.playSfx?.("buttonClick");
+          setRoom(res.Room);
+          if (res?.RequiresFavorPick) {
+            setPickModal({
+              kind: "cardPick",
+              purpose: "Favor",
+              cardKey: ctx.cardKey,
+              title: "Xin — chọn 1 lá từ tay đối thủ",
+              sub: "Hệ thống đã xáo các lá trên tay đối thủ — chọn 1.",
+              candidates: res.FavorCandidates || [],
+              fxColor: "#ffd86b",
+              fxAccent: "#ffeaa3",
+              targetId
+            });
+            return;
+          }
+          if (res?.Toast) toast?.info?.(res.Toast);
+          return;
+        }
+      } catch (e) {
+        toast?.error?.(e.message || "Thao tác thất bại.");
+      }
+    },
+    [audio, myId, pickModal, roomId, toast]
+  );
+  const onPickCard = reactExports.useCallback(
+    async (key) => {
+      const ctx = pickModal;
+      if (!ctx) return;
+      setPickModal(null);
+      try {
+        if (ctx.purpose === "Favor") {
+          const res = await roomsApi.playCard(roomId, {
+            memberId: myId,
+            cardKey: ctx.cardKey,
+            targetMemberId: ctx.targetId,
             discardPickKey: key
           });
           audio.playSfx?.("buttonClick");
           setRoom(res.Room);
           if (res?.Toast) toast?.info?.(res.Toast);
-        } else if (modal.kind === "ThreeSame") {
+          return;
+        }
+        if (ctx.purpose === "ThreeSame") {
           const res = await roomsApi.playCard(roomId, {
             memberId: myId,
-            cardKey: modal.kind,
-            targetMemberId: modal.targetId,
+            cardKey: ctx.cardKey,
+            targetMemberId: ctx.targetId,
             comboKind: "ThreeSame",
             discardPickKey: key
           });
           audio.playSfx?.("buttonClick");
           setRoom(res.Room);
           if (res?.Toast) toast?.info?.(res.Toast);
-        } else if (modal.kind === "TwoSame") {
+          return;
+        }
+        if (ctx.purpose === "FiveAny") {
           const res = await roomsApi.playCard(roomId, {
             memberId: myId,
-            cardKey: modal.kind,
-            targetMemberId: modal.targetId,
-            comboKind: "TwoSame",
+            cardKey: ctx.cardKey,
+            comboKind: "FiveAny",
             discardPickKey: key
           });
           audio.playSfx?.("buttonClick");
           setRoom(res.Room);
           if (res?.Toast) toast?.info?.(res.Toast);
+          return;
         }
-        setComboModal(null);
       } catch (e) {
         toast?.error?.(e.message || "Combo thất bại.");
       }
     },
-    [comboModal, audio, emitFx, myId, roomId, toast]
+    [audio, myId, pickModal, roomId, toast]
   );
   const onDrawCard = reactExports.useCallback(async () => {
     if (!isMyTurn || !isAlive || gameEnded) return;
@@ -1608,27 +1791,68 @@ function GamePage() {
       }
     ),
     actionModal && actionModal.awaitingTarget && /* @__PURE__ */ jsxRuntimeExports.jsx(
-      CardActionModal,
+      PlayerPickerModal,
       {
-        card: actionModal.card,
-        requiresTarget: true,
-        opponents: members.filter((m) => m.id !== myId).map((m) => ({ ...m, alive: gs?.alive?.[m.id] !== false })),
-        onClose: () => {
+        title: "Xin — chọn đối thủ",
+        sub: "Lấy 1 lá ngẫu nhiên từ tay đối thủ (hệ thống sẽ xáo). ",
+        opponents: members.filter((m) => m.id !== myId).map((m) => ({ ...m, alive: gs?.alive?.[m.id] !== false, handCount: gs?.handCounts?.[m.id] || 0 })),
+        myId,
+        onPick: async (tid) => {
+          setActionModal(null);
+          try {
+            const res = await roomsApi.playCard(roomId, {
+              memberId: myId,
+              cardKey: actionModal.card.key,
+              targetMemberId: tid
+            });
+            audio.playSfx?.("buttonClick");
+            setRoom(res.Room);
+            if (res?.RequiresFavorPick) {
+              setPickModal({
+                kind: "cardPick",
+                purpose: "Favor",
+                cardKey: actionModal.card.key,
+                title: "Xin — chọn 1 lá từ tay đối thủ",
+                sub: "Hệ thống đã xáo các lá trên tay đối thủ — chọn 1.",
+                candidates: res.FavorCandidates || [],
+                fxColor: "#ffd86b",
+                fxAccent: "#ffeaa3",
+                targetId: tid
+              });
+            } else if (res?.Toast) {
+              toast?.info?.(res.Toast);
+            }
+          } catch (e) {
+            toast?.error?.(e.message || "Không thể dùng lá bài.");
+          }
+        },
+        onCancel: () => {
           setActionModal(null);
           setSelectedCardIdx(null);
-        },
-        onPickTarget: onPickTargetForAction
+        }
       }
     ),
-    comboModal && /* @__PURE__ */ jsxRuntimeExports.jsx(
-      ComboModal,
+    pickModal && pickModal.kind === "playerPick" && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      PlayerPickerModal,
       {
-        kind: ["ninja", "superman", "zombie", "robot", "hải-tặc"].includes(comboModal.kind) ? "ThreeSame" : comboModal.kind,
-        targetName: comboModal.targetName,
-        handCards: comboModal.handCards || [],
-        discardPile: comboModal.discardPile || [],
-        onPick: onPickComboCard,
-        onCancel: () => setComboModal(null)
+        title: pickModal.title,
+        sub: pickModal.sub,
+        opponents: members.filter((m) => m.id !== myId).map((m) => ({ ...m, alive: gs?.alive?.[m.id] !== false, handCount: gs?.handCounts?.[m.id] || 0 })),
+        myId,
+        onPick: onPickPlayer,
+        onCancel: () => setPickModal(null)
+      }
+    ),
+    pickModal && pickModal.kind === "cardPick" && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      CardPickModal,
+      {
+        title: pickModal.title,
+        sub: pickModal.sub,
+        candidates: pickModal.candidates,
+        fxColor: pickModal.fxColor,
+        fxAccent: pickModal.fxAccent,
+        onPick: onPickCard,
+        onCancel: () => setPickModal(null)
       }
     ),
     defuseModal && /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -1637,6 +1861,13 @@ function GamePage() {
         deckSize: deckCount,
         onConfirm: onConfirmDefuse,
         onSkip: () => onConfirmDefuse(deckCount)
+      }
+    ),
+    futurePeek && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      FuturePeekModal,
+      {
+        peek: futurePeek,
+        onClose: () => setFuturePeek(null)
       }
     ),
     pendingAction && nopeRemaining > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "nope-react-toast", children: [

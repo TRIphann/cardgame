@@ -63,6 +63,10 @@ public class GameActionResult
     public bool RequiresDiscardPick { get; set; }
     // Set when the player needs to pick a target (2-same combo or Favor).
     public bool RequiresTargetPick { get; set; }
+    // Set when the player needs to pick a card from Favor's revealed hand.
+    public bool RequiresFavorPick { get; set; }
+    // Cards the player can pick from (server-side shuffled target hand).
+    public List<string>? FavorCandidates { get; set; }
     // Set when future card peeked top-3 deck cards (3 cards max).
     public List<string>? FuturePeek { get; set; }
     // Card played this turn (for active-card display).

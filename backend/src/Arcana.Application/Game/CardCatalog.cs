@@ -54,6 +54,18 @@ public static class CardCatalog
     public static bool IsComboDefuse(string key) => ComboDefuses.Contains(key);
 
     /// <summary>
+    /// Cards exposed to the player for "name any card" combos (3-same).
+    /// Excludes bomb + back (back is not a real card; bomb is hidden from
+    /// the public catalogue since nobody "wants" it).
+    /// </summary>
+    public static readonly IReadOnlyList<string> PublicCardKeys = new[]
+    {
+        Attack, Skip, Favor, Future, Shuffle, Nope,
+        "ninja", "superman", "zombie", "robot", "hải-tặc",
+        Defuse,
+    };
+
+    /// <summary>
     /// Build the deck (Fisher-Yates shuffled) for the given player count.
     /// Base of 5 players, then each +/-1 player delta adds or subtracts one
     /// of every action card and a bomb. Defuses are NOT included — they're

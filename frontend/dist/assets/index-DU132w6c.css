@@ -3818,6 +3818,238 @@ body { }
   border-color: rgba(95, 224, 126, 0.95);
 }
 
+/* ── Future peek modal ───────────────────────────────── */
+.future-peek-modal {
+  max-width: 720px;
+  width: 90vw;
+  background: linear-gradient(135deg, rgba(30, 18, 60, 0.96), rgba(15, 8, 40, 0.96));
+  border: 2px solid color-mix(in srgb, var(--fx-color, #9a78ff) 60%, #ffd782 40%);
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, 0.75),
+    0 0 80px color-mix(in srgb, var(--fx-color, #9a78ff) 50%, transparent);
+}
+.future-peek-modal__icon {
+  font-size: 56px;
+  text-align: center;
+  margin-bottom: 4px;
+  color: var(--fx-color);
+  filter: drop-shadow(0 0 18px var(--fx-color));
+  animation: future-peek-icon-pulse 2s ease-in-out infinite;
+}
+@keyframes future-peek-icon-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.85; }
+  50%      { transform: scale(1.15); opacity: 1; }
+}
+.future-peek-modal__row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+  margin-top: 16px;
+  margin-bottom: 14px;
+}
+.future-peek-modal__slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.future-peek-modal__card {
+  position: relative;
+  width: 110px;
+  height: 156px;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.6),
+    0 0 22px color-mix(in srgb, var(--fx-color, #9a78ff) 50%, transparent);
+  border: 2px solid color-mix(in srgb, var(--fx-color, #9a78ff) 70%, white 30%);
+  animation: future-peek-card-enter 360ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.future-peek-modal__card img { width: 100%; height: 100%; object-fit: contain; }
+.future-peek-modal__card-glow {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle, color-mix(in srgb, var(--fx-color, #9a78ff) 35%, transparent), transparent 70%);
+  pointer-events: none;
+  animation: future-peek-card-glow 2.4s ease-in-out infinite;
+}
+@keyframes future-peek-card-enter {
+  0%   { opacity: 0; transform: scale(0.5) rotateY(-180deg); }
+  100% { opacity: 1; transform: scale(1) rotateY(0); }
+}
+@keyframes future-peek-card-glow {
+  0%, 100% { opacity: 0.45; }
+  50%      { opacity: 0.85; }
+}
+.future-peek-modal__card-position {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--fx-color), var(--fx-accent));
+  font-family: "Cinzel", serif;
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+  box-shadow: 0 0 12px var(--fx-color);
+}
+.future-peek-modal__slot-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  text-align: center;
+}
+.future-peek-modal__slot-label strong {
+  font-family: "Cinzel", serif;
+  font-size: 13px;
+  color: var(--fx-accent);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.future-peek-modal__slot-label span {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.6);
+  line-height: 1.3;
+}
+.future-peek-modal__slot-key {
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.65);
+}
+
+/* ── Card pick modal (Favor / Combo3 / Combo5) ────── */
+.card-pick-modal {
+  max-width: 760px;
+  width: 92vw;
+  background: linear-gradient(135deg, rgba(30, 18, 60, 0.96), rgba(15, 8, 40, 0.96));
+  border: 2px solid color-mix(in srgb, var(--fx-color, #ffd86b) 60%, #ffd782 40%);
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, 0.75),
+    0 0 80px color-mix(in srgb, var(--fx-color, #ffd86b) 50%, transparent);
+}
+.card-pick-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 14px;
+  margin: 14px 0 18px;
+  max-height: 50vh;
+  overflow-y: auto;
+  padding: 4px;
+}
+.card-pick-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+.card-pick-card:hover {
+  transform: translateY(-3px) scale(1.04);
+  border-color: var(--fx-color);
+  box-shadow: 0 0 22px color-mix(in srgb, var(--fx-color) 55%, transparent);
+}
+.card-pick-card img {
+  width: 90px;
+  height: 126px;
+  object-fit: contain;
+  border-radius: 6px;
+}
+.card-pick-card__glow {
+  position: absolute;
+  inset: 8px;
+  border-radius: 6px;
+  background: radial-gradient(circle, color-mix(in srgb, var(--fx-color) 35%, transparent), transparent 70%);
+  pointer-events: none;
+  opacity: 0.6;
+  transition: opacity 160ms ease;
+}
+.card-pick-card:hover .card-pick-card__glow { opacity: 1; }
+.card-pick-card__name {
+  font-family: "Cinzel", serif;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  color: var(--fx-accent);
+  text-transform: uppercase;
+}
+
+/* ── Player picker modal ──────────────────────────────── */
+.player-pick-modal {
+  max-width: 640px;
+  width: 90vw;
+  background: linear-gradient(135deg, rgba(30, 18, 60, 0.96), rgba(15, 8, 40, 0.96));
+  border: 2px solid rgba(255, 215, 130, 0.65);
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, 0.75),
+    0 0 70px rgba(255, 215, 130, 0.35);
+}
+.player-pick-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+  margin: 14px 0 18px;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+.player-pick-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+.player-pick-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 215, 130, 0.85);
+  box-shadow: 0 0 22px rgba(255, 215, 130, 0.4);
+}
+.player-pick-card__avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ffd86b, #ff8a7a);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: "Cinzel", serif;
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+.player-pick-card__name {
+  font-family: "Cinzel", serif;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.9);
+}
+.player-pick-card__meta {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
 @media (max-width: 900px) {
   .game-table { grid-template-columns: 1fr; grid-template-rows: auto auto auto; }
   .game-side { flex-direction: row; flex-wrap: wrap; }

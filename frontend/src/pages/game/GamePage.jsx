@@ -20,8 +20,10 @@ import { CARD_LABELS, getCardLabel } from "./cardLabels.js";
 import { FloatingBackdrop } from "./FloatingBackdrop.jsx";
 import { HandArc } from "./HandArc.jsx";
 import { CardActionModal } from "./CardActionModal.jsx";
-import { ComboModal } from "./ComboModal.jsx";
+import { PlayerPickerModal } from "./PlayerPickerModal.jsx";
+import { CardPickModal } from "./CardPickModal.jsx";
 import { DefuseModal } from "./DefuseModal.jsx";
+import { FuturePeekModal } from "./FuturePeekModal.jsx";
 import { DrawAnimation } from "./DrawAnimation.jsx";
 import { PlayCardAnimation } from "./PlayCardAnimation.jsx";
 import { BombReveal, BombExplode } from "./BombReveal.jsx";
@@ -29,6 +31,11 @@ import { ActionCardReveal } from "./ActionCardReveal.jsx";
 import { FxBurst } from "./FxBurst.jsx";
 import { FxScreenShake } from "./FxScreenShake.jsx";
 import { SummaryScreen } from "./SummaryScreen.jsx";
+
+// Combo card keys (server-side "defuse variants").
+const COMBO_KEYS = ["ninja", "superman", "zombie", "robot", "hải-tặc"];
+// Special handling: which cards need a target pick (server will validate).
+const CARDS_REQUIRING_TARGET = new Set(["favor"]);
 
 function readSessionRoomId() {
   try {
@@ -41,9 +48,6 @@ function readSessionRoomId() {
 }
 
 const NOPE_WINDOW_MS = 3000;
-
-// Special handling: which cards need a target pick (server will validate).
-const CARDS_REQUIRING_TARGET = new Set(["favor"]);
 
 function statusToText(s) {
   if (s === "playing") return "Đang chơi";
@@ -71,9 +75,12 @@ export default function GamePage() {
 
   // ── Selection / modal state ────────────────────────────────
   const [selectedCardIdx, setSelectedCardIdx] = useState(null);
-  const [actionModal, setActionModal] = useState(null); // { card }
-  const [pendingTarget, setPendingTarget] = useState(null); // member id
-  const [comboModal, setComboModal] = useState(null); // { kind, targetId, targetName, handCards, discardPile }
+  const [actionModal, setActionModal] = useState(null); // { card, awaitingTarget? }
+  // Generic "next step" modal — phases:
+  //   { kind: "playerPick", card, purpose }  → PlayerPickerModal
+  //   { kind: "cardPick", card, purpose, candidates, color, accent }
+  const [pickModal, setPickModal] = useState(null);
+  const [futurePeek, setFuturePeek] = useState(null); // [key1, key2, key3]
   const [defuseModal, setDefuseModal] = useState(false);
   const [drawAnim, setDrawAnim] = useState(null); // { sourceRect, targetRect, cardKey, viewer, revealKey }
   const [recentDiscards, setRecentDiscards] = useState([]); // [{ key, by }] — last played cards
@@ -246,6 +253,7 @@ export default function GamePage() {
   }, [roomId, session, navigate, toast]);
 
   // ── Card play flow ─────────────────────────────────────────
+  // When user clicks a hand card, open the action modal.
   const onSelectHandCard = useCallback(
     (idx, key) => {
       if (!isMyTurn || !isAlive || gameEnded) return;
@@ -256,6 +264,27 @@ export default function GamePage() {
     [isMyTurn, isAlive, gameEnded],
   );
 
+  // Helper to determine if a card is a combo defuse.
+  const isComboCard = useCallback((k) => COMBO_KEYS.includes(k), []);
+
+  // Helper: detect the highest combo the hand supports. Returns null / 'TwoSame' / 'ThreeSame' / 'FiveAny'.
+  const detectComboFor = useCallback(
+    (hand, cardKey) => {
+      const comboCount = (hand || []).filter(isComboCard).length;
+      if (comboCount >= 5) return "FiveAny";
+      const sameCount = (hand || []).filter((c) => c === cardKey).length;
+      if (sameCount >= 3) return "ThreeSame";
+      if (sameCount >= 2) return "TwoSame";
+      return null;
+    },
+    [isComboCard],
+  );
+
+  // Dispatch a card play. Strategy:
+  //   1) non-combo action → call playCard directly + handle response flags
+  //   2) combo 2/3 (needs target) → open player picker
+  //   3) combo 5 (needs discard key) → call playCard → server returns RequiresDiscardPick
+  //   4) combo 3 (after target chosen) → server returns RequiresDiscardPick → open card picker
   const onConfirmAction = useCallback(async () => {
     if (!actionModal) return;
     const card = actionModal.card;
@@ -279,25 +308,87 @@ export default function GamePage() {
     emitFx(card.key, discardRect, { size: "lg", durationMs: 1500 });
 
     try {
+      // Case A: combo card → detect combo + flow
+      if (isComboCard(card.key)) {
+        const combo = detectComboFor(myHand, card.key);
+        if (!combo) {
+          toast?.error?.("Cần ít nhất 2 lá combo để dùng.");
+          return;
+        }
+        if (combo === "FiveAny") {
+          // 5-any: server returns the discard candidates on RequiresDiscardPick.
+          const res = await roomsApi.playCard(roomId, {
+            memberId: myId,
+            cardKey: card.key,
+            comboKind: "FiveAny",
+          });
+          audio.playSfx?.("buttonClick");
+          setRoom(res.Room);
+          if (res?.RequiresDiscardPick) {
+            setPickModal({
+              kind: "cardPick",
+              purpose: "FiveAny",
+              cardKey: card.key,
+              title: "Chọn 1 lá từ chồng bỏ",
+              sub: "Các lá đã đánh (trùng nhau chỉ hiện 1 lần).",
+              candidates: res.FavorCandidates || [],
+              fxColor: "#ffd86b",
+              fxAccent: "#a4f2dc",
+            });
+            return;
+          }
+          if (res?.Toast) toast?.info?.(res.Toast);
+          return;
+        }
+        // TwoSame or ThreeSame → need to pick target.
+        setPickModal({
+          kind: "playerPick",
+          purpose: combo,
+          cardKey: card.key,
+          title: combo === "TwoSame" ? "Combo 2 — Chọn đối thủ" : "Combo 3 — Chọn đối thủ",
+          sub: combo === "TwoSame"
+            ? "Lấy 1 lá ngẫu nhiên từ tay đối thủ."
+            : "Yêu cầu đối thủ đưa 1 lá chỉ định (nếu có).",
+        });
+        return;
+      }
+
+      // Case B: regular action card.
       const res = await roomsApi.playCard(roomId, {
         memberId: myId,
         cardKey: card.key,
       });
       audio.playSfx?.("buttonClick");
-      // If server says more input is required, open the right modal.
+
       if (res?.RequiresTargetPick) {
+        // Phase 1 for Favor → PlayerPickerModal
         setActionModal({ card, awaitingTarget: true });
         return;
       }
-      if (res?.RequiresDiscardPick) {
-        // discardCardKey missing — surface combo modal in FiveAny mode.
-        const gs2 = res?.Room?.gameState;
-        setComboModal({
-          kind: "FiveAny",
-          discardPile: gs2?.discardPile || [],
+
+      if (res?.RequiresFavorPick) {
+        // Phase 2 for Favor → CardPickModal
+        setPickModal({
+          kind: "cardPick",
+          purpose: "Favor",
+          cardKey: card.key,
+          title: "Chọn 1 lá từ tay đối thủ",
+          sub: "Hệ thống đã xáo các lá trên tay đối thủ — chọn 1.",
+          candidates: res.FavorCandidates || [],
+          fxColor: "#ffd86b",
+          fxAccent: "#ffeaa3",
         });
+        setRoom(res.Room);
         return;
       }
+
+      if (res?.FuturePeek && res.FuturePeek.length > 0) {
+        setRoom(res.Room);
+        setFuturePeek(res.FuturePeek);
+        if (res?.Toast) toast?.info?.(res.Toast);
+        return;
+      }
+
       setRoom(res.Room);
       // Pop the just-played card visually on top of the discard pile so the
       // other players can see what was just dropped.
@@ -309,101 +400,137 @@ export default function GamePage() {
     } catch (e) {
       toast?.error?.(e.message || "Không thể dùng lá bài.");
     }
-  }, [actionModal, audio, emitFx, myId, roomId, toast]);
+  }, [actionModal, audio, detectComboFor, emitFx, isComboCard, myHand, myId, roomId, toast]);
 
-  const onPickTargetForAction = useCallback(
+  // Player picker callback — handles BOTH combo (Two/Three) and Favor.
+  const onPickPlayer = useCallback(
     async (targetId) => {
-      const card = actionModal?.card;
-      if (!card) return;
-      setActionModal(null);
-      setSelectedCardIdx(null);
-      try {
-        const res = await roomsApi.playCard(roomId, {
-          memberId: myId,
-          cardKey: card.key,
-          targetMemberId: targetId,
-        });
-        audio.playSfx?.("buttonClick");
-        // 2-same combo: server will ask for the specific card next.
-        if (res?.RequiresTargetPick) {
-          // Stay on card picking: opponent's hand cards via the combo modal.
-          const targetHand = res?.Room?.myHand ? null : null; // server doesn't expose target hand by default
-          // For 2-same and 3-same the server needs specific card selection.
-          // We send another play-card with comboKind hint.
-          setComboModal({
-            kind: card.key, // combo card key same as the variant played
-            targetId,
-            targetName: members.find((m) => m.id === targetId)?.name || "?",
-            handCards: null, // server doesn't expose; for 3-same we need the list
-          });
-          return;
-        }
-        setRoom(res.Room);
-        if (res?.Toast) toast?.info?.(res.Toast);
-      } catch (e) {
-        toast?.error?.(e.message || "Không thể dùng lá bài.");
-      }
-    },
-    [actionModal, audio, members, myId, roomId, toast],
-  );
+      const ctx = pickModal;
+      if (!ctx) return;
+      setPickModal(null);
 
-  // Refresh hand-targets via snapshot if combo modal needs server data
-  useEffect(() => {
-    if (!comboModal) return;
-    // For 2-same/3-same we don't know target's hand. We have to just ask
-    // the player to remember / use best-effort guess. To make this playable,
-    // we refetch the room and trust the player picks by key name.
-    // A future enhancement: server returns target's hand keys in private
-    // view for the actor only.
-  }, [comboModal]);
-
-  const onPickComboCard = useCallback(
-    async (key) => {
-      const modal = comboModal;
-      if (!modal) return;
       try {
-        const isFiveAny = modal.kind === "FiveAny";
-        const fxKey = isFiveAny ? "5-any" : "combo";
-        emitFx(fxKey, discardRef.current?.getBoundingClientRect?.(), { size: "lg", durationMs: 1500 });
-        if (isFiveAny) {
+        if (ctx.purpose === "TwoSame") {
           const res = await roomsApi.playCard(roomId, {
             memberId: myId,
-            cardKey: "hải-tặc", // any combo card type
-            comboKind: "FiveAny",
+            cardKey: ctx.cardKey,
+            targetMemberId: targetId,
+            comboKind: "TwoSame",
+          });
+          audio.playSfx?.("buttonClick");
+          setRoom(res.Room);
+          if (res?.Toast) toast?.info?.(res.Toast);
+          return;
+        }
+        if (ctx.purpose === "ThreeSame") {
+          // Phase 1: ask server to validate target + return public card list.
+          const res = await roomsApi.playCard(roomId, {
+            memberId: myId,
+            cardKey: ctx.cardKey,
+            targetMemberId: targetId,
+            comboKind: "ThreeSame",
+          });
+          audio.playSfx?.("buttonClick");
+          setRoom(res.Room);
+          if (res?.RequiresDiscardPick) {
+            setPickModal({
+              kind: "cardPick",
+              purpose: "ThreeSame",
+              cardKey: ctx.cardKey,
+              title: "Combo 3 — Yêu cầu đối thủ đưa lá",
+              sub: "Chọn 1 lá bất kỳ. Nếu đối thủ có lá này bạn sẽ nhận được, nếu không combo vô hiệu.",
+              candidates: res.FavorCandidates || [],
+              fxColor: "#9a78ff",
+              fxAccent: "#cdb9ff",
+              targetId,
+            });
+            return;
+          }
+          if (res?.Toast) toast?.info?.(res.Toast);
+          return;
+        }
+        // Favor phase 1 → server shuffles target hand + returns candidates.
+        if (ctx.purpose === "Favor") {
+          const res = await roomsApi.playCard(roomId, {
+            memberId: myId,
+            cardKey: ctx.cardKey,
+            targetMemberId: targetId,
+          });
+          audio.playSfx?.("buttonClick");
+          setRoom(res.Room);
+          if (res?.RequiresFavorPick) {
+            setPickModal({
+              kind: "cardPick",
+              purpose: "Favor",
+              cardKey: ctx.cardKey,
+              title: "Xin — chọn 1 lá từ tay đối thủ",
+              sub: "Hệ thống đã xáo các lá trên tay đối thủ — chọn 1.",
+              candidates: res.FavorCandidates || [],
+              fxColor: "#ffd86b",
+              fxAccent: "#ffeaa3",
+              targetId,
+            });
+            return;
+          }
+          if (res?.Toast) toast?.info?.(res.Toast);
+          return;
+        }
+      } catch (e) {
+        toast?.error?.(e.message || "Thao tác thất bại.");
+      }
+    },
+    [audio, myId, pickModal, roomId, toast],
+  );
+
+  // Card pick callback — final phase (Favor / ThreeSame / FiveAny).
+  const onPickCard = useCallback(
+    async (key) => {
+      const ctx = pickModal;
+      if (!ctx) return;
+      setPickModal(null);
+      try {
+        if (ctx.purpose === "Favor") {
+          const res = await roomsApi.playCard(roomId, {
+            memberId: myId,
+            cardKey: ctx.cardKey,
+            targetMemberId: ctx.targetId,
             discardPickKey: key,
           });
           audio.playSfx?.("buttonClick");
           setRoom(res.Room);
           if (res?.Toast) toast?.info?.(res.Toast);
-        } else if (modal.kind === "ThreeSame") {
+          return;
+        }
+        if (ctx.purpose === "ThreeSame") {
           const res = await roomsApi.playCard(roomId, {
             memberId: myId,
-            cardKey: modal.kind,
-            targetMemberId: modal.targetId,
+            cardKey: ctx.cardKey,
+            targetMemberId: ctx.targetId,
             comboKind: "ThreeSame",
             discardPickKey: key,
           });
           audio.playSfx?.("buttonClick");
           setRoom(res.Room);
           if (res?.Toast) toast?.info?.(res.Toast);
-        } else if (modal.kind === "TwoSame") {
+          return;
+        }
+        if (ctx.purpose === "FiveAny") {
           const res = await roomsApi.playCard(roomId, {
             memberId: myId,
-            cardKey: modal.kind,
-            targetMemberId: modal.targetId,
-            comboKind: "TwoSame",
+            cardKey: ctx.cardKey,
+            comboKind: "FiveAny",
             discardPickKey: key,
           });
           audio.playSfx?.("buttonClick");
           setRoom(res.Room);
           if (res?.Toast) toast?.info?.(res.Toast);
+          return;
         }
-        setComboModal(null);
       } catch (e) {
         toast?.error?.(e.message || "Combo thất bại.");
       }
     },
-    [comboModal, audio, emitFx, myId, roomId, toast],
+    [audio, myId, pickModal, roomId, toast],
   );
 
   // ── Draw card ──────────────────────────────────────────────
@@ -679,24 +806,66 @@ export default function GamePage() {
         />
       )}
       {actionModal && actionModal.awaitingTarget && (
-        <CardActionModal
-          card={actionModal.card}
-          requiresTarget
+        <PlayerPickerModal
+          title="Xin — chọn đối thủ"
+          sub="Lấy 1 lá ngẫu nhiên từ tay đối thủ (hệ thống sẽ xáo). "
           opponents={members
             .filter((m) => m.id !== myId)
-            .map((m) => ({ ...m, alive: gs?.alive?.[m.id] !== false }))}
-          onClose={() => { setActionModal(null); setSelectedCardIdx(null); }}
-          onPickTarget={onPickTargetForAction}
+            .map((m) => ({ ...m, alive: gs?.alive?.[m.id] !== false, handCount: gs?.handCounts?.[m.id] || 0 }))}
+          myId={myId}
+          onPick={async (tid) => {
+            setActionModal(null);
+            try {
+              const res = await roomsApi.playCard(roomId, {
+                memberId: myId,
+                cardKey: actionModal.card.key,
+                targetMemberId: tid,
+              });
+              audio.playSfx?.("buttonClick");
+              setRoom(res.Room);
+              if (res?.RequiresFavorPick) {
+                setPickModal({
+                  kind: "cardPick",
+                  purpose: "Favor",
+                  cardKey: actionModal.card.key,
+                  title: "Xin — chọn 1 lá từ tay đối thủ",
+                  sub: "Hệ thống đã xáo các lá trên tay đối thủ — chọn 1.",
+                  candidates: res.FavorCandidates || [],
+                  fxColor: "#ffd86b",
+                  fxAccent: "#ffeaa3",
+                  targetId: tid,
+                });
+              } else if (res?.Toast) {
+                toast?.info?.(res.Toast);
+              }
+            } catch (e) {
+              toast?.error?.(e.message || "Không thể dùng lá bài.");
+            }
+          }}
+          onCancel={() => { setActionModal(null); setSelectedCardIdx(null); }}
         />
       )}
-      {comboModal && (
-        <ComboModal
-          kind={["ninja", "superman", "zombie", "robot", "hải-tặc"].includes(comboModal.kind) ? "ThreeSame" : comboModal.kind}
-          targetName={comboModal.targetName}
-          handCards={comboModal.handCards || []}
-          discardPile={comboModal.discardPile || []}
-          onPick={onPickComboCard}
-          onCancel={() => setComboModal(null)}
+      {pickModal && pickModal.kind === "playerPick" && (
+        <PlayerPickerModal
+          title={pickModal.title}
+          sub={pickModal.sub}
+          opponents={members
+            .filter((m) => m.id !== myId)
+            .map((m) => ({ ...m, alive: gs?.alive?.[m.id] !== false, handCount: gs?.handCounts?.[m.id] || 0 }))}
+          myId={myId}
+          onPick={onPickPlayer}
+          onCancel={() => setPickModal(null)}
+        />
+      )}
+      {pickModal && pickModal.kind === "cardPick" && (
+        <CardPickModal
+          title={pickModal.title}
+          sub={pickModal.sub}
+          candidates={pickModal.candidates}
+          fxColor={pickModal.fxColor}
+          fxAccent={pickModal.fxAccent}
+          onPick={onPickCard}
+          onCancel={() => setPickModal(null)}
         />
       )}
       {defuseModal && (
@@ -704,6 +873,12 @@ export default function GamePage() {
           deckSize={deckCount}
           onConfirm={onConfirmDefuse}
           onSkip={() => onConfirmDefuse(deckCount)}
+        />
+      )}
+      {futurePeek && (
+        <FuturePeekModal
+          peek={futurePeek}
+          onClose={() => setFuturePeek(null)}
         />
       )}
 

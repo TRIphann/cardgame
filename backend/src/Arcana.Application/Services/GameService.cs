@@ -188,18 +188,41 @@ public class GameService
                 if (!gs.Alive.GetValueOrDefault(targetMemberId))
                     throw new DomainException("target_dead", "Đối thủ đã bị loại.");
 
-                var tgtHand = gs.Hands[targetMemberId];
-                if (tgtHand.Count == 0)
+                var tgtHandF = gs.Hands[targetMemberId];
+                if (tgtHandF.Count == 0)
                     throw new DomainException("target_empty", "Đối thủ không còn lá bài.");
 
+                // Spending the Favor card now (it's committed). Return the
+                // target's shuffled hand so the player picks which one to take.
                 RemoveFromHand(hand, CardCatalog.Favor);
-                var stolenIdx = Random.Shared.Next(tgtHand.Count);
-                var stolen = tgtHand[stolenIdx];
-                tgtHand.RemoveAt(stolenIdx);
-                hand.Add(stolen);
+
+                if (string.IsNullOrEmpty(discardPickKey))
+                {
+                    // Phase 1: server shuffles a snapshot copy for the actor
+                    // to choose from. NOTE: gs.Hands is the source of truth.
+                    var shuffled = new List<string>(tgtHandF);
+                    for (var i = shuffled.Count - 1; i > 0; i--)
+                    {
+                        var j = Random.Shared.Next(i + 1);
+                        (shuffled[i], shuffled[j]) = (shuffled[j], shuffled[i]);
+                    }
+                    // Persist before returning pick state so others see updated handCounts.
+                    await PersistAsync(room.Id, gs, ct);
+                    result.Room = (await _repository.GetByIdAsync(room.Id, ct))!;
+                    result.PlayedCardKey = CardCatalog.Favor;
+                    result.RequiresFavorPick = true;
+                    result.FavorCandidates = shuffled;
+                    result.Toast = "Chọn 1 lá để lấy từ tay đối thủ.";
+                    return result;
+                }
+
+                // Phase 2: player chose which card to take.
+                if (!tgtHandF.Contains(discardPickKey))
+                    throw new DomainException("favor_card_gone", "Đối thủ không còn lá này.");
+                tgtHandF.Remove(discardPickKey);
+                hand.Add(discardPickKey);
                 gs.CardsPlayed[memberId] = gs.CardsPlayed.GetValueOrDefault(memberId) + 1;
                 gs.TurnsTaken[memberId] = gs.TurnsTaken.GetValueOrDefault(memberId) + 1;
-                QueueNopeWindow(gs, memberId, CardCatalog.Favor, targetMemberId);
                 AdvanceTurn(gs);
                 result.PlayedCardKey = CardCatalog.Favor;
                 result.Toast = $"Lấy 1 lá từ đối thủ.";
@@ -275,20 +298,18 @@ public class GameService
                     result.Toast = "Đối thủ không hợp lệ hoặc không còn bài.";
                     return result;
                 }
-                if (string.IsNullOrEmpty(discardPickKey) || !t2.Contains(discardPickKey))
-                {
-                    result.RequiresTargetPick = false; // target already chosen; client picks card
-                    result.Toast = "Chọn 1 lá từ tay đối thủ.";
-                    return result;
-                }
+                // Combo 2-same per spec: SERVER picks 1 random card from target.
+                var stolenIdx = Random.Shared.Next(t2.Count);
+                var stolenKey = t2[stolenIdx];
                 SpendComboFromHand(hand, cardKey, 2);
-                t2.Remove(discardPickKey);
-                hand.Add(discardPickKey);
+                t2.RemoveAt(stolenIdx);
+                hand.Add(stolenKey);
                 gs.CardsPlayed[memberId] = gs.CardsPlayed.GetValueOrDefault(memberId) + 1;
                 gs.TurnsTaken[memberId] = gs.TurnsTaken.GetValueOrDefault(memberId) + 1;
-                QueueNopeWindow(gs, memberId, cardKey, targetMemberId);
+                // Combo 2-same is NOT Nope-able per game rules.
                 AdvanceTurn(gs);
-                result.Toast = "Lấy 1 lá từ tay đối thủ.";
+                result.PlayedCardKey = cardKey;
+                result.Toast = "Lấy 1 lá ngẫu nhiên từ tay đối thủ.";
                 break;
 
             case ComboKind.ThreeSame:
@@ -303,31 +324,45 @@ public class GameService
                     result.Toast = "Đối thủ không hợp lệ.";
                     return result;
                 }
-                if (!t3.Contains(cardKey))
+                // Per spec: show player the FULL cloudinary list (except bomb/back)
+                // and let them pick. If target doesn't have the picked card → combo
+                // fizzles (cards spent, turn advances).
+                if (string.IsNullOrEmpty(discardPickKey))
                 {
-                    // Target doesn't have the requested card → spend cards, advance turn, no-op effect.
-                    SpendComboFromHand(hand, cardKey, 3);
-                    gs.CardsPlayed[memberId] = gs.CardsPlayed.GetValueOrDefault(memberId) + 1;
-                    gs.TurnsTaken[memberId] = gs.TurnsTaken.GetValueOrDefault(memberId) + 1;
-                    QueueNopeWindow(gs, memberId, cardKey, targetMemberId);
-                    AdvanceTurn(gs);
-                    result.Toast = "Đối thủ không có lá bạn muốn.";
-                    break;
+                    // Return ALL non-bomb/non-back card keys for selection.
+                    result.RequiresDiscardPick = true;
+                    result.FavorCandidates = CardCatalog.PublicCardKeys.ToList();
+                    result.Toast = "Chọn 1 lá để yêu cầu đối thủ đưa.";
+                    return result;
                 }
                 SpendComboFromHand(hand, cardKey, 3);
-                t3.Remove(cardKey);
-                hand.Add(cardKey);
+                if (t3.Contains(discardPickKey))
+                {
+                    t3.Remove(discardPickKey);
+                    hand.Add(discardPickKey);
+                    result.Toast = "Đối thủ có lá — lấy về.";
+                }
+                else
+                {
+                    result.Toast = "Đối thủ không có lá này — combo vô hiệu.";
+                }
                 gs.CardsPlayed[memberId] = gs.CardsPlayed.GetValueOrDefault(memberId) + 1;
                 gs.TurnsTaken[memberId] = gs.TurnsTaken.GetValueOrDefault(memberId) + 1;
-                QueueNopeWindow(gs, memberId, cardKey, targetMemberId);
+                // Combo 3-same is NOT Nope-able.
                 AdvanceTurn(gs);
-                result.Toast = "Lấy đúng lá bạn cần.";
+                result.PlayedCardKey = cardKey;
                 break;
 
             case ComboKind.FiveAny:
                 if (string.IsNullOrEmpty(discardPickKey))
                 {
+                    // Return the unique keys in the discard pile (deduped).
                     result.RequiresDiscardPick = true;
+                    result.FavorCandidates = gs.DiscardPile
+                        .Distinct()
+                        .Where(k => k != "bomb" && k != "back")
+                        .ToList();
+                    result.Toast = "Chọn 1 lá đã được đánh để lấy lại.";
                     return result;
                 }
                 if (!gs.DiscardPile.Contains(discardPickKey))
@@ -335,15 +370,14 @@ public class GameService
                     result.Toast = "Lá bài không còn trong chồng bỏ.";
                     return result;
                 }
-                // For 5-any we don't care about specific types — just consume any
-                // 5 combo defuse cards in hand.
                 SpendAnyComboFromHand(hand, 5);
                 gs.DiscardPile.Remove(discardPickKey);
                 hand.Add(discardPickKey);
                 gs.CardsPlayed[memberId] = gs.CardsPlayed.GetValueOrDefault(memberId) + 1;
                 gs.TurnsTaken[memberId] = gs.TurnsTaken.GetValueOrDefault(memberId) + 1;
-                QueueNopeWindow(gs, memberId, "5-any");
+                // Combo 5-any is NOT Nope-able.
                 AdvanceTurn(gs);
+                result.PlayedCardKey = "5-any";
                 result.Toast = "Lấy 1 lá từ chồng bỏ.";
                 break;
         }
@@ -460,6 +494,9 @@ public class GameService
         var gs = room.GameState!;
         var pending = gs.PendingAction
             ?? throw new DomainException("no_pending_action", "Không có hành động nào để Nope.");
+
+        if (pending.InitiatorId == memberId)
+            throw new DomainException("cannot_nope_self", "Bạn không thể cản hành động do chính mình.");
 
         if ((DateTime.UtcNow - pending.CreatedAt).TotalSeconds > NopeWindowSeconds)
         {
