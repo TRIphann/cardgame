@@ -99,7 +99,7 @@ export default function LobbyPage() {
 
   const roomId = session.session?.roomId;
   // Only poll for real room IDs, not pending placeholders
-  const isPending = !roomId || (typeof roomId === "string" && roomId.startsWith("pending-"));
+  const isPending = !roomId || (typeof roomId === "string" && roomId.startsWith("PENDING-"));
   const pollRoomId = isPending ? null : roomId;
   const myPlayerId = session.session?.playerId;
   const { room, error: roomError, refresh } = useRoomPolling(pollRoomId, { memberId: myPlayerId });
@@ -108,8 +108,8 @@ export default function LobbyPage() {
   // Prefer server code, fall back to session code
   const displayCode = room?.code || session.session?.roomCode || "";
   // Real code = 6-character A-Z/0-9 string, NOT a placeholder
-  const isPlaceholderCode = displayCode && (displayCode.startsWith("pending") || displayCode.length !== 6);
-  const hasRealCode = displayCode && displayCode.length === 6 && !displayCode.startsWith("pending");
+  const isPlaceholderCode = displayCode && (displayCode.startsWith("PENDING") || !/^[A-Z0-9]{6}$/.test(displayCode));
+  const hasRealCode = displayCode && displayCode.length === 6 && !isPlaceholderCode;
   // Show code ONLY when the user has clicked the eye-toggle. The code is
   // persistent for the lifetime of this room session — once revealed it stays
   // revealed, but it never auto-reveals.

@@ -24,11 +24,15 @@ export function Seats({ side, members, myId, onPickAvatar, onToggleReady }) {
   const host = all.find((m) => m.isHost) || null;
   const others = all.filter((m) => !m.isHost);
 
+  // Distribute non-host players:
+  //   1 non-host → right side (so 2-player rooms show host left, guest right)
+  //   2+ non-hosts → round-robin fill: [i%2===1 → left, i%2===0 → right]
+  //   This gives: 1 non-host → right, 2 non-hosts → left+right, 3 → left+right+left, etc.
   const leftMembers = [];
   const rightMembers = [];
   for (let i = 0; i < others.length; i += 1) {
-    if (i % 2 === 0) leftMembers.push(others[i]);
-    else rightMembers.push(others[i]);
+    if (i % 2 === 0) rightMembers.push(others[i]);
+    else leftMembers.push(others[i]);
   }
 
   const list =

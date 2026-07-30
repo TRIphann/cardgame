@@ -65,7 +65,14 @@ export function useOptimisticRoom({ onNavigate } = {}) {
 
     pendingPostRef.current = postPromise;
 
-    const raced = await raceWithFallback(postPromise, action === "join" ? FAST_NAV_TIMEOUT_MS : 0);
+    // CREATE: always wait for the real response — the room code must be
+    // shown to the user immediately after the API resolves. No timeout.
+    // JOIN: use the 900ms race so the player isn't staring at a spinner
+    // on Render's cold-start.
+    const raced = await raceWithFallback(postPromise, action === "join" ? FAST_NAV_TIMEOUT_MS : 999_999);
+
+    // Only join triggers the optimistic cold-start path (CREATE never does).
+    const isJoinColdStart = action === "join" && raced.kind === "timeout";
 
     const finalize = (room, member) => {
       // isHost is decided by the *action*, not by inspecting the server's
@@ -103,17 +110,25 @@ export function useOptimisticRoom({ onNavigate } = {}) {
       return { kind: "err", error: raced.error };
     }
 
+    // ── Optimistic path: only for JOIN cold-start ────────────────────
+    if (!isJoinColdStart) {
+      // This should never happen for CREATE since we set timeout = 999_999ms.
+      setError(new Error("Unexpected timeout — please try again."));
+      setBusy(false);
+      return { kind: "err" };
+    }
+
     // Cold-start: navigate immediately, patch session later.
     const fakeRoom = {
-      id: "pending-" + Date.now(),
+      id: "PENDING-" + Date.now(),
       code: placeholderCode(),
-      hostId: "pending",
+      hostId: "PENDING",
       hostName: name,
       status: "waiting",
       maxPlayers: 8,
       currentPlayers: 1,
       createdAt: new Date().toISOString(),
-      members: [{ id: "pending-me", name, isHost: true, joinedAt: new Date().toISOString() }],
+      members: [{ id: "PENDING-me", name, isHost: true, joinedAt: new Date().toISOString() }],
     };
     finalize(fakeRoom, fakeRoom.members[0]);
     setBusy(false);
@@ -125,7 +140,7 @@ export function useOptimisticRoom({ onNavigate } = {}) {
         const me = pickMember(real, action === "create", name);
         if (!real?.id || !me?.id) return;
         const cur = loadSession();
-        if (cur && cur.playerId === "pending-me") {
+        if (cur && cur.playerId === "PENDING-me") {
           saveSession({
             ...cur,
             roomId: real.id,
@@ -138,7 +153,7 @@ export function useOptimisticRoom({ onNavigate } = {}) {
       .catch((err) => {
         console.warn("[arcana] optimistic cold-start POST failed", err);
         const cur = loadSession();
-        if (cur && cur.roomId?.startsWith("pending-")) {
+        if (cur && cur.roomId?.startsWith("PENDING-")) {
           // Roll back to landing so the user sees the error.
           window.location.assign("/");
         }
