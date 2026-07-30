@@ -12,8 +12,8 @@ body { }
   overflow-y: auto;
   position: relative;
   z-index: 1;
-  display: grid;
-  grid-template-rows: auto 1fr auto;
+  display: flex;
+  flex-direction: column;
   gap: 16px;
   padding: 56px 24px 28px;
   background: rgba(7, 8, 26, 0.88);

@@ -496,6 +496,24 @@ export default function GamePage() {
       });
       if (res?.Toast) toast?.info?.(res.Toast);
     } catch (e) {
+      const code = e?.code;
+      // On stale hand/turn, the server is the source of truth. Refresh the
+      // snapshot so the local UI re-syncs with the actual game state. This
+      // prevents users from repeatedly clicking the same card and getting
+      // hammered with HTTP 400s.
+      if (code === "card_not_in_hand" || code === "not_your_turn" || code === "action_pending") {
+        try {
+          const fresh = await roomsApi.snapshotWithViewer(roomId, myId);
+          if (fresh) {
+            setRoom(fresh);
+            // Reopen the modal so the user can pick a still-available card.
+            if (actionModal) {
+              const meta = getCardLabel(actionModal.card.key);
+              setActionModal({ card: { key: actionModal.card.key, ...meta }, handIdx: null });
+            }
+          }
+        } catch (_) { /* swallow — toast below covers the UX */ }
+      }
       toast?.error?.(e.message || "Không thể dùng lá bài.");
     }
     } finally {

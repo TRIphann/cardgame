@@ -94,30 +94,31 @@ public class GameService
         // Step 3: deal 5 cards to each player. The first card we hand them is
         // always a Defuse variant (combo defuse); the next 4 come from the
         // top of the shuffled deck.
+        //
+        // If we run out of combo defuse variants in the deck, fall back to a
+        // freshly rolled one — this guarantees every player gets exactly one
+        // defuse card, even with very small player counts where the spec
+        // distributes fewer combo variants than there are players.
         foreach (var p in players)
         {
             var hand = new List<string>();
 
-            // Hand them a defuse variant from the deck so even their cứu is
-            // a random one of the 5 combo types (and may be a base "defuse"
-            // card if the deck runs out of variants). This way the "1 cứu
-            // per player" rule is satisfied without needing a separate deck
-            // of variants — the variant cards ARE in the main deck.
-            var defuseIdx = state.Deck.IndexOf(CardCatalog.Defuse);
+            string defuseToGive;
+            var comboIdx = -1;
             for (var i = 0; i < state.Deck.Count; i++)
             {
-                if (CardCatalog.IsComboDefuse(state.Deck[i])) { defuseIdx = i; break; }
+                if (CardCatalog.IsComboDefuse(state.Deck[i])) { comboIdx = i; break; }
             }
-            string defuseToGive;
-            if (defuseIdx >= 0)
+            if (comboIdx >= 0)
             {
-                defuseToGive = state.Deck[defuseIdx];
-                state.Deck.RemoveAt(defuseIdx);
+                defuseToGive = state.Deck[comboIdx];
+                state.Deck.RemoveAt(comboIdx);
             }
             else
             {
-                // No defuse variant left in the deck — fall back to a freshly
-                // rolled one (shouldn't normally happen given N+1 copies).
+                // No combo defuse variant left in the deck — fall back to a
+                // freshly rolled one. This keeps "1 cứu per player" intact
+                // even when (playerCount > available combo variants).
                 defuseToGive = CardCatalog.RollDefuseVariant();
             }
             hand.Add(defuseToGive);

@@ -10,18 +10,19 @@
   position: relative;
   /* Use min-height so the page can grow taller than the viewport when the
      browser tab is short (mobile, split-screen, F12 open). Content stays
-     scrollable instead of being clipped. */
+     scrollable instead of being clipped. isolation:isolate creates a new
+     stacking context so layered backgrounds don't bleed into siblings. */
   min-height: 100vh;
   min-height: 100dvh;
   min-height: 100svh;
   overflow-x: hidden;
   overflow-y: auto;
-  display: grid;
-  grid-template-rows: auto 1fr auto;
-  grid-template-columns: 1fr;
+  display: flex;
+  flex-direction: column;
   gap: 14px;
   padding: 14px 14px 18px;
   box-sizing: border-box;
+  isolation: isolate;
   background:
     radial-gradient(ellipse at 20% 10%, rgba(110, 60, 200, 0.28), transparent 60%),
     radial-gradient(ellipse at 85% 90%, rgba(220, 70, 140, 0.22), transparent 65%),
