@@ -358,11 +358,21 @@ export default function LobbyPage() {
     }
   }, [room, session.session, audio, toast, t]);
 
-  const handleLeave = useCallback(() => {
+  const handleLeave = useCallback(async () => {
     audio.playSfx("buttonClick");
+    // Send the leave signal to the server BEFORE navigating away so other
+    // players see this member disappear from the lobby immediately.
+    try {
+      const cur = loadSession();
+      if (cur?.playerId && cur?.roomId && !cur.playerId.startsWith("pending-")) {
+        await roomsApi.leave(cur.roomId, cur.playerId);
+      }
+    } catch (_) {
+      // Best-effort: navigate away even if the leave call fails.
+    }
     session.clear();
     navigate(ROUTES.landing);
-  }, [audio, session, navigate]);
+  }, [audio, navigate, session]);
 
   // Toggle this player's ready state. Only non-host players see a button;
   // we still guard on the server (SetReadyAsync rejects hosts). The host's

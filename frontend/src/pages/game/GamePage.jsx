@@ -634,10 +634,14 @@ export default function GamePage() {
       setConcedeConfirm(false);
       try {
         const res = await roomsApi.concede(roomId, myId);
+        // After conceding the player is dead — navigate away immediately so
+        // they don't see a dead ghost in the game UI.
         toast?.info?.(res?.Toast || "Bạn đã đầu hàng.");
         navigate(ROUTES.landing, { replace: true });
       } catch (e) {
         toast?.error?.(e.message || "Không thể đầu hàng.");
+        // Even on error, navigate away so the player isn't stuck on a dead screen.
+        navigate(ROUTES.landing, { replace: true });
       }
     },
     [myId, navigate, roomId, toast],

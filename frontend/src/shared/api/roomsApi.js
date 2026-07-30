@@ -130,6 +130,12 @@ export const roomsApi = {
       body: JSON.stringify({ memberId, isReady }),
     });
   },
+  leave(roomId, memberId) {
+    return jsonRequest(`/api/rooms/${roomId}/members/${memberId}/leave`, {
+      method: "POST",
+      body: JSON.stringify({ memberId }),
+    });
+  },
   heartbeat(roomId, memberId) {
     // Fire-and-forget on the caller side; we still wrap it in jsonRequest
     // so the abort/timeout logic is reused. The promise resolves with

@@ -21,7 +21,7 @@ public sealed class NopeTimeoutService : BackgroundService
     private const int PollIntervalMs = 500;
 
     /// <summary>Total window length — must mirror GameService's NopeWindowSeconds.</summary>
-    public const int NopeWindowSeconds = 3;
+    public const int NopeWindowSeconds = 5;
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly INopeWindowRegistry _registry;

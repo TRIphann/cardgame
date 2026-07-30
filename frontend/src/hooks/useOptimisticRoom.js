@@ -65,7 +65,7 @@ export function useOptimisticRoom({ onNavigate } = {}) {
 
     pendingPostRef.current = postPromise;
 
-    const raced = await raceWithFallback(postPromise, FAST_NAV_TIMEOUT_MS);
+    const raced = await raceWithFallback(postPromise, action === "join" ? FAST_NAV_TIMEOUT_MS : 0);
 
     const finalize = (room, member) => {
       // isHost is decided by the *action*, not by inspecting the server's
