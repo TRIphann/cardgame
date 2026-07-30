@@ -8,28 +8,26 @@
 
 .game-page {
   position: relative;
-  /* 100dvh = dynamic viewport height that updates as browser chrome
-     appears/disappears (F11 fullscreen, F12 devtools). 100svh = small
-     viewport for mobile browser chrome. Using all three units means the
-     layout fills the available area in every mode. */
-  height: 100vh;
-  height: 100dvh;
-  height: 100svh;
-  overflow: hidden;
+  /* Use min-height so the page can grow taller than the viewport when the
+     browser tab is short (mobile, split-screen, F12 open). Content stays
+     scrollable instead of being clipped. */
+  min-height: 100vh;
+  min-height: 100dvh;
+  min-height: 100svh;
+  overflow-x: hidden;
+  overflow-y: auto;
   display: grid;
   grid-template-rows: auto 1fr auto;
   grid-template-columns: 1fr;
   gap: 14px;
-  padding: 18px 28px 24px;
-  /* Hard ceiling so the page never grows past the actual viewport */
-  max-height: 100dvh;
-  max-height: 100svh;
+  padding: 14px 14px 18px;
   box-sizing: border-box;
   background:
     radial-gradient(ellipse at 20% 10%, rgba(110, 60, 200, 0.28), transparent 60%),
     radial-gradient(ellipse at 85% 90%, rgba(220, 70, 140, 0.22), transparent 65%),
     radial-gradient(ellipse at 50% 50%, rgba(40, 30, 90, 0.4), transparent 80%),
     linear-gradient(180deg, #0a0820 0%, #060314 100%);
+  background-attachment: fixed;
   backdrop-filter: blur(8px);
   color: rgba(230, 215, 255, 0.95);
   font-family: "DM Sans", system-ui, sans-serif;
@@ -100,6 +98,8 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
   padding: 10px 18px;
   background:
     linear-gradient(140deg, rgba(50, 30, 100, 0.55), rgba(20, 12, 52, 0.65));
@@ -111,6 +111,7 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
   position: relative;
   z-index: 5;
+  min-width: 0;
 }
 .game-header::before {
   content: "";
@@ -283,10 +284,6 @@
   gap: 18px;
   align-items: stretch;
   min-height: 0;
-  /* Never exceed the grid container's computed height */
-  max-height: 100%;
-  overflow: hidden;
-  /* Hard cap on width so the grid never overflows the viewport */
   min-width: 0;
   width: 100%;
   box-sizing: border-box;
@@ -318,9 +315,8 @@
   justify-content: center;
   gap: 28px;
   padding: 24px 0 36px;
-  /* Constrain height so the hand-arc at the bottom always has room */
-  max-height: 100%;
-  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
 }
 
 /* ── Discard pile wrap + glow aura ──────────────── */

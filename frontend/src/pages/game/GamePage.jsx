@@ -370,6 +370,18 @@ export default function GamePage() {
     setActionModal(null);
     setSelectedCardIdx(null);
 
+    // Safety: bail out if the local hand snapshot doesn't actually contain
+    // the card we just selected. This guards against a stale render where
+    // the server has already removed the card (e.g. another player's play
+    // raced ahead of the snapshot). Without this we'd POST to /play-card
+    // and get HTTP 400 "card_not_in_hand".
+    const localHand = (room?.myHand && Array.isArray(room.myHand)) ? room.myHand : [];
+    if (!isComboCard(card.key) && !localHand.includes(card.key)) {
+      actionInFlightRef.current = false;
+      toast?.error?.("Bạn không còn lá này trên tay.");
+      return;
+    }
+
     // Capture source position for the "card flew out of hand to discard"
     // animation. We pick the bottom of the player seat so the card visually
     // travels upward to the table centre.
@@ -500,6 +512,7 @@ export default function GamePage() {
 
       try {
         if (ctx.purpose === "TwoSame") {
+          // Phase 1 returned the shuffled hand for the actor to pick from.
           const res = await roomsApi.playCard(roomId, {
             memberId: myId,
             cardKey: ctx.cardKey,
@@ -508,6 +521,20 @@ export default function GamePage() {
           });
           audio.playSfx?.("buttonClick");
           setRoom(res.Room);
+          if (res?.RequiresFavorPick) {
+            setPickModal({
+              kind: "cardPick",
+              purpose: "TwoSame",
+              cardKey: ctx.cardKey,
+              title: "Combo 2 — Chọn 1 lá từ tay đối thủ",
+              sub: "Hệ thống đã xáo các lá trên tay đối thủ — chọn 1.",
+              candidates: res.FavorCandidates || [],
+              fxColor: "#9a78ff",
+              fxAccent: "#cdb9ff",
+              targetId,
+            });
+            return;
+          }
           if (res?.Toast) toast?.info?.(res.Toast);
           return;
         }
@@ -578,6 +605,19 @@ export default function GamePage() {
       if (!ctx) return;
       setPickModal(null);
       try {
+        if (ctx.purpose === "TwoSame") {
+          const res = await roomsApi.playCard(roomId, {
+            memberId: myId,
+            cardKey: ctx.cardKey,
+            targetMemberId: ctx.targetId,
+            comboKind: "TwoSame",
+            discardPickKey: key,
+          });
+          audio.playSfx?.("buttonClick");
+          setRoom(res.Room);
+          if (res?.Toast) toast?.info?.(res.Toast);
+          return;
+        }
         if (ctx.purpose === "Favor") {
           const res = await roomsApi.playCard(roomId, {
             memberId: myId,

@@ -798,6 +798,15 @@ public class GameService
         // Advance the turn so the initiator's turn actually ends and the
         // next player is on the clock.
         AdvanceTurn(gs);
+        // AdvanceTurn only resets TurnStartedAt when the attack chain isn't
+        // active. For plain Skip / Favor / Future / Shuffle / etc. it does,
+        // but for Attack + Skip chains the prior turn's TurnStartedAt is
+        // intentionally preserved. In every case we want the *current*
+        // player on a fresh 60s clock, so explicitly arm it here.
+        if (gs.EndedAt is null && gs.TurnStartedAt is not null)
+        {
+            gs.TurnStartedAt = DateTime.UtcNow;
+        }
         CheckWinCondition(gs);
         await PersistAsync(roomId, gs, ct);
         return new GameActionResult
