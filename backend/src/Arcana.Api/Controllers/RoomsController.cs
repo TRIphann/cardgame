@@ -278,7 +278,8 @@ public class RoomsController : ControllerBase
             gs.LastPlayedByNope,
             gs.TurnStartedAt?.ToString("O"),
             60,
-            gs.TurnOrder?.ToList() ?? new List<string>());
+            gs.TurnOrder?.ToList() ?? new List<string>(),
+            gs.FuturePeek?.ToList() ?? new List<string>());
     }
 
     private static RoomMemberDto MapMemberDto(RoomMember m) => new(

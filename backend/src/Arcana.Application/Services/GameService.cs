@@ -148,12 +148,19 @@ public class GameService
         state.TurnStartedAt = DateTime.UtcNow;
         // Turn order: shuffle a copy of the players list once. This is the
         // order we surface to clients ("Bạn sẽ đi thứ X").
+        // IMPORTANT: we shuffle BEFORE picking the first player so that
+        // CurrentTurnMemberId and TurnOrder[0] are always the same person.
+        // Previously the code picked CurrentTurnMemberId first (from the
+        // unshuffled list) then shuffled independently, causing the UI to
+        // show "thứ 1" for a different player than the one who actually
+        // goes first.
         state.TurnOrder = players.Select(p => p.Id).ToList();
         for (var i = state.TurnOrder.Count - 1; i > 0; i--)
         {
             var j = Random.Shared.Next(i + 1);
             (state.TurnOrder[i], state.TurnOrder[j]) = (state.TurnOrder[j], state.TurnOrder[i]);
         }
+        state.CurrentTurnMemberId = state.TurnOrder[0];
 
         var updated = await _repository.UpdateGameStateAsync(roomId, state, RoomStatus.Playing, ct);
         return updated ?? throw new DomainException("room_not_found", "Phòng không tồn tại.");
@@ -327,7 +334,8 @@ public class GameService
                 RemoveFromHand(hand, CardCatalog.Future);
                 gs.DiscardPile.Add(CardCatalog.Future);
                 gs.CardsPlayed[memberId] = gs.CardsPlayed.GetValueOrDefault(memberId) + 1;
-                result.FuturePeek = gs.Deck.TakeLast(3).Reverse().ToList();
+                gs.FuturePeek = gs.Deck.TakeLast(3).Reverse().ToList();
+                result.FuturePeek = gs.FuturePeek;
                 QueueNopeWindow(gs, memberId, CardCatalog.Future);
                 result.PlayedCardKey = CardCatalog.Future;
                 result.Toast = $"Xem trước 3 lá.";
@@ -872,6 +880,9 @@ public class GameService
             gs.CurrentTurnMemberId = aliveIds[nextIdx];
         }
         gs.TurnStartedAt = DateTime.UtcNow;
+        // Clear the FuturePeek visual field so stale peek results don't linger
+        // across turn boundaries.
+        gs.FuturePeek = null;
     }
 
     private static void CheckWinCondition(GameState gs)
@@ -888,6 +899,12 @@ public class GameService
             // leave WinnerId null so the UI can show "no winner" instead of
             // crowning the last player who just gave up.
             gs.EndedAt = DateTime.UtcNow;
+        }
+        // Wipe stale cinematic/peek state on game end so reconnecting players
+        // don't see leftover overlays.
+        if (gs.EndedAt is not null)
+        {
+            gs.FuturePeek = null;
         }
     }
 }

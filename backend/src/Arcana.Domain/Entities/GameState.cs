@@ -50,6 +50,11 @@ public class GameState
     // exploded or defused). Drives a 3s cinematic for everyone in the room.
     public bool BombRevealActive { get; set; } = false;
 
+    // ── Future-peek field (persisted so SignalR re-fetch survives) ──
+    // Set when a player plays the Future card; survives the SignalR snapshot
+    // re-fetch so the FuturePeekModal can render correctly on reconnection.
+    public List<string>? FuturePeek { get; set; }
+
     // ── Action-card cinematic fields ────────────────────────
     // Most recent action / nope card that should appear centre-screen for
     // everyone. Reset each time someone chains a Nope. Cleared when the

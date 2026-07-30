@@ -54,7 +54,10 @@ public record GameStateDto(
     string? TurnStartedAt = null,
     int TurnTimeLimitSec = 60,
     // Frozen turn order for the current game. Index 0 = first player.
-    IReadOnlyList<string>? TurnOrder = null);
+    IReadOnlyList<string>? TurnOrder = null,
+    // Persisted FuturePeek — survives SignalR snapshot re-fetch so the modal
+    // can re-render correctly when players reconnect.
+    IReadOnlyList<string>? FuturePeek = null);
 
 public record PendingActionDto(string InitiatorId, string CardKey, string? TargetMemberId, IReadOnlyList<string> NopeChain, string CreatedAt);
 

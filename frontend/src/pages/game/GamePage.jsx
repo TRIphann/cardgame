@@ -157,18 +157,38 @@ export default function GamePage() {
 
   // Slice players into left/right stacks for the layout. We put the local
   // player at the bottom (not in the side lists).
+  // Slice players into left/right stacks for the layout. The local player sits
+  // at the bottom in .game-you — they are never in side lists.
+  //
+  // Layout rule (mirrors LobbyPage/Seats.jsx logic):
+  //   1. Host  → left column, always.
+  //   2. The first person to JOIN the room (earliest joinedAt, excluding host)
+  //      → right column first.  This is the person who has been waiting longest.
+  //   3. Remaining non-host members → alternate LEFT → RIGHT → LEFT, keeping
+  //      the two sides as balanced as possible.
+  //
+  // With 2 players (host + 1 guest):  host=left, guest=right  ✓
+  // With 3 players (host + 2 guests): host=left, first-guest=right, second-guest=left  ✓
+  // With 4 players (host + 3 guests): host=left, first-guest=right, second=left, third=right  ✓
   const opponents = useMemo(() => {
-    const alive = members.filter((m) => m.id !== myId);
-    // Seat placement policy: the first opponent (index 0) goes on the
-    // RIGHT, then alternates RIGHT → LEFT → RIGHT → LEFT. This keeps the
-    // table visually balanced when there's an even number of opponents
-    // (1 vs 1, 2 vs 2, etc.) instead of stacking everyone on one side.
+    const nonSelf = members.filter((m) => m.id !== myId);
+    const host = members.find((m) => m.isHost) || null;
+
+    // The first person to join (excluding host) lands on the right.
+    // Sort non-host members by joinedAt so the earliest joiner gets priority right.
+    const nonHost = nonSelf
+      .filter((m) => !m.isHost)
+      .sort((a, b) => new Date(a.joinedAt) - new Date(b.joinedAt));
+
     const left = [];
     const right = [];
-    alive.forEach((m, i) => {
-      if (i % 2 === 0) right.push(m);
-      else left.push(m);
-    });
+
+    // Slot 0 on the right = earliest joiner.
+    for (let i = 0; i < nonHost.length; i++) {
+      if (i % 2 === 0) right.push(nonHost[i]);
+      else left.push(nonHost[i]);
+    }
+
     return { left, right };
   }, [members, myId]);
 
@@ -188,7 +208,14 @@ export default function GamePage() {
     memberId: myId,
     enabled: Boolean(roomId && myId),
     onUpdate: (data) => {
-      setRoom((prev) => data);
+      // Functional update with deep dedupe: skip re-renders when the SignalR
+      // snapshot is functionally identical to the current state. This prevents
+      // unnecessary component refreshes after every server push and keeps the
+      // turnIntro / modal state stable.
+      setRoom((prev) => {
+        if (prev && JSON.stringify(prev) === JSON.stringify(data)) return prev;
+        return data;
+      });
       if (data?.status === "waiting") {
         navigate(ROUTES.lobby, { replace: true });
       }
@@ -234,21 +261,35 @@ export default function GamePage() {
     return () => clearInterval(id);
   }, []);
 
-  // When the game starts (or a new game is loaded), surface "Bạn sẽ đi
-  // thứ X". We dedupe by the TurnOrder array reference so each new game
-  // shows the intro once but re-renders of the same snapshot don't.
+  // When the server persists FuturePeek into GameState (after a Future card is
+  // played), the SignalR snapshot will carry it back to us. If the modal isn't
+  // open yet, auto-open it. If it's already open the state update is a no-op.
+  // This survives re-connection: reconnecting players get the last peek result
+  // from Firestore and can view it again without re-playing the card.
   useEffect(() => {
+    if (!gs?.futurePeek || gs.futurePeek.length === 0) return;
+    setFuturePeek(gs.futurePeek);
+  }, [gs?.futurePeek]);
+
+  // When the game starts (or a new game is loaded), surface "Bạn sẽ đi
+  // thứ X". We dedupe by deep JSON comparison so each new game shows the
+  // intro once but re-renders of the same snapshot don't.
+  // Guard: suppress when a modal is already active so the turn-intro doesn't
+  // steal focus (e.g. over FuturePeek or any player-picker flow).
+  useEffect(() => {
+    if (futurePeek) return; // modal already open — don't interrupt it
     const order = gs?.turnOrder;
     if (!order || order.length === 0) {
       lastTurnOrderRef.current = null;
       return;
     }
-    if (lastTurnOrderRef.current === order) return;
-    lastTurnOrderRef.current = order;
+    const orderKey = order.join(",");
+    if (lastTurnOrderRef.current === orderKey) return;
+    lastTurnOrderRef.current = orderKey;
     const myIdx = order.indexOf(myId);
     if (myIdx < 0) return;
     setTurnIntro({ order: myIdx + 1, total: order.length, memberId: myId });
-  }, [gs?.turnOrder, myId]);
+  }, [gs?.turnOrder, myId, futurePeek]);
 
   // When game ends, navigate to summary screen state (kept inside this
   // component, not router change). We also rotate the room after the player
@@ -376,7 +417,14 @@ export default function GamePage() {
           if (res?.Toast) toast?.info?.(res.Toast);
           return;
         }
-        // TwoSame or ThreeSame → need to pick target.
+        // TwoSame or ThreeSame → need to pick target. Call setRoom first so the
+        // hand shows the combo card removed before the picker opens.
+        const res = await roomsApi.playCard(roomId, {
+          memberId: myId,
+          cardKey: card.key,
+          comboKind: combo,
+        });
+        setRoom(res.Room);
         setPickModal({
           kind: "playerPick",
           purpose: combo,

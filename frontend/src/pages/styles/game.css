@@ -8,15 +8,23 @@
 
 .game-page {
   position: relative;
-  /* Fill the viewport without scrolling. 100svh = small viewport so the
-     bottom isn't cut off by mobile browser chrome. */
-  min-height: 100vh;
-  min-height: 100svh;
+  /* 100dvh = dynamic viewport height that updates as browser chrome
+     appears/disappears (F11 fullscreen, F12 devtools). 100svh = small
+     viewport for mobile browser chrome. Using all three units means the
+     layout fills the available area in every mode. */
+  height: 100vh;
+  height: 100dvh;
+  height: 100svh;
   overflow: hidden;
   display: grid;
   grid-template-rows: auto 1fr auto;
+  grid-template-columns: 1fr;
   gap: 14px;
   padding: 18px 28px 24px;
+  /* Hard ceiling so the page never grows past the actual viewport */
+  max-height: 100dvh;
+  max-height: 100svh;
+  box-sizing: border-box;
   background:
     radial-gradient(ellipse at 20% 10%, rgba(110, 60, 200, 0.28), transparent 60%),
     radial-gradient(ellipse at 85% 90%, rgba(220, 70, 140, 0.22), transparent 65%),
@@ -275,6 +283,9 @@
   gap: 18px;
   align-items: stretch;
   min-height: 0;
+  /* Never exceed the grid container's computed height */
+  max-height: 100%;
+  overflow: hidden;
 }
 
 .game-side {
@@ -303,6 +314,9 @@
   justify-content: center;
   gap: 28px;
   padding: 24px 0 36px;
+  /* Constrain height so the hand-arc at the bottom always has room */
+  max-height: 100%;
+  overflow: hidden;
 }
 
 /* ── Discard pile wrap + glow aura ──────────────── */
@@ -738,7 +752,10 @@
 .hand-arc {
   position: relative;
   width: min(880px, 96vw);
-  height: 220px;
+  /* Let the hand arc breathe: use min-height so it can shrink on small
+     viewports, but cap the max so it never pushes the table off-screen. */
+  height: min(220px, 30vh);
+  min-height: 120px;
   display: flex;
   justify-content: center;
   align-items: flex-end;

@@ -268,6 +268,7 @@ public class FirestoreRoomRepository : IRoomRepository
                 ? (object?)Timestamp.FromDateTime(gs.TurnStartedAt.Value.ToUniversalTime())
                 : null,
             ["turnOrder"] = gs.TurnOrder,
+            ["futurePeek"] = gs.FuturePeek,
         };
         return doc;
     }
@@ -392,6 +393,9 @@ public class FirestoreRoomRepository : IRoomRepository
 
         if (doc.TryGetValue("turnOrder", out var tor) && tor is IEnumerable<object> torList)
             gs.TurnOrder = torList.Select(t => t as string ?? string.Empty).Where(s => s.Length > 0).ToList();
+
+        if (doc.TryGetValue("futurePeek", out var fp) && fp is IEnumerable<object> fpList)
+            gs.FuturePeek = fpList.Select(x => x as string ?? string.Empty).Where(s => s.Length > 0).ToList();
 
         if (doc.TryGetValue("pendingAction", out var pa) && pa is Dictionary<string, object> paDict)
         {
