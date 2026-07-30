@@ -157,40 +157,37 @@ export default function GamePage() {
 
   // Slice players into left/right stacks for the layout. We put the local
   // player at the bottom (not in the side lists).
-  // Slice players into left/right stacks for the layout. The local player sits
-  // at the bottom in .game-you — they are never in side lists.
-  //
-  // Layout rule (mirrors LobbyPage/Seats.jsx logic):
-  //   1. Host  → left column, always.
-  //   2. The first person to JOIN the room (earliest joinedAt, excluding host)
-  //      → right column first.  This is the person who has been waiting longest.
-  //   3. Remaining non-host members → alternate LEFT → RIGHT → LEFT, keeping
-  //      the two sides as balanced as possible.
-  //
-  // With 2 players (host + 1 guest):  host=left, guest=right  ✓
-  // With 3 players (host + 2 guests): host=left, first-guest=right, second-guest=left  ✓
-  // With 4 players (host + 3 guests): host=left, first-guest=right, second=left, third=right  ✓
-  const opponents = useMemo(() => {
-    const nonSelf = members.filter((m) => m.id !== myId);
-    const host = members.find((m) => m.isHost) || null;
+    // Layout rule (mirrors LobbyPage/Seats.jsx logic):
+    //   1. Host  → left column, always.
+    //   2. The first person to JOIN the room (earliest joinedAt, excluding host)
+    //      → right column first.  This is the person who has been waiting longest.
+    //   3. Remaining non-host members → alternate LEFT → RIGHT → LEFT, keeping
+    //      the two sides as balanced as possible.
+    //
+    // With 2 players (host + 1 guest):  host=left, guest=right  ✓
+    // With 3 players (host + 2 guests): host=left, first-guest=right, second-guest=left  ✓
+    // With 4 players (host + 3 guests): host=left, first-guest=right, second=left, third=right  ✓
+    const opponents = useMemo(() => {
+      const nonSelf = members.filter((m) => m.id !== myId);
 
-    // The first person to join (excluding host) lands on the right.
-    // Sort non-host members by joinedAt so the earliest joiner gets priority right.
-    const nonHost = nonSelf
-      .filter((m) => !m.isHost)
-      .sort((a, b) => new Date(a.joinedAt) - new Date(b.joinedAt));
+      // The first person to join (excluding host) lands on the right.
+      // Sort non-host members by joinedAt so the earliest joiner gets priority right.
+      const nonHost = nonSelf
+        .filter((m) => !m.isHost)
+        .sort((a, b) => new Date(a.joinedAt) - new Date(b.joinedAt));
 
-    const left = [];
-    const right = [];
+      const left = [];
+      const right = [];
 
-    // Slot 0 on the right = earliest joiner.
-    for (let i = 0; i < nonHost.length; i++) {
-      if (i % 2 === 0) right.push(nonHost[i]);
-      else left.push(nonHost[i]);
-    }
+      // Slot 0 on the right = earliest joiner.
+      // i=0 → right (first joiner), i=1 → left, i=2 → right, etc.
+      for (let i = 0; i < nonHost.length; i++) {
+        if (i % 2 === 0) right.push(nonHost[i]);
+        else left.push(nonHost[i]);
+      }
 
-    return { left, right };
-  }, [members, myId]);
+      return { left, right };
+    }, [members, myId]);
 
   const topPlayer = useMemo(() => {
     // Current-turn player for the active glow.
@@ -260,6 +257,11 @@ export default function GamePage() {
     const id = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(id);
   }, []);
+
+  // Reset turn order ref when roomId changes (new game / new session).
+  useEffect(() => {
+    lastTurnOrderRef.current = null;
+  }, [roomId]);
 
   // When the server persists FuturePeek into GameState (after a Future card is
   // played), the SignalR snapshot will carry it back to us. If the modal isn't

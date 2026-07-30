@@ -277,7 +277,7 @@
   display: grid;
   /* Each side column auto-sizes: when 0 opponents, column collapses to 0.
      When 1+ opponents, each side is capped at 240px so the centre stays
-     wide. */
+     wide. min-width:0 prevents grid columns from overflowing their container. */
   grid-template-columns: minmax(0, 240px) 1fr minmax(0, 240px);
   grid-template-rows: 1fr;
   gap: 18px;
@@ -286,6 +286,10 @@
   /* Never exceed the grid container's computed height */
   max-height: 100%;
   overflow: hidden;
+  /* Hard cap on width so the grid never overflows the viewport */
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .game-side {

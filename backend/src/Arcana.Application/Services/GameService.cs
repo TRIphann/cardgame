@@ -685,8 +685,12 @@ public class GameService
             gs.PendingAction = null;
             // Action resolved (cancelled) — clear cinematic.
             ClearActionCinematic(gs);
-            // Advance turn because the action was cancelled — initiator is done.
-            AdvanceTurn(gs);
+            // NOTE: Nope is a ZERO-turn action — the player who played Nope
+            // did NOT spend their turn. The initiator also did NOT spend their
+            // turn (the card effect never resolved). So we do NOT call
+            // AdvanceTurn here. The initiator stays at their current turn and
+            // the Nope player stays at theirs. The Nope card itself was
+            // consumed from their hand but neither player's turn count advances.
         }
 
         CheckWinCondition(gs);
@@ -864,19 +868,24 @@ public class GameService
         if (gs.AttackCounter > 0)
         {
             gs.AttackCounter -= 1;
-            // Attack plays don't refresh the turn clock — the next "real" turn
-            // is still owed time. The player still has the original window
-            // they started with for the whole attack chain.
+            // Attack chain: each skipped turn just decrements the counter. We do
+            // NOT update TurnStartedAt so the NEXT real turn (after the chain ends)
+            // gets the correct elapsed time from when the chain started.
+            // Also: advance currentTurnMemberId so the UI shows the right player.
+            var currentIdx = aliveIds.IndexOf(gs.CurrentTurnMemberId);
+            gs.CurrentTurnMemberId = currentIdx < 0 || currentIdx >= aliveIds.Count - 1
+                ? aliveIds[0]
+                : aliveIds[currentIdx + 1];
             return;
         }
-        var currentIdx = aliveIds.IndexOf(gs.CurrentTurnMemberId);
-        if (currentIdx < 0)
+        var currentIdx2 = aliveIds.IndexOf(gs.CurrentTurnMemberId);
+        if (currentIdx2 < 0)
         {
             gs.CurrentTurnMemberId = aliveIds[0];
         }
         else
         {
-            var nextIdx = (currentIdx + 1) % aliveIds.Count;
+            var nextIdx = (currentIdx2 + 1) % aliveIds.Count;
             gs.CurrentTurnMemberId = aliveIds[nextIdx];
         }
         gs.TurnStartedAt = DateTime.UtcNow;
