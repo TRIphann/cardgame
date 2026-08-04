@@ -47,7 +47,9 @@ function readSessionRoomId() {
   }
 }
 
-const NOPE_WINDOW_MS = 3000;
+// Server (GameService.cs) uses a 5s window for the Nope chain. We mirror
+// it client-side so the visible countdown matches the server's auto-resolve.
+const NOPE_WINDOW_MS = 5000;
 
 function statusToText(s) {
   if (s === "playing") return "Đang chơi";
@@ -98,6 +100,10 @@ export default function GamePage() {
   const [bombExplode, setBombExplode] = useState(null);
   const lastTurnRef = useRef(null);
   const lastDrawnRef = useRef(null); // dedupe by `(memberId, lastDrawnAt)`
+  // Active timer for the corner opponent-draw toast. Tracked so we can
+  // clear it if the game unmounts mid-animation (avoids "setState on
+  // unmounted component" warnings).
+  const opponentDrawTimerRef = useRef(null);
   // Track the last card the local player drew. We pass this into HandArc
   // so the freshly-drawn card can animate in (scale-up + glow) instead of
   // just popping into existence.
@@ -213,7 +219,14 @@ export default function GamePage() {
         if (prev && JSON.stringify(prev) === JSON.stringify(data)) return prev;
         return data;
       });
-      if (data?.status === "waiting") {
+      // Only navigate to the lobby when the game is fully finished and the
+      // host is preparing to re-rotate. The status field alone is too coarse
+      // — a transient snapshot mid-game could otherwise mis-fire a route
+      // change that looks like a "page reload" to the user.
+      const gs = data?.gameState;
+      const gameFinished = gs?.endedAt != null;
+      const isLobby = data?.status === "waiting" && !gameFinished;
+      if (isLobby) {
         navigate(ROUTES.lobby, { replace: true });
       }
     },
@@ -245,7 +258,11 @@ export default function GamePage() {
       // hand contents.
       if (drewCount > 0 && prevTurn !== myId) {
         setOpponentDrawAnim({ memberId: prevTurn, ts: Date.now() });
-        setTimeout(() => setOpponentDrawAnim(null), 1100);
+        if (opponentDrawTimerRef.current) clearTimeout(opponentDrawTimerRef.current);
+        opponentDrawTimerRef.current = setTimeout(() => {
+          setOpponentDrawAnim(null);
+          opponentDrawTimerRef.current = null;
+        }, 1100);
       }
     }
     lastTurnRef.current = curTurn;
@@ -256,6 +273,16 @@ export default function GamePage() {
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(id);
+  }, []);
+
+  // Clear any pending opponent-draw toast timer on unmount.
+  useEffect(() => {
+    return () => {
+      if (opponentDrawTimerRef.current) {
+        clearTimeout(opponentDrawTimerRef.current);
+        opponentDrawTimerRef.current = null;
+      }
+    };
   }, []);
 
   // Reset turn order ref when roomId changes (new game / new session).
@@ -740,6 +767,17 @@ export default function GamePage() {
       if (res?.RequiresDefuse) {
         setDefuseModal(true);
         if (res?.Toast) toast?.warning?.(res.Toast);
+      } else if (res?.RequiresMoreDraws) {
+        // Attack chain: more draws required. Auto-prompt the user but also
+        // offer a small delay so the UI doesn't feel like a firehose.
+        if (res?.Toast) toast?.info?.(res.Toast);
+        setTimeout(() => {
+          // only auto-draw if the AttackCounter is still positive on the
+          // local snapshot — the user might have died on the previous draw.
+          if (isAlive && isMyTurn) {
+            onDrawCard();
+          }
+        }, 1200);
       } else if (res?.Toast) {
         if (res?.DrawnCardKey === "bomb") {
           // Player died by drawing a bomb. The BombReveal → BombExplode
@@ -823,11 +861,15 @@ export default function GamePage() {
   // cap at 6 entries so the visual stack stays small and natural.
   useEffect(() => {
     const key = pendingAction?.cardKey;
-    if (!key || key === "5-any") return;
+    const createdAt = pendingAction?.createdAt;
+    if (!key || !createdAt) return;
     setRecentDiscards((prev) => {
+      // Dedupe by createdAt — the same pendingAction often re-fires the
+      // effect on snapshot refresh, but we only want one stack entry per
+      // distinct action. Distinct actions with the same key still get added.
       const last = prev[prev.length - 1];
-      if (last && last.key === key) return prev; // avoid double-render
-      const next = [...prev, { key, by: pendingAction.initiatorId, ts: Date.now() }];
+      if (last && last.ts === createdAt) return prev;
+      const next = [...prev, { key, by: pendingAction.initiatorId, ts: createdAt }];
       return next.length > 6 ? next.slice(next.length - 6) : next;
     });
   }, [pendingAction?.cardKey, pendingAction?.createdAt]);
@@ -846,17 +888,21 @@ export default function GamePage() {
 
     const member = members.find((m) => m.id === gs.LastDrawnBy);
     const memberName = member?.name || "Bạn";
-    const willDefuse = gs.Alive?.get?.(gs.LastDrawnBy) !== false
-      && (room?.myHand?.includes?.("defuse") || false);
-    // For local viewer, peek at own hand to know if THEY can defuse.
-    const canDefuseLocally = gs.LastDrawnBy === myId
-      ? (myHand || []).some((c) => ["ninja", "superman", "zombie", "robot", "hải-tặc"].includes(c))
-      : willDefuse;
-
+    // We can only PREDICT a defuse for the local viewer — other players'
+    // hand CONTENTS are hidden behind the server, so we can't know whether
+    // they hold a defuse. Default to "won't defuse" for opponents so the
+    // cinematic stays suspenseful.
+    const isLocal = gs.LastDrawnBy === myId;
+    const stillAlive = gs.Alive?.[gs.LastDrawnBy] !== false;
+    const willDefuse = !!(
+      isLocal &&
+      stillAlive &&
+      (myHand || []).some((c) => COMBO_KEYS.includes(c))
+    );
     setBombReveal({
       memberId: gs.LastDrawnBy,
       memberName,
-      willDefuse: canDefuseLocally,
+      willDefuse,
       key: stamp,
     });
 
@@ -1147,15 +1193,11 @@ export default function GamePage() {
         </div>
       )}
 
-      {/* Nope countdown toast — only show for non-initiators. The person who
-          played the card already knows they did; the toast was redundant
-          noise for them. */}
-      {pendingAction && nopeRemaining > 0 && pendingAction.initiatorId !== myId && (
-        <div className="nope-react-toast">
-          <span className="nope-react-toast__label">Hành động vừa xảy ra</span>
-          <span className="nope-react-toast__timer">{(nopeRemaining / 1000).toFixed(1)}s</span>
-        </div>
-      )}
+      {/* The main ActionCardReveal component already contains a large
+          countdown ring + label. We intentionally do NOT also render a
+          separate corner toast here — having both would feel like the
+          countdown was "showing twice" to the user. The reveal itself
+          is the source of truth for the 5s reaction window. */}
 
       {/* Draw animation */}
       {drawAnim && (

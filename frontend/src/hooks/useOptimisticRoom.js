@@ -13,8 +13,9 @@
 // for navigating after success.
 
 import { useCallback, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { roomsApi } from "@shared/api/roomsApi.js";
-import { saveSession, loadSession } from "@config/env.js";
+import { ROUTES, saveSession, loadSession } from "@config/env.js";
 
 const FAST_NAV_TIMEOUT_MS = 900;
 const PLACEHOLDER_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -48,6 +49,15 @@ function raceWithFallback(postPromise, ms) {
 }
 
 export function useOptimisticRoom({ onNavigate } = {}) {
+  const navigate = useNavigate();
+  const navigateToLanding = useCallback(() => {
+    if (typeof onNavigate === "function") {
+      onNavigate(ROUTES.landing);
+      return;
+    }
+    // SPA navigation — preserves router state, no full reload flicker.
+    navigate(ROUTES.landing, { replace: true });
+  }, [navigate, onNavigate]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const pendingPostRef = useRef(null);
@@ -154,13 +164,13 @@ export function useOptimisticRoom({ onNavigate } = {}) {
         console.warn("[arcana] optimistic cold-start POST failed", err);
         const cur = loadSession();
         if (cur && cur.roomId?.startsWith("PENDING-")) {
-          // Roll back to landing so the user sees the error.
-          window.location.assign("/");
+          // SPA rollback — no full page reload.
+          navigateToLanding();
         }
       });
 
     return { kind: "ok", optimistic: true, room: fakeRoom };
-  }, [onNavigate]);
+  }, [onNavigate, navigateToLanding]);
 
   return { run, busy, error };
 }

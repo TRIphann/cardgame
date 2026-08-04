@@ -42,13 +42,21 @@ export function useGameChannel({ roomId, memberId, onUpdate, enabled }) {
           // tolerate transient errors
         }
       };
-      // Immediate first fetch, then interval.
-      tick();
-      pollTimerRef.current = setInterval(tick, FALLBACK_POLL_MS);
+      // Do a single baseline fetch after a short delay so the hub has a
+      // chance to connect first. Without this, an always-on poll would
+      // race the realtime channel and double-fetch snapshots on every
+      // server update.
+      pollTimerRef.current = setTimeout(() => {
+        if (disposed) return;
+        tick();
+        pollTimerRef.current = setInterval(tick, FALLBACK_POLL_MS);
+      }, 400);
     };
 
     const stopPoll = () => {
       if (pollTimerRef.current) {
+        // Might be a setTimeout (before interval started) or setInterval.
+        clearTimeout(pollTimerRef.current);
         clearInterval(pollTimerRef.current);
         pollTimerRef.current = null;
       }

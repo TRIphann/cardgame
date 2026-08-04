@@ -8,7 +8,7 @@
 // response về server, parent có thể re-mount với `revealKey` để card flip
 // mở mặt.
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { cardImageUrl } from "@games/exploding-cats/cardCloudinary.js";
 import { FxBurst } from "./FxBurst.jsx";
 
@@ -19,6 +19,13 @@ const VANISH_MS = 280;
 export function DrawAnimation({ sourceRect, targetRect, cardKey = "back", revealKey, onComplete }) {
   const [phase, setPhase] = useState("flying"); // flying → landing → done
   const [mounted, setMounted] = useState(true);
+  // Stash the latest onComplete in a ref so we don't restart the animation
+  // when the parent re-renders with a new callback closure (e.g. after the
+  // draw response lands and we set the revealKey). The original bug was that
+  // the back card kept showing because the timeouts were being cleared and
+  // re-armed on every re-render.
+  const onCompleteRef = useRef(onComplete);
+  useEffect(() => { onCompleteRef.current = onComplete; }, [onComplete]);
 
   useEffect(() => {
     const t1 = setTimeout(() => setPhase("landing"), FLIGHT_MS - 80);
@@ -26,10 +33,10 @@ export function DrawAnimation({ sourceRect, targetRect, cardKey = "back", reveal
     // Wait long enough for the vanish animation to finish before unmounting.
     const t3 = setTimeout(() => {
       setMounted(false);
-      onComplete?.();
+      onCompleteRef.current?.();
     }, FLIGHT_MS + 40 + VANISH_MS);
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
-  }, [onComplete]);
+  }, []);
 
   if (!mounted || !sourceRect || !targetRect) return null;
 

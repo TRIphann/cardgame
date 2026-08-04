@@ -72,11 +72,11 @@ public static class CardCatalog
     ///   Future      = N       ("Xem 1 tí")
     ///   Defuse      = N + 1   (combo defuse variants + 5 base types)
     ///   Combo N-1 each (robot, zombie, ninja, superman, hải-tặc)  = 5(N-1)
-    ///   Attack      = N       ("Bốc đi")
-    ///   Favor       = N       ("Cho xin")
+    ///   Attack      = N - 1   ("Bốc đi") — N-1 per spec
+    ///   Favor       = N - 1   ("Cho xin") — N-1 per spec
     ///   Skip        = N - 1
     ///   Shuffle     = N - 1   ("Xào xáo")
-    ///   Nope        = N - 1
+    ///   Nope        = N       ("Cản") — N per spec so every player can chain
     /// </summary>
     public static List<string> BuildDeck(int playerCount)
     {
@@ -91,21 +91,20 @@ public static class CardCatalog
         var bombCount = playerCount - 1;
         for (var i = 0; i < bombCount; i++) deck.Add(Bomb);
 
-        // N copies each.
-        AddCopies(deck, Attack, playerCount);
-        AddCopies(deck, Favor, playerCount);
+        // N copies each for these "common" action cards.
         AddCopies(deck, Future, playerCount);
+        AddCopies(deck, Nope, playerCount);
 
         // Defuse base card + 5 combo variants = N + 1 total "cứu" cards.
-        // StartGame gives 1 to each player (N dealt) and the 1 leftover
-        // sits in the deck — except for N=4 where the 5th goes to whoever
-        // happens to receive it during the 4-card deal.
+        // StartGame deals exactly 1 defuse to each player (N dealt) and the
+        // 1 leftover sits in the deck — it can land in anyone's 4-card deal.
         AddCopies(deck, Defuse, playerCount + 1);
 
         // N - 1 copies each for the "consumable" action cards.
+        AddCopies(deck, Attack, playerCount - 1);
+        AddCopies(deck, Favor, playerCount - 1);
         AddCopies(deck, Shuffle, playerCount - 1);
         AddCopies(deck, Skip, playerCount - 1);
-        AddCopies(deck, Nope, playerCount - 1);
 
         // Combo defuse variants: N - 1 total distributed across the 5 types.
         var comboCopies = playerCount - 1;

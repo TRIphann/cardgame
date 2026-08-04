@@ -165,15 +165,12 @@
 .settings-button-danger:hover { background: rgba(255, 100, 100, 0.2); }
 
 .game-page {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  padding: 56px 24px;
-  color: rgba(220, 200, 255, 0.85);
-  font-family: "DM Sans", system-ui, sans-serif;
+  /* Layout is owned by pages/styles/game.css. We only declare positioning
+     here so the ambient/backdrop renders behind it without bleeding into
+     siblings. */
+  position: relative;
+  z-index: 1;
 }
-.game-page h1 { font-family: "Cinzel", serif; }
 
 .form-attention { animation: arc-shake 0.4s ease-in-out; }
 @keyframes arc-shake {

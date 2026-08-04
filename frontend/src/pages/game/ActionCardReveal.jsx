@@ -8,7 +8,7 @@
 //
 // Reset triggers: key thay đổi (LastPlayedAt mới) → remount với phase mới.
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { cardImageUrl } from "@games/exploding-cats/cardCloudinary.js";
 import { fxFor } from "./cardFx.js";
 import { getCardLabel } from "./cardLabels.js";
@@ -26,6 +26,8 @@ export function ActionCardReveal({
 }) {
   const [phase, setPhase] = useState("enter");
   const [mounted, setMounted] = useState(true);
+  const onCompleteRef = useRef(onComplete);
+  useEffect(() => { onCompleteRef.current = onComplete; }, [onComplete]);
 
   const fx = fxFor(cardKey || "general");
   const safeCardKey = cardKey || "general";
@@ -43,17 +45,20 @@ export function ActionCardReveal({
       setPhase("exit");
       const t = setTimeout(() => {
         setMounted(false);
-        onComplete?.();
+        onCompleteRef.current?.();
       }, EXIT_MS);
       return () => clearTimeout(t);
     }
     return undefined;
-  }, [nopeRemainingMs, onComplete]);
+  }, [nopeRemainingMs]);
 
   if (!mounted) return null;
 
+  // The server allows a 5s Nope window. Mirror that here so the countdown
+  // ring matches what the server actually enforces.
+  const NOPE_WINDOW_MS = 5000;
   const ringPct = nopeRemainingMs != null
-    ? Math.max(0, Math.min(1, nopeRemainingMs / 3000))
+    ? Math.max(0, Math.min(1, nopeRemainingMs / NOPE_WINDOW_MS))
     : 0;
 
   return (

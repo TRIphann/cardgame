@@ -100,6 +100,8 @@ public record GameActionResponse(
     IReadOnlyList<string>? FavorCandidates,
     IReadOnlyList<string>? FuturePeek,
     string? PlayedCardKey,
-    string? ComboKind);
+    string? ComboKind,
+    bool RequiresMoreDraws = false,
+    int RemainingDraws = 0);
 
 public record ErrorResponse(string Code, string Message);

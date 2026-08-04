@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="140" height="200" viewBox="0 0 140 200">
+<defs>
+  <linearGradient id="bg_bomb1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3d1505"/><stop offset="100%" stop-color="#1a0500"/></linearGradient>
+  <linearGradient id="ov_bomb1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="black" stop-opacity="0"/><stop offset="100%" stop-color="black" stop-opacity="0.42"/></linearGradient>
+  <filter id="sd_bomb1"><feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="black" flood-opacity="0.6"/></filter>
+  <radialGradient id="bgGlow_bomb1" cx="50%" cy="45%" r="55%"><stop offset="0%" stop-color="#ff3300" stop-opacity="0.22"/><stop offset="60%" stop-color="#ff3300" stop-opacity="0.07"/><stop offset="100%" stop-color="#ff3300" stop-opacity="0"/></radialGradient>
+</defs>
+<g filter="url(#sd_bomb1)"><rect width="140" height="200" rx="14" fill="url(#bg_bomb1)"/></g>
+<rect x="1.5" y="1.5" width="137" height="197" rx="13" fill="none" stroke="white" stroke-width="0.8" opacity="0.13"/>
+<rect width="140" height="200" rx="14" fill="url(#bgGlow_bomb1)"/>
+<rect x="0" y="146" width="140" height="54" fill="url(#ov_bomb1)"/>
+<g transform="translate(0,4)" opacity="0.97">
+<g transform="translate(2,-2)">
+  <g stroke="#ff6600" stroke-linecap="round" fill="none">
+    <line x1="68" y1="2" x2="68" y2="22" stroke-width="3.5" opacity="0.85"/>
+    <line x1="40" y1="8" x2="48" y2="26" stroke-width="3" opacity="0.75"/>
+    <line x1="96" y1="8" x2="88" y2="26" stroke-width="3" opacity="0.75"/>
+    <line x1="14" y1="32" x2="32" y2="42" stroke-width="2.5" opacity="0.65"/>
+    <line x1="122" y1="32" x2="104" y2="42" stroke-width="2.5" opacity="0.65"/>
+    <line x1="2" y1="60" x2="22" y2="62" stroke-width="2.5" opacity="0.6"/>
+    <line x1="134" y1="60" x2="114" y2="62" stroke-width="2.5" opacity="0.6"/>
+    <line x1="6" y1="88" x2="24" y2="84" stroke-width="2" opacity="0.5"/>
+    <line x1="130" y1="88" x2="112" y2="84" stroke-width="2" opacity="0.5"/>
+    <line x1="16" y1="114" x2="34" y2="108" stroke-width="2" opacity="0.45"/>
+    <line x1="120" y1="114" x2="102" y2="108" stroke-width="2" opacity="0.45"/>
+    <line x1="68" y1="138" x2="68" y2="124" stroke-width="3" opacity="0.55"/>
+  </g>
+  <ellipse cx="34" cy="86" rx="20" ry="18" fill="#3a1a05"/>
+  <ellipse cx="104" cy="86" rx="22" ry="20" fill="#4a220a"/>
+  <ellipse cx="68" cy="116" rx="26" ry="16" fill="#5a2a08"/>
+  <ellipse cx="50" cy="108" rx="18" ry="14" fill="#3a1a05"/>
+  <ellipse cx="86" cy="110" rx="18" ry="14" fill="#3a1a05"/>
+  <circle cx="68" cy="68" r="38" fill="#ff4400"/>
+  <circle cx="40" cy="74" r="22" fill="#ff5500"/>
+  <circle cx="96" cy="74" r="24" fill="#ff5500"/>
+  <circle cx="68" cy="98" r="28" fill="#ee3300"/>
+  <circle cx="68" cy="68" r="26" fill="#ffaa22"/>
+  <circle cx="58" cy="64" r="14" fill="#ffdd44"/>
+  <circle cx="80" cy="72" r="12" fill="#ff6600"/>
+  <circle cx="68" cy="68" r="14" fill="#fff066"/>
+  <circle cx="68" cy="68" r="7" fill="#ffffff" opacity="0.9"/>
+  <ellipse cx="56" cy="50" rx="8" ry="5" fill="#fff" opacity="0.4"/>
+  <ellipse cx="84" cy="60" rx="6" ry="4" fill="#fff" opacity="0.3"/>
+  <circle cx="32" cy="44" r="1.8" fill="#222" opacity="0.7"/>
+  <circle cx="106" cy="40" r="2" fill="#222" opacity="0.7"/>
+  <circle cx="22" cy="56" r="1.5" fill="#222" opacity="0.6"/>
+  <circle cx="118" cy="58" r="1.5" fill="#222" opacity="0.6"/>
+  <circle cx="44" cy="24" r="1.2" fill="#ffdd44" opacity="0.8"/>
+  <circle cx="94" cy="22" r="1.2" fill="#ffdd44" opacity="0.8"/>
+  <circle cx="76" cy="14" r="1" fill="#fff" opacity="0.7"/>
+  <circle cx="62" cy="20" r="1" fill="#fff" opacity="0.6"/>
+</g></g>
+<text x="70" y="180" text-anchor="middle" font-family="'Arial Black','Segoe UI Black',sans-serif" font-size="13" font-weight="900" fill="white" letter-spacing="1.5">BOM</text>
+</svg>

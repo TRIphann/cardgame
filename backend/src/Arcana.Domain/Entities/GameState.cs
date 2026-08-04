@@ -55,6 +55,13 @@ public class GameState
     // re-fetch so the FuturePeekModal can render correctly on reconnection.
     public List<string>? FuturePeek { get; set; }
 
+    // ── Pending Favor-pick field ───────────────────────
+    // While this is set, the Favor card is in its post-play "choose a card"
+    // phase. It survives the SignalR snapshot re-fetch so the modal renders
+    // correctly on reconnection, and gets cleared when the pick lands or the
+    // action gets Nope'd.
+    public PendingFavorPick? PendingFavorPick { get; set; }
+
     // ── Action-card cinematic fields ────────────────────────
     // Most recent action / nope card that should appear centre-screen for
     // everyone. Reset each time someone chains a Nope. Cleared when the

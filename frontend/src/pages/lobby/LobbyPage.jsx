@@ -282,14 +282,10 @@ export default function LobbyPage() {
         onAction: async (action, payload) => {
           if (action === "kick") {
             try {
-              await fetch(`/api/rooms/${roomId}/kick`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  hostId: session.session.playerId,
-                  targetMemberId: payload.memberId,
-                }),
-              });
+              // Use the shared wrapper so the request goes to the configured
+              // backend (relative URLs would hit the Netlify SPA fallback and
+              // silently serve index.html instead of reaching the API).
+              await roomsApi.kick(roomId, session.session.playerId, payload.memberId);
               refresh();
             } catch (e) { toast.error("Kick thất bại."); }
           }
@@ -412,12 +408,9 @@ export default function LobbyPage() {
       return;
     }
     try {
-      const res = await fetch(`${API_BASE_URL}/api/rooms/${roomId}/start`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ hostId: session.session.playerId }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      // Use the shared wrapper so we get the same timeout/retry/error
+      // handling as the rest of the app.
+      await roomsApi.startGame(roomId, session.session.playerId);
       refresh();
     } catch (e) {
       toast.error(e.message || "Không bắt đầu được ván.");

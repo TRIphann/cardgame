@@ -172,7 +172,8 @@ public class RoomsController : ControllerBase
             result.RequiresDefuse, result.RequiresDiscardPick, result.RequiresTargetPick,
             result.RequiresFavorPick, result.FavorCandidates,
             result.FuturePeek, result.PlayedCardKey,
-            result.ComboKind?.ToString()));
+            result.ComboKind?.ToString(),
+            result.RequiresMoreDraws, result.RemainingDraws));
     }
 
     [HttpPost("{id}/game/draw-card")]
@@ -188,7 +189,8 @@ public class RoomsController : ControllerBase
             result.RequiresDefuse, result.RequiresDiscardPick, result.RequiresTargetPick,
             result.RequiresFavorPick, result.FavorCandidates,
             result.FuturePeek, result.PlayedCardKey,
-            result.ComboKind?.ToString()));
+            result.ComboKind?.ToString(),
+            result.RequiresMoreDraws, result.RemainingDraws));
     }
 
     [HttpPost("{id}/game/defuse")]
@@ -238,15 +240,28 @@ public class RoomsController : ControllerBase
             .OrderBy(m => m.JoinedAt)
             .Select(m => MapMemberDto(m))
             .ToList(),
-        room.GameState is null ? null : MapGameState(room.GameState),
+        room.GameState is null ? null : MapGameState(room.GameState, viewerMemberId),
         // Expose the local hand only to its owner. Other players' hands are
         // hidden server-side too, but we double-check here for defense-in-depth.
         viewerMemberId is null || room.GameState is null || !room.GameState.Hands.TryGetValue(viewerMemberId, out var hand)
             ? null
             : hand);
 
-    private static GameStateDto MapGameState(GameState gs)
+    private static GameStateDto MapGameState(GameState gs, string? viewerMemberId)
     {
+        // Per the game rules: the Future peek is private to the player who
+        // played the card. Everyone else sees the cinematic overlay but
+        // NOT the card contents. We nil out the FuturePeek for non-owners.
+        var futurePeek = gs.FuturePeek;
+        var pendingInitiator = gs.PendingAction?.InitiatorId;
+        var isOwner = !string.IsNullOrEmpty(viewerMemberId)
+            && !string.IsNullOrEmpty(pendingInitiator)
+            && string.Equals(pendingInitiator, viewerMemberId, StringComparison.Ordinal);
+        if (futurePeek is not null && !isOwner)
+        {
+            futurePeek = null;
+        }
+
         return new GameStateDto(
             // NOTE: DeckCount intentionally omitted — nobody should see deck size.
             gs.DiscardPile.Count,
@@ -279,7 +294,7 @@ public class RoomsController : ControllerBase
             gs.TurnStartedAt?.ToString("O"),
             60,
             gs.TurnOrder?.ToList() ?? new List<string>(),
-            gs.FuturePeek?.ToList() ?? new List<string>());
+            futurePeek?.ToList() ?? new List<string>());
     }
 
     private static RoomMemberDto MapMemberDto(RoomMember m) => new(

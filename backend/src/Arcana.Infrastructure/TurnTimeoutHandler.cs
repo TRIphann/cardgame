@@ -95,14 +95,6 @@ public sealed class TurnTimeoutHandler : ITurnTimeoutHandler
                 "Auto-drew for player {MemberId} in room {RoomId} (turn timer expired)",
                 memberId, roomId);
         }
-        catch (DomainException ex) when (ex.Code == "no_defuse_required")
-        {
-            // Defuse modal just popped for the timed-out player — let them
-            // still react. Their turn hasn't advanced; refresh the registry
-            // so we don't immediately fire again.
-            if (gs.TurnStartedAt is not null)
-                _registry.Register(roomId, gs.TurnStartedAt.Value);
-        }
         catch (DomainException ex) when (ex.Code is "deck_empty" or "action_pending" or "not_your_turn")
         {
             // Race: another player already moved, the deck ran dry, or a
@@ -112,6 +104,22 @@ public sealed class TurnTimeoutHandler : ITurnTimeoutHandler
                 "Auto-draw skipped for room {RoomId}: {Reason}",
                 roomId, ex.Code);
             _registry.Unregister(roomId);
+        }
+        catch (DomainException ex) when (ex.Code == "already_dead")
+        {
+            // The timed-out player died (e.g. via a bomb) between the
+            // registry snapshot and this call. AdvanceTurn should already
+            // have moved the turn forward; just refresh the registry to the
+            // current player so the next tick fires for the right person.
+            var refreshed = await roomRepo.GetByIdAsync(roomId, ct);
+            if (refreshed?.GameState is { EndedAt: null, TurnStartedAt: not null })
+            {
+                _registry.Register(roomId, refreshed.GameState.TurnStartedAt!.Value);
+            }
+            else
+            {
+                _registry.Unregister(roomId);
+            }
         }
     }
 }

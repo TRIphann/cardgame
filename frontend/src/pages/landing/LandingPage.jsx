@@ -5,19 +5,22 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ROUTES, saveLastName, loadLastName } from "@config/env.js";
+import { ROUTES, saveLastName, loadLastName, API_BASE_URL } from "@config/env.js";
 import { useAudio } from "@shared/audio/AudioManager.jsx";
 import { useToast } from "@shared/ui/toast.jsx";
 import { useI18n } from "@shared/i18n/i18n.jsx";
 import { useOptimisticRoom } from "../../hooks/useOptimisticRoom.js";
 
 // Wake the Render free-tier container up-front so the first user action
-// doesn't pay the full cold-start cost.  We use a lazy fetch that starts
+// doesn't pay the full cold-start cost. We use a lazy fetch that starts
 // after a 3-second delay so it only fires if the user lingers on the page.
 let _prewarmTimer = null;
 if (typeof window !== "undefined") {
   _prewarmTimer = setTimeout(() => {
-    fetch("/api/rooms", { method: "HEAD", cache: "no-store" }).catch(() => {});
+    // Hit the *backend* health endpoint directly, not a relative URL.
+    // A relative URL would be caught by the Netlify SPA fallback (which
+    // serves index.html for any non-asset path) and never warm Render up.
+    fetch(`${API_BASE_URL}/health`, { method: "GET", cache: "no-store" }).catch(() => {});
   }, 3000);
 }
 

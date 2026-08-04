@@ -60,18 +60,19 @@ public class GameService
         //
         //   1) Extract all bombs from the deck and stash them aside. The deck
         //      we're about to shuffle has ZERO bombs in it.
-        //   2) Shuffle the bomb-free deck.
-        //   3) Deal 5 cards to each player: 1 of them is a Defuse variant,
-        //      the other 4 come from the top of the shuffled deck. This means
-        //      each player's hand contains exactly one "cứu" card + 4 action
-        //      cards — the leftover defuse variants stay in the deck and get
-        //      either drawn or stacked later.
-        //   4) Insert all N-1 bombs at random positions into the remaining
+        //   2) Extract ALL (N+1) defuse variants and distribute exactly 1 to
+        //      each player FIRST. The remaining 1 defuse stays in the deck —
+        //      it can be dealt to anyone in step 4.
+        //   3) Shuffle the bomb-free, defuse-free deck.
+        //   4) Deal 4 cards from the top of the shuffled deck to each player.
+        //      The 1 leftover defuse variant lives somewhere in here, so each
+        //      player ends up with exactly 1 cứu + 4 random action cards.
+        //   5) Insert all N-1 bombs at random positions into the remaining
         //      deck. They can land anywhere, including clustered together or
         //      on top (first card drawn). That's intentional.
         //
-        // Result: every player starts with a defuse, NO bombs dealt, exactly
-        // 1 player can dodge every bomb and win.
+        // Result: every player starts with exactly one defuse, NO bombs dealt,
+        // exactly 1 player can dodge every bomb and win.
 
         // Step 1: pull all bombs out of the deck first.
         var bombs = new List<string>();
@@ -84,51 +85,40 @@ public class GameService
             }
         }
 
-        // Step 2: shuffle the bomb-free deck.
-        for (var i = state.Deck.Count - 1; i > 0; i--)
-        {
-            var j = Random.Shared.Next(i + 1);
-            (state.Deck[i], state.Deck[j]) = (state.Deck[j], state.Deck[i]);
-        }
+        // Step 2: distribute one defuse card (combo variant OR base "defuse")
+        // to each player. We walk the deck in order to find the first
+        // defuse-class card and hand it over, then remove it. If we run
+        // out mid-way (playerCount > total defuse count), fall back to
+        // rolling a fresh defuse variant. The deal logic intentionally
+        // checks BOTH the base "defuse" key and the 5 combo variants so
+        // every player gets exactly one cứu — the spec requires "exactly 1
+        // cứu per player + 1 leftover in the deck".
+        static bool IsDefuseClass(string key) =>
+            key == CardCatalog.Defuse || CardCatalog.IsComboDefuse(key);
 
-        // Step 3: deal 5 cards to each player. The first card we hand them is
-        // always a Defuse variant (combo defuse); the next 4 come from the
-        // top of the shuffled deck.
-        //
-        // If we run out of combo defuse variants in the deck, fall back to a
-        // freshly rolled one — this guarantees every player gets exactly one
-        // defuse card, even with very small player counts where the spec
-        // distributes fewer combo variants than there are players.
         foreach (var p in players)
         {
             var hand = new List<string>();
 
             string defuseToGive;
-            var comboIdx = -1;
+            var defuseIdx = -1;
             for (var i = 0; i < state.Deck.Count; i++)
             {
-                if (CardCatalog.IsComboDefuse(state.Deck[i])) { comboIdx = i; break; }
+                if (IsDefuseClass(state.Deck[i])) { defuseIdx = i; break; }
             }
-            if (comboIdx >= 0)
+            if (defuseIdx >= 0)
             {
-                defuseToGive = state.Deck[comboIdx];
-                state.Deck.RemoveAt(comboIdx);
+                defuseToGive = state.Deck[defuseIdx];
+                state.Deck.RemoveAt(defuseIdx);
             }
             else
             {
-                // No combo defuse variant left in the deck — fall back to a
-                // freshly rolled one. This keeps "1 cứu per player" intact
-                // even when (playerCount > available combo variants).
+                // No defuse-class card left in the deck — fall back to a
+                // freshly rolled one. This guarantees every player gets
+                // exactly one cứu even when the deck ran out mid-distribution.
                 defuseToGive = CardCatalog.RollDefuseVariant();
             }
             hand.Add(defuseToGive);
-
-            // Then deal 4 cards from the top of the shuffled deck.
-            for (var i = 0; i < 4 && state.Deck.Count > 0; i++)
-            {
-                hand.Add(state.Deck[0]);
-                state.Deck.RemoveAt(0);
-            }
 
             state.Hands[p.Id] = hand;
             state.Alive[p.Id] = true;
@@ -137,7 +127,25 @@ public class GameService
             state.CardsPlayed[p.Id] = 0;
         }
 
-        // Step 4: insert all N-1 bombs at random positions into the remaining
+        // Step 3: shuffle the bomb-free + defuse-free deck.
+        for (var i = state.Deck.Count - 1; i > 0; i--)
+        {
+            var j = Random.Shared.Next(i + 1);
+            (state.Deck[i], state.Deck[j]) = (state.Deck[j], state.Deck[i]);
+        }
+
+        // Step 4: deal 4 cards to each player from the top of the shuffled
+        // deck. The leftover defuse (1 copy) can land here — that's by design.
+        foreach (var p in players)
+        {
+            for (var i = 0; i < 4 && state.Deck.Count > 0; i++)
+            {
+                state.Hands[p.Id].Add(state.Deck[0]);
+                state.Deck.RemoveAt(0);
+            }
+        }
+
+        // Step 5: insert all N-1 bombs at random positions into the remaining
         // deck. Anywhere means anywhere — top, bottom, clustered, solitary.
         foreach (var _ in bombs)
         {
@@ -311,38 +319,57 @@ public class GameService
                 if (tgtHandF.Count == 0)
                     throw new DomainException("target_empty", "Đối thủ không còn lá bài.");
 
-                // Spending the Favor card now (it's committed). Return the
-                // target's shuffled hand so the player picks which one to take.
+                // Spending the Favor card now (it's committed). The 5s Nope
+                // window opens so other players can chain Cản. Once the
+                // window expires, the actor picks which card to take from
+                // the target's shuffled hand.
                 RemoveFromHand(hand, CardCatalog.Favor);
 
                 if (string.IsNullOrEmpty(discardPickKey))
                 {
-                    // Phase 1: server shuffles a snapshot copy for the actor
-                    // to choose from. NOTE: gs.Hands is the source of truth.
+                    // Phase 1: open Nope window AND ask the actor to pick a
+                    // card from the target's shuffled hand. The Nope window
+                    // stays open until it expires — if anyone chains a Cản
+                    // that cancels the action, the picked card is ignored
+                    // (ResolveExpiredNopeAsync handles the cleanup).
                     var shuffled = new List<string>(tgtHandF);
                     for (var i = shuffled.Count - 1; i > 0; i--)
                     {
                         var j = Random.Shared.Next(i + 1);
                         (shuffled[i], shuffled[j]) = (shuffled[j], shuffled[i]);
                     }
-                    // Persist before returning pick state so others see updated handCounts.
-                    await PersistAsync(room.Id, gs, ct);
-                    result.Room = (await _repository.GetByIdAsync(room.Id, ct))!;
+                    // Stash the pending favor pick so ResolveExpiredNopeAsync
+                    // can clear it if the action gets Nope'd.
+                    gs.PendingFavorPick = new PendingFavorPick
+                    {
+                        TargetMemberId = targetMemberId,
+                        ShuffledCandidates = shuffled,
+                    };
+                    QueueNopeWindow(gs, memberId, CardCatalog.Favor);
                     result.PlayedCardKey = CardCatalog.Favor;
                     result.RequiresFavorPick = true;
                     result.FavorCandidates = shuffled;
                     result.Toast = "Chọn 1 lá để lấy từ tay đối thủ.";
+                    // Persist immediately so the actor's hand count is updated
+                    // on every client of the room, and so the broadcast fans
+                    // out to all tabs to show the Favor reaction window.
+                    CheckWinCondition(gs);
+                    await PersistAsync(room.Id, gs, ct);
+                    result.Room = (await _repository.GetByIdAsync(room.Id, ct))!;
                     return result;
                 }
 
-                // Phase 2: player chose which card to take.
+                // Phase 2: player chose which card to take. We allow this only
+                // if the Nope window already closed (no more chained Nope).
+                if (gs.PendingAction is not null)
+                    throw new DomainException("action_pending", "Đang chờ phản ứng Nope.");
                 if (!tgtHandF.Contains(discardPickKey))
                     throw new DomainException("favor_card_gone", "Đối thủ không còn lá này.");
                 tgtHandF.Remove(discardPickKey);
                 hand.Add(discardPickKey);
+                gs.PendingFavorPick = null;
                 gs.CardsPlayed[memberId] = gs.CardsPlayed.GetValueOrDefault(memberId) + 1;
                 gs.TurnsTaken[memberId] = gs.TurnsTaken.GetValueOrDefault(memberId) + 1;
-                // Favor takes effect immediately — no Nope window needed.
                 AdvanceTurn(gs);
                 result.PlayedCardKey = CardCatalog.Favor;
                 result.Toast = $"Lấy 1 lá từ đối thủ.";
@@ -599,6 +626,16 @@ public class GameService
         if (gs.Deck.Count == 0)
             throw new DomainException("deck_empty", "Hết bài trong chồng.");
 
+        // AttackCounter-driven multi-draw: when an Attack card is played, the
+        // next player must draw 2 cards instead of 1. The player's UI shows a
+        // "Bạn phải rút 2 lá" hint and after the first draw they auto-prompt
+        // for the next one. If the player has a Skip card, they can play it
+        // (consume one draw) instead of drawing cards.
+        if (gs.AttackCounter > 0)
+        {
+            return await DrawMultipleAsync(roomId, gs, memberId, gs.AttackCounter, ct);
+        }
+
         var drawn = gs.Deck[^1];
         gs.Deck.RemoveAt(gs.Deck.Count - 1);
         var hand = gs.Hands[memberId];
@@ -617,7 +654,14 @@ public class GameService
             var defuseIdx = -1;
             for (var i = 0; i < hand.Count; i++)
             {
-                if (CardCatalog.IsComboDefuse(hand[i])) { defuseIdx = i; break; }
+                // Treat BOTH the base "defuse" key and the 5 combo variants
+                // as defuse-class cards. The player's starting hand may be
+                // either type depending on how the dealing protocol rolled.
+                if (hand[i] == CardCatalog.Defuse || CardCatalog.IsComboDefuse(hand[i]))
+                {
+                    defuseIdx = i;
+                    break;
+                }
             }
             if (defuseIdx >= 0)
             {
@@ -631,11 +675,123 @@ public class GameService
             // animation finishes; the snapshot will report Alive=false.
             gs.Alive[memberId] = false;
             gs.DiedAt[memberId] = DateTime.UtcNow;
+            // Move the dead player's hand to the discard pile so the cards
+            // aren't floating in limbo, and advance the turn so the next
+            // alive player actually gets the clock. Without AdvanceTurn here
+            // the dead player would keep "holding" the turn forever and
+            // TurnClockService would just keep auto-drawing into their hand.
+            if (gs.Hands.TryGetValue(memberId, out var deadHand))
+            {
+                gs.DiscardPile.AddRange(deadHand);
+                gs.Hands.Remove(memberId);
+            }
+            gs.TurnsTaken.Remove(memberId);
+            gs.CardsPlayed.Remove(memberId);
+            AdvanceTurn(gs);
             result.Toast = "Bạn đã chết.";
         }
         else
         {
             hand.Add(drawn);
+            result.Toast = $"Rút được: {CardCatalog.Names.GetValueOrDefault(drawn, drawn)}.";
+            gs.TurnsTaken[memberId] = gs.TurnsTaken.GetValueOrDefault(memberId) + 1;
+            AdvanceTurn(gs);
+        }
+
+        CheckWinCondition(gs);
+        await PersistAsync(roomId, gs, ct);
+        result.Room = (await _repository.GetByIdAsync(roomId, ct))!;
+        return result;
+    }
+
+    /// <summary>
+    /// Helper for the Attack chain: the player must draw <paramref name="remaining"/>
+    /// cards. We draw them one at a time so the bomb-reveal animation can fire
+    /// per draw. After each draw, if the player drew a bomb and they have a
+    /// defuse, we stop and return to the defuse flow. If the deck runs out
+    /// mid-chain, we stop and advance the turn.
+    /// </summary>
+    private async Task<GameActionResult> DrawMultipleAsync(string roomId, GameState gs, string memberId, int remaining, CancellationToken ct)
+    {
+        if (remaining <= 0 || gs.Deck.Count == 0)
+        {
+            // Out of cards or no more draws required — end the chain.
+            gs.AttackCounter = 0;
+            gs.TurnsTaken[memberId] = gs.TurnsTaken.GetValueOrDefault(memberId) + 1;
+            AdvanceTurn(gs);
+            CheckWinCondition(gs);
+            await PersistAsync(roomId, gs, ct);
+            return new GameActionResult
+            {
+                Room = (await _repository.GetByIdAsync(roomId, ct))!,
+                Toast = "Hết bài — lượt kết thúc.",
+            };
+        }
+
+        var drawn = gs.Deck[^1];
+        gs.Deck.RemoveAt(gs.Deck.Count - 1);
+        var hand = gs.Hands[memberId];
+        var result = new GameActionResult { DrawnCardKey = drawn };
+
+        // Broadcast for cinematic overlay
+        gs.LastDrawnBy = memberId;
+        gs.LastDrawnCardKey = drawn;
+        gs.LastDrawnAt = DateTime.UtcNow;
+        gs.BombRevealActive = drawn == CardCatalog.Bomb;
+
+        if (drawn == CardCatalog.Bomb)
+        {
+            var defuseIdx = -1;
+            for (var i = 0; i < hand.Count; i++)
+            {
+                if (hand[i] == CardCatalog.Defuse || CardCatalog.IsComboDefuse(hand[i]))
+                {
+                    defuseIdx = i;
+                    break;
+                }
+            }
+            if (defuseIdx >= 0)
+            {
+                // Consume the chain — defusing the bomb ends the player's turn.
+                gs.AttackCounter = 0;
+                result.RequiresDefuse = true;
+                result.Toast = $"Rút trúng bom trong lượt tấn công — hãy chọn vị trí đặt lại.";
+                await PersistAsync(roomId, gs, ct);
+                result.Room = (await _repository.GetByIdAsync(roomId, ct))!;
+                return result;
+            }
+            // No defuse → die. Bomb goes to discard pile, attack chain ends.
+            gs.Alive[memberId] = false;
+            gs.DiedAt[memberId] = DateTime.UtcNow;
+            gs.AttackCounter = 0;
+            // Move the dead player's hand to the discard pile so the cards
+            // aren't floating in limbo, and advance the turn so the next
+            // alive player actually gets the clock.
+            if (gs.Hands.TryGetValue(memberId, out var deadHand2))
+            {
+                gs.DiscardPile.AddRange(deadHand2);
+                gs.Hands.Remove(memberId);
+            }
+            gs.TurnsTaken.Remove(memberId);
+            gs.CardsPlayed.Remove(memberId);
+            AdvanceTurn(gs);
+            result.Toast = "Bạn đã chết.";
+        }
+        else
+        {
+            hand.Add(drawn);
+            gs.AttackCounter -= 1;
+            if (gs.AttackCounter > 0)
+            {
+                // More draws required — leave the turn on this player.
+                result.Toast = $"Rút được: {CardCatalog.Names.GetValueOrDefault(drawn, drawn)}. Còn {gs.AttackCounter} lá phải rút.";
+                result.RequiresMoreDraws = true;
+                result.RemainingDraws = gs.AttackCounter;
+                await PersistAsync(roomId, gs, ct);
+                result.Room = (await _repository.GetByIdAsync(roomId, ct))!;
+                return result;
+            }
+            // Chain finished — advance turn normally.
             result.Toast = $"Rút được: {CardCatalog.Names.GetValueOrDefault(drawn, drawn)}.";
             gs.TurnsTaken[memberId] = gs.TurnsTaken.GetValueOrDefault(memberId) + 1;
             AdvanceTurn(gs);
@@ -659,7 +815,11 @@ public class GameService
         var defuseIdx = -1;
         for (var i = 0; i < hand.Count; i++)
         {
-            if (CardCatalog.IsComboDefuse(hand[i])) { defuseIdx = i; break; }
+            if (hand[i] == CardCatalog.Defuse || CardCatalog.IsComboDefuse(hand[i]))
+            {
+                defuseIdx = i;
+                break;
+            }
         }
         if (defuseIdx < 0)
             throw new DomainException("no_defuse", "Bạn không có lá cứu.");
@@ -722,6 +882,12 @@ public class GameService
             // Last noper wins — cancel the action.
             // Restore initiator's hand (where possible).
             RefundInitiatorCard(gs, pending);
+            // If the cancelled action was a Favor, clear the pending pick too
+            // so the modal doesn't keep showing stale candidates.
+            if (pending.CardKey == CardCatalog.Favor)
+            {
+                gs.PendingFavorPick = null;
+            }
             gs.PendingAction = null;
             // Action resolved (cancelled) — clear cinematic.
             ClearActionCinematic(gs);
@@ -796,15 +962,33 @@ public class GameService
         gs.PendingAction = null;
         ClearActionCinematic(gs);
 
+        // For Favor, the card was removed from hand and the Nope window
+        // opened, but the player still needs to pick which card to take.
+        // Don't advance the turn yet — the actor will call PlayCardAsync
+        // again with the discardPickKey set, which will execute the swap
+        // and advance the turn at that point.
+        if (pending.CardKey == CardCatalog.Favor && gs.PendingFavorPick is not null)
+        {
+            CheckWinCondition(gs);
+            await PersistAsync(roomId, gs, ct);
+            return new GameActionResult
+            {
+                Room = (await _repository.GetByIdAsync(roomId, ct))!,
+                Toast = $"Hết thời gian cản — chọn 1 lá để lấy từ đối thủ.",
+            };
+        }
+
         // Advance the turn so the initiator's turn actually ends and the
         // next player is on the clock.
-        AdvanceTurn(gs);
         // AdvanceTurn only resets TurnStartedAt when the attack chain isn't
-        // active. For plain Skip / Favor / Future / Shuffle / etc. it does,
-        // but for Attack + Skip chains the prior turn's TurnStartedAt is
-        // intentionally preserved. In every case we want the *current*
-        // player on a fresh 60s clock, so explicitly arm it here.
-        if (gs.EndedAt is null && gs.TurnStartedAt is not null)
+        // active. For Attack + Skip chains the prior turn's TurnStartedAt is
+        // intentionally preserved — the attacked player must draw all their
+        // attack cards inside the original 60s window. We mirror that here:
+        // capture whether we're starting a fresh attack chain BEFORE the
+        // decrement and skip the explicit reset in that case.
+        var startingAttackChain = gs.AttackCounter > 0;
+        AdvanceTurn(gs);
+        if (gs.EndedAt is null && gs.TurnStartedAt is not null && !startingAttackChain)
         {
             gs.TurnStartedAt = DateTime.UtcNow;
         }

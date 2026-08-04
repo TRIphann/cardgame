@@ -14,7 +14,7 @@
 //   0.7-3.0s  pulse + sparks + countdown
 //   3.0s+  chuyển phase nổ (nếu không defuse) hoặc fade out
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { cardImageUrl } from "@games/exploding-cats/cardCloudinary.js";
 
 const REVEAL_DURATION_MS = 3000;
@@ -23,6 +23,11 @@ const FLIP_DELAY_MS = 280;
 export function BombReveal({ memberName, memberId, willDefuse, onComplete }) {
   const [phase, setPhase] = useState("back");
   const [mounted, setMounted] = useState(true);
+  // Stash onComplete in a ref so the parent re-rendering with a new
+  // closure doesn't restart the timers (which would freeze the bomb on
+  // the back face forever).
+  const onCompleteRef = useRef(onComplete);
+  useEffect(() => { onCompleteRef.current = onComplete; }, [onComplete]);
 
   useEffect(() => {
     const t1 = setTimeout(() => setPhase("flip"), FLIP_DELAY_MS);
@@ -32,14 +37,14 @@ export function BombReveal({ memberName, memberId, willDefuse, onComplete }) {
         setPhase("fadeout");
         const t4 = setTimeout(() => {
           setMounted(false);
-          onComplete?.();
+          onCompleteRef.current?.();
         }, 400);
         return () => clearTimeout(t4);
       }
       setPhase("explode");
     }, REVEAL_DURATION_MS);
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
-  }, [willDefuse, onComplete]);
+  }, [willDefuse]);
 
   if (!mounted) return null;
 
@@ -137,14 +142,16 @@ export function BombReveal({ memberName, memberId, willDefuse, onComplete }) {
 // Multi-layer shockwave + fireball + debris + screen shake + flame ring + sparks.
 export function BombExplode({ memberName, onComplete }) {
   const [mounted, setMounted] = useState(true);
+  const onCompleteRef = useRef(onComplete);
+  useEffect(() => { onCompleteRef.current = onComplete; }, [onComplete]);
 
   useEffect(() => {
     const id = setTimeout(() => {
       setMounted(false);
-      onComplete?.();
+      onCompleteRef.current?.();
     }, 2400);
     return () => clearTimeout(id);
-  }, [onComplete]);
+  }, []);
 
   if (!mounted) return null;
 
