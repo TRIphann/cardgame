@@ -49,7 +49,9 @@ export async function request(path, options = {}) {
       clearTimeout(timer);
       lastErr = err;
       if (attempt < MAX_RETRIES && isTransient(err)) {
-        await sleep(700);
+        // Exponential backoff: 1s, 2s, up to 5s — helps Render cold-start.
+        const delay = Math.min(5000, 500 * Math.pow(2, attempt));
+        await sleep(delay);
         continue;
       }
       throw err;

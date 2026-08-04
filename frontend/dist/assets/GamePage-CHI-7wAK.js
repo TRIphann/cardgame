@@ -1,5 +1,5 @@
 import { r as reactExports, j as jsxRuntimeExports } from "./react-BhVOh7S1.js";
-import { r as roomsApi, A as API_BASE_URL, c as cardImageUrl, u as useSession, a as useToast, b as useAudio, R as ROUTES, C as CARD_CLOUDINARY } from "./index-DnNHNeyT.js";
+import { r as roomsApi, A as API_BASE_URL, c as cardImageUrl, u as useSession, a as useToast, b as useAudio, R as ROUTES, C as CARD_CLOUDINARY } from "./index-DsRmULXR.js";
 import { H as HubConnectionBuilder, L as LogLevel } from "./vendor-DcE7maHo.js";
 import { c as useParams, a as useNavigate } from "./router-DRJyKT9H.js";
 import "./react-dom-HPixZcWd.js";
@@ -1477,10 +1477,13 @@ function GamePage() {
       const card = actionModal.card;
       setActionModal(null);
       setSelectedCardIdx(null);
+      const savedCardKey = card.key;
       const localHand = room?.myHand && Array.isArray(room.myHand) ? room.myHand : [];
       if (!isComboCard(card.key) && !localHand.includes(card.key)) {
         actionInFlightRef.current = false;
         toast?.error?.("Bạn không còn lá này trên tay.");
+        const meta = getCardLabel(savedCardKey);
+        setActionModal({ card: { key: savedCardKey, ...meta } });
         return;
       }
       const srcRect = handCenterRef.current?.getBoundingClientRect?.();
@@ -1583,9 +1586,9 @@ function GamePage() {
             const fresh = await roomsApi.snapshotWithViewer(roomId, myId);
             if (fresh) {
               setRoom(fresh);
-              if (actionModal) {
-                const meta = getCardLabel(actionModal.card.key);
-                setActionModal({ card: { key: actionModal.card.key, ...meta }, handIdx: null });
+              if (savedCardKey) {
+                const meta = getCardLabel(savedCardKey);
+                setActionModal({ card: { key: savedCardKey, ...meta } });
               }
             }
           } catch (_) {
@@ -1596,7 +1599,7 @@ function GamePage() {
     } finally {
       actionInFlightRef.current = false;
     }
-  }, [actionModal, audio, detectComboFor, emitFx, isComboCard, myHand, myId, roomId, toast]);
+  }, [audio, detectComboFor, emitFx, isComboCard, myHand, myId, room, roomId, toast]);
   const onPickPlayer = reactExports.useCallback(
     async (targetId) => {
       const ctx = pickModal;

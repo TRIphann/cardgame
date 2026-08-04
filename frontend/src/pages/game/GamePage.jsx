@@ -395,6 +395,11 @@ export default function GamePage() {
     setActionModal(null);
     setSelectedCardIdx(null);
 
+    // Capture card key for stale-closure recovery in the catch block.
+    // actionModal is set to null above, so we need savedCard to re-open
+    // the modal on error (card_not_in_hand / not_your_turn / action_pending).
+    const savedCardKey = card.key;
+
     // Safety: bail out if the local hand snapshot doesn't actually contain
     // the card we just selected. This guards against a stale render where
     // the server has already removed the card (e.g. another player's play
@@ -404,6 +409,9 @@ export default function GamePage() {
     if (!isComboCard(card.key) && !localHand.includes(card.key)) {
       actionInFlightRef.current = false;
       toast?.error?.("Bạn không còn lá này trên tay.");
+      // Restore modal so the user can pick another card.
+      const meta = getCardLabel(savedCardKey);
+      setActionModal({ card: { key: savedCardKey, ...meta } });
       return;
     }
 
@@ -531,10 +539,10 @@ export default function GamePage() {
           const fresh = await roomsApi.snapshotWithViewer(roomId, myId);
           if (fresh) {
             setRoom(fresh);
-            // Reopen the modal so the user can pick a still-available card.
-            if (actionModal) {
-              const meta = getCardLabel(actionModal.card.key);
-              setActionModal({ card: { key: actionModal.card.key, ...meta }, handIdx: null });
+            // Reopen the modal using savedCardKey (actionModal is already null).
+            if (savedCardKey) {
+              const meta = getCardLabel(savedCardKey);
+              setActionModal({ card: { key: savedCardKey, ...meta } });
             }
           }
         } catch (_) { /* swallow — toast below covers the UX */ }
@@ -544,7 +552,7 @@ export default function GamePage() {
     } finally {
       actionInFlightRef.current = false;
     }
-  }, [actionModal, audio, detectComboFor, emitFx, isComboCard, myHand, myId, roomId, toast]);
+  }, [audio, detectComboFor, emitFx, isComboCard, myHand, myId, room, roomId, toast]);
 
   // Player picker callback — handles BOTH combo (Two/Three) and Favor.
   const onPickPlayer = useCallback(
