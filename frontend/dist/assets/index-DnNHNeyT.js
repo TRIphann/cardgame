@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/GamePage-yvh2L0gb.js","assets/react-BhVOh7S1.js","assets/vendor-DcE7maHo.js","assets/router-DRJyKT9H.js","assets/react-dom-HPixZcWd.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/GamePage-CWfsRws3.js","assets/react-BhVOh7S1.js","assets/vendor-DcE7maHo.js","assets/router-DRJyKT9H.js","assets/react-dom-HPixZcWd.js","assets/GamePage-DOY4bVJm.css"])))=>i.map(i=>d[i]);
 var __defProp = Object.defineProperty;
 var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
 var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
@@ -979,7 +979,7 @@ function useOptimisticRoom({ onNavigate } = {}) {
       hostId: "PENDING",
       hostName: name,
       status: "waiting",
-      maxPlayers: 8,
+      maxPlayers: 7,
       currentPlayers: 1,
       createdAt: (/* @__PURE__ */ new Date()).toISOString(),
       members: [{ id: "PENDING-me", name, isHost: true, joinedAt: (/* @__PURE__ */ new Date()).toISOString() }]
@@ -2185,7 +2185,8 @@ function LobbyPage() {
     [members, session.session]
   );
   const isHost = myMember?.isHost || isPending && session.session?.isHost;
-  const canStart = isHost && room && room.status === "waiting" && allOtherPlayersReady;
+  const MIN_PLAYERS = 3;
+  const canStart = isHost && room && room.status === "waiting" && (members?.length ?? 0) >= MIN_PLAYERS && allOtherPlayersReady;
   const playerCount = Math.max(members?.length ?? 0, 1);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("main", { className: "lobby-page", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lobby-backdrop", "aria-hidden": "true", children: [
@@ -2372,6 +2373,11 @@ function LobbyPage() {
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("footer", { className: "lobby-footer", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "player-count", children: t("lobby.playerCount", { count: playerCount }) }),
+      isHost && (members?.length ?? 0) < 3 && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "lobby-footer__hint", children: [
+        "Cần ít nhất 3 người chơi để bắt đầu. Hiện có ",
+        members?.length ?? 1,
+        "/3."
+      ] }),
       isHost && /* @__PURE__ */ jsxRuntimeExports.jsx(
         "button",
         {
@@ -2387,7 +2393,7 @@ function LobbyPage() {
     roomError && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lobby-error", role: "alert", children: String(roomError.message || roomError) })
   ] });
 }
-const GamePage = reactExports.lazy(() => __vitePreload(() => import("./GamePage-yvh2L0gb.js"), true ? __vite__mapDeps([0,1,2,3,4]) : void 0));
+const GamePage = reactExports.lazy(() => __vitePreload(() => import("./GamePage-CWfsRws3.js"), true ? __vite__mapDeps([0,1,2,3,4,5]) : void 0));
 function App() {
   const location = useLocation();
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(ErrorBoundary, { children: [

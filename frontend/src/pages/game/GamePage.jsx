@@ -31,6 +31,7 @@ import { ActionCardReveal } from "./ActionCardReveal.jsx";
 import { FxBurst } from "./FxBurst.jsx";
 import { FxScreenShake } from "./FxScreenShake.jsx";
 import { SummaryScreen } from "./SummaryScreen.jsx";
+import "../styles/game.css";
 
 // Combo card keys (server-side "defuse variants").
 const COMBO_KEYS = ["ninja", "superman", "zombie", "robot", "hải-tặc"];
@@ -164,32 +165,29 @@ export default function GamePage() {
   // Slice players into left/right stacks for the layout. We put the local
   // player at the bottom (not in the side lists).
     // Layout rule (mirrors LobbyPage/Seats.jsx logic):
-    //   1. Host  → left column, always.
-    //   2. The first person to JOIN the room (earliest joinedAt, excluding host)
-    //      → right column first.  This is the person who has been waiting longest.
-    //   3. Remaining non-host members → alternate LEFT → RIGHT → LEFT, keeping
-    //      the two sides as balanced as possible.
+    //   1. Host  → left column, always (regardless of viewer).
+    //   2. Non-host members (excluding self) → alternate RIGHT → LEFT in the
+    //      order they joined, keeping the two sides as balanced as possible.
     //
-    // With 2 players (host + 1 guest):  host=left, guest=right  ✓
-    // With 3 players (host + 2 guests): host=left, first-guest=right, second-guest=left  ✓
-    // With 4 players (host + 3 guests): host=left, first-guest=right, second=left, third=right  ✓
+    // With 3 players (host + 2 guests):
+    //   host viewer →  left = [host], right = [guest1, guest3?], left = [guest2]
+    //   guest viewer → left = [host],     right = [others]
+    // Every viewer therefore sees the same overall shape.
     const opponents = useMemo(() => {
       const nonSelf = members.filter((m) => m.id !== myId);
-
-      // The first person to join (excluding host) lands on the right.
-      // Sort non-host members by joinedAt so the earliest joiner gets priority right.
-      const nonHost = nonSelf
+      const host = nonSelf.find((m) => m.isHost) || null;
+      const others = nonSelf
         .filter((m) => !m.isHost)
         .sort((a, b) => new Date(a.joinedAt) - new Date(b.joinedAt));
 
       const left = [];
       const right = [];
+      if (host) left.push(host);
 
-      // Slot 0 on the right = earliest joiner.
-      // i=0 → right (first joiner), i=1 → left, i=2 → right, etc.
-      for (let i = 0; i < nonHost.length; i++) {
-        if (i % 2 === 0) right.push(nonHost[i]);
-        else left.push(nonHost[i]);
+      // Even-indexed non-host players go right; odd-indexed go left.
+      for (let i = 0; i < others.length; i++) {
+        if (i % 2 === 0) right.push(others[i]);
+        else left.push(others[i]);
       }
 
       return { left, right };
@@ -874,33 +872,33 @@ export default function GamePage() {
     });
   }, [pendingAction?.cardKey, pendingAction?.createdAt]);
 
-  // ── Bomb reveal detection ──────────────────────────────
-  // Whenever a snapshot arrives with `BombRevealActive=true` AND a fresh
-  // `LastDrawnAt`, fire the cinematic bomb overlay for everyone. We dedupe
-  // by (memberId, lastDrawnAt) so re-renders of the same snapshot don't
-  // re-trigger.
+// ── Bomb reveal detection ──────────────────────────────
+// Whenever a snapshot arrives with `bombRevealActive=true` AND a fresh
+// `lastDrawnAt`, fire the cinematic bomb overlay for everyone. We dedupe
+// by (memberId, lastDrawnAt) so re-renders of the same snapshot don't
+// re-trigger.
   useEffect(() => {
-    if (!gs?.BombRevealActive || !gs?.LastDrawnAt || !gs?.LastDrawnBy) return;
-    if (gs.LastDrawnCardKey !== "bomb") return;
-    const stamp = `${gs.LastDrawnBy}::${gs.LastDrawnAt}`;
+    if (!gs?.bombRevealActive || !gs?.lastDrawnAt || !gs?.lastDrawnBy) return;
+    if (gs.lastDrawnCardKey !== "bomb") return;
+    const stamp = `${gs.lastDrawnBy}::${gs.lastDrawnAt}`;
     if (lastDrawnRef.current === stamp) return;
     lastDrawnRef.current = stamp;
 
-    const member = members.find((m) => m.id === gs.LastDrawnBy);
+    const member = members.find((m) => m.id === gs.lastDrawnBy);
     const memberName = member?.name || "Bạn";
     // We can only PREDICT a defuse for the local viewer — other players'
     // hand CONTENTS are hidden behind the server, so we can't know whether
     // they hold a defuse. Default to "won't defuse" for opponents so the
     // cinematic stays suspenseful.
-    const isLocal = gs.LastDrawnBy === myId;
-    const stillAlive = gs.Alive?.[gs.LastDrawnBy] !== false;
+    const isLocal = gs.lastDrawnBy === myId;
+    const stillAlive = gs.alive?.[gs.lastDrawnBy] !== false;
     const willDefuse = !!(
       isLocal &&
       stillAlive &&
       (myHand || []).some((c) => COMBO_KEYS.includes(c))
     );
     setBombReveal({
-      memberId: gs.LastDrawnBy,
+      memberId: gs.lastDrawnBy,
       memberName,
       willDefuse,
       key: stamp,
@@ -909,7 +907,7 @@ export default function GamePage() {
     // Hard timeout safety net so the overlay never gets stuck.
     const safety = setTimeout(() => setBombReveal(null), 4500);
     return () => clearTimeout(safety);
-  }, [gs?.BombRevealActive, gs?.LastDrawnAt, gs?.LastDrawnBy, gs?.LastDrawnCardKey, gs?.Alive, members, myId, myHand, room?.myHand]);
+  }, [gs?.bombRevealActive, gs?.lastDrawnAt, gs?.lastDrawnBy, gs?.lastDrawnCardKey, gs?.alive, members, myId, myHand, room?.myHand]);
 
   // ── Render ────────────────────────────────────────────────
   if (!room) {
@@ -1205,6 +1203,7 @@ export default function GamePage() {
           sourceRect={drawAnim.sourceRect}
           targetRect={drawAnim.targetRect}
           cardKey={drawAnim.cardKey}
+          revealKey={drawAnim.revealKey}
           onComplete={() => setDrawAnim(null)}
         />
       )}
@@ -1278,18 +1277,21 @@ export default function GamePage() {
       )}
 
       {/* Action-card centre reveal — shows played action card or latest
-          Nope during the 3s window. Mounted/reset every time LastPlayedAt
+          Nope during the 3s window. Mounted/reset every time lastPlayedAt
           changes or chain length grows. Hides when pendingAction closes. */}
       {(() => {
-        const cardKey = gs?.LastPlayedCardKey;
-        const at = gs?.LastPlayedAt;
+        const cardKey = gs?.lastPlayedCardKey;
+        const at = gs?.lastPlayedAt;
         if (!cardKey || !at) return null;
-        const chain = gs?.PendingAction?.NopeChain?.length || 0;
-        const isNopeChain = !!gs?.LastPlayedByNope;
-        const memberId = isNopeChain ? gs?.LastPlayedByNope : gs?.LastPlayedBy;
+        const chain = gs?.pendingAction?.nopeChain?.length || 0;
+        const isNopeChain = !!gs?.lastPlayedByNope;
+        const memberId = isNopeChain ? gs?.lastPlayedByNope : gs?.lastPlayedBy;
         const memberName = members.find((m) => m.id === memberId)?.name || "Bạn";
         // Nope remaining window (mirror server countdown)
         const remaining = nopeRemaining > 0 ? nopeRemaining : null;
+        // Origin = top of deck pile so the flip animation springs from where
+        // the card came from.
+        const originRect = deckRef.current?.getBoundingClientRect?.() || null;
         return (
           <ActionCardReveal
             key={`${at}::${chain}::${cardKey}`}
@@ -1298,6 +1300,7 @@ export default function GamePage() {
             isNopeChain={isNopeChain}
             chainCount={chain}
             nopeRemainingMs={remaining}
+            originRect={originRect}
             onComplete={undefined}
           />
         );

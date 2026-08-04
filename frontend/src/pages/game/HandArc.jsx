@@ -62,8 +62,14 @@ export function HandArc({ hand, selectedIndex, onSelectCard, onHoverCard, lastDr
           "--arc-tx": tx,
           "--arc-tr": tr,
           "--arc-ty": ty,
-          "--hover-lift": hovered ? "translateY(-30px)" : ty,
-          transform: hovered ? `${tx} ${tr} ${ty} translateY(-30px) scale(1.1)` : `${tx} ${tr} ${ty}`,
+          "--hover-lift": hovered ? "translateY(-22px)" : ty,
+          // NOTE: don't add `tx` here — the horizontal fan is already done
+          // via `left`. Adding translateX(tx) on top doubled the spread and
+          // pushed cards off-screen. Only the rotation + vertical lift come
+          // from the transform.
+          transform: hovered
+            ? `${tr} ${ty} translateY(-22px) scale(1.06)`
+            : `${tr} ${ty}`,
           zIndex: 10 + idx + (hovered ? 1000 : 0),
         };
         const url = cardImageUrl(key);

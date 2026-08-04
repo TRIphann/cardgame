@@ -10,6 +10,7 @@ import { useAudio } from "@shared/audio/AudioManager.jsx";
 import { useToast } from "@shared/ui/toast.jsx";
 import { useI18n } from "@shared/i18n/i18n.jsx";
 import { useOptimisticRoom } from "../../hooks/useOptimisticRoom.js";
+import "../styles/landing.css";
 
 // Wake the Render free-tier container up-front so the first user action
 // doesn't pay the full cold-start cost. We use a lazy fetch that starts

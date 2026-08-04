@@ -1,6 +1,8 @@
-// FuturePeekModal — premium cinematic reveal của 3 lá trên cùng bộ bài mà
-// chỉ player này nhìn được. Cards xuất hiện lần lượt với magical eye reveal
-// sequence. Player thấy được từng lá một với hiệu ứng glow + flip.
+// FuturePeekModal — 3 lá trên cùng bộ bài chỉ player này nhìn được.
+//
+// 3 lá flip từ mặt sau (`back`) sang mặt trước (3 card image) lần lượt
+// theo stagger 250ms. Không border, không box — chỉ card image và label
+// phía dưới.
 
 import React, { useEffect, useState } from "react";
 import { cardImageUrl } from "@games/exploding-cats/cardCloudinary.js";
@@ -27,12 +29,6 @@ export function FuturePeekModal({ peek, onClose }) {
 
   return (
     <div className="game-modal__scrim future-peek-scrim" onClick={onClose}>
-      <div className="future-peek-magical-bg" aria-hidden="true">
-        <span className="future-peek-magical-bg__orb future-peek-magical-bg__orb--1" />
-        <span className="future-peek-magical-bg__orb future-peek-magical-bg__orb--2" />
-        <span className="future-peek-magical-bg__orb future-peek-magical-bg__orb--3" />
-      </div>
-
       <div
         className="game-modal future-peek-modal"
         onClick={(e) => e.stopPropagation()}
@@ -61,27 +57,24 @@ export function FuturePeekModal({ peek, onClose }) {
             return (
               <div
                 key={p.idx}
-                className={`future-peek-modal__slot${revealed ? " future-peek-modal__slot--revealed" : ""}`}
+                className={`future-peek-slot${revealed ? " future-peek-slot--revealed" : ""}`}
                 style={{ "--reveal-delay": `${p.idx * 0.6}s` }}
               >
-                <div className="future-peek-modal__card-wrap">
-                  <div className="future-peek-modal__card-back" aria-hidden="true">
-                    <img src={cardImageUrl("back")} alt="" />
+                <div className="future-peek-slot__card-wrap">
+                  <div className="future-peek-slot__inner">
+                    <div className="future-peek-slot__face future-peek-slot__face--back">
+                      <img src={cardImageUrl("back")} alt="" draggable={false} />
+                    </div>
+                    <div className="future-peek-slot__face future-peek-slot__face--front">
+                      <img src={cardImageUrl(key)} alt={meta.label} draggable={false} />
+                    </div>
                   </div>
-                  <div className="future-peek-modal__card">
-                    <img src={cardImageUrl(key)} alt={meta.label} draggable={false} />
-                    <span className="future-peek-modal__card-glow" aria-hidden="true" />
-                    <span className="future-peek-modal__card-shine" aria-hidden="true" />
-                    <span className="future-peek-modal__card-position">
-                      {p.idx + 1}
-                    </span>
-                  </div>
+                  <span className="future-peek-slot__position">{p.idx + 1}</span>
                 </div>
-                <div className="future-peek-modal__slot-label">
+                <div className="future-peek-slot__label">
                   <strong>{p.label}</strong>
                   <span>{p.sub}</span>
                 </div>
-                <div className="future-peek-modal__slot-key">{key}</div>
               </div>
             );
           })}

@@ -1,12 +1,10 @@
-/* Main entry CSS — imports everything the React app needs.
-   We pull in the existing vanilla stylesheets so we don't have to re-write
-   any visual rules while in the React migration. New React-only rules are
-   defined at the bottom. */
+/* Main entry CSS — global styles only.
+   Page-specific stylesheets (landing.css, lobby.css, game.css) are now
+   imported by their respective page components so the CSS for the current
+   route is the only CSS that gets parsed at boot. This avoids landing pages
+   paying for game-page CSS and vice-versa. */
 
 @import "../shared/styles/global.css";
-@import "../pages/styles/landing.css";
-@import "../pages/styles/lobby.css";
-@import "../pages/styles/game.css";
 @import "../shared/styles/settings.css";
 
 /* ============================================

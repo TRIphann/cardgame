@@ -1,5 +1,5 @@
 import { r as reactExports, j as jsxRuntimeExports } from "./react-BhVOh7S1.js";
-import { r as roomsApi, A as API_BASE_URL, c as cardImageUrl, u as useSession, a as useToast, b as useAudio, R as ROUTES, C as CARD_CLOUDINARY } from "./index-CVEyk8wh.js";
+import { r as roomsApi, A as API_BASE_URL, c as cardImageUrl, u as useSession, a as useToast, b as useAudio, R as ROUTES, C as CARD_CLOUDINARY } from "./index-DnNHNeyT.js";
 import { H as HubConnectionBuilder, L as LogLevel } from "./vendor-DcE7maHo.js";
 import { c as useParams, a as useNavigate } from "./router-DRJyKT9H.js";
 import "./react-dom-HPixZcWd.js";
@@ -280,8 +280,12 @@ function HandArc({ hand, selectedIndex, onSelectCard, onHoverCard, lastDrawnKey 
       "--arc-tx": tx,
       "--arc-tr": tr,
       "--arc-ty": ty,
-      "--hover-lift": hovered ? "translateY(-30px)" : ty,
-      transform: hovered ? `${tx} ${tr} ${ty} translateY(-30px) scale(1.1)` : `${tx} ${tr} ${ty}`,
+      "--hover-lift": hovered ? "translateY(-22px)" : ty,
+      // NOTE: don't add `tx` here — the horizontal fan is already done
+      // via `left`. Adding translateX(tx) on top doubled the spread and
+      // pushed cards off-screen. Only the rotation + vertical lift come
+      // from the transform.
+      transform: hovered ? `${tr} ${ty} translateY(-22px) scale(1.06)` : `${tr} ${ty}`,
       zIndex: 10 + idx + (hovered ? 1e3 : 0)
     };
     const url = cardImageUrl(key);
@@ -753,88 +757,82 @@ function FuturePeekModal({ peek, onClose }) {
     { idx: 1, label: "Lượt sau", sub: "Lá người kế tiếp rút (nếu bạn bỏ)" },
     { idx: 2, label: "2 lượt sau", sub: "Lá người 2 turn sau rút" }
   ];
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "game-modal__scrim future-peek-scrim", onClick: onClose, children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "future-peek-magical-bg", "aria-hidden": "true", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "future-peek-magical-bg__orb future-peek-magical-bg__orb--1" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "future-peek-magical-bg__orb future-peek-magical-bg__orb--2" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "future-peek-magical-bg__orb future-peek-magical-bg__orb--3" })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs(
-      "div",
-      {
-        className: "game-modal future-peek-modal",
-        onClick: (e) => e.stopPropagation(),
-        style: { "--fx-color": "#9a78ff", "--fx-accent": "#cdb9ff" },
-        children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "button",
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-modal__scrim future-peek-scrim", onClick: onClose, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: "game-modal future-peek-modal",
+      onClick: (e) => e.stopPropagation(),
+      style: { "--fx-color": "#9a78ff", "--fx-accent": "#cdb9ff" },
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            className: "game-modal__close",
+            type: "button",
+            onClick: onClose,
+            "aria-label": "Đóng",
+            children: "×"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "future-peek-modal__icon", "aria-hidden": "true", children: "◉" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "game-modal__title", children: "Xem trước 3 lá" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "game-modal__sub", children: "Chỉ bạn mới thấy — đếm từ đầu bộ bài (lá sẽ rút tiếp)." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "future-peek-modal__row", children: positions.map((p) => {
+          const key = peek[p.idx];
+          if (!key) return null;
+          const meta = getCardLabel(key);
+          const revealed = p.idx < revealedCount;
+          return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "div",
             {
-              className: "game-modal__close",
-              type: "button",
-              onClick: onClose,
-              "aria-label": "Đóng",
-              children: "×"
-            }
-          ),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "future-peek-modal__icon", "aria-hidden": "true", children: "◉" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "game-modal__title", children: "Xem trước 3 lá" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "game-modal__sub", children: "Chỉ bạn mới thấy — đếm từ đầu bộ bài (lá sẽ rút tiếp)." }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "future-peek-modal__row", children: positions.map((p) => {
-            const key = peek[p.idx];
-            if (!key) return null;
-            const meta = getCardLabel(key);
-            const revealed = p.idx < revealedCount;
-            return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-              "div",
-              {
-                className: `future-peek-modal__slot${revealed ? " future-peek-modal__slot--revealed" : ""}`,
-                style: { "--reveal-delay": `${p.idx * 0.6}s` },
-                children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "future-peek-modal__card-wrap", children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "future-peek-modal__card-back", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: cardImageUrl("back"), alt: "" }) }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "future-peek-modal__card", children: [
-                      /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: cardImageUrl(key), alt: meta.label, draggable: false }),
-                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "future-peek-modal__card-glow", "aria-hidden": "true" }),
-                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "future-peek-modal__card-shine", "aria-hidden": "true" }),
-                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "future-peek-modal__card-position", children: p.idx + 1 })
-                    ] })
+              className: `future-peek-slot${revealed ? " future-peek-slot--revealed" : ""}`,
+              style: { "--reveal-delay": `${p.idx * 0.6}s` },
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "future-peek-slot__card-wrap", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "future-peek-slot__inner", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "future-peek-slot__face future-peek-slot__face--back", children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: cardImageUrl("back"), alt: "", draggable: false }) }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "future-peek-slot__face future-peek-slot__face--front", children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: cardImageUrl(key), alt: meta.label, draggable: false }) })
                   ] }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "future-peek-modal__slot-label", children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: p.label }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: p.sub })
-                  ] }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "future-peek-modal__slot-key", children: key })
-                ]
-              },
-              p.idx
-            );
-          }) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-modal__actions", children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "game-action-btn game-action-btn--primary", onClick: onClose, children: "Úp xuống & đặt lại theo thứ tự" }) })
-        ]
-      }
-    )
-  ] });
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "future-peek-slot__position", children: p.idx + 1 })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "future-peek-slot__label", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: p.label }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: p.sub })
+                ] })
+              ]
+            },
+            p.idx
+          );
+        }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-modal__actions", children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "game-action-btn game-action-btn--primary", onClick: onClose, children: "Úp xuống & đặt lại theo thứ tự" }) })
+      ]
+    }
+  ) });
 }
-const FLIGHT_MS$1 = 850;
+const FLIGHT_MS$1 = 720;
+const FLIP_AT_PCT = 0.55;
 const VANISH_MS = 280;
-function DrawAnimation({ sourceRect, targetRect, cardKey = "back", revealKey, onComplete }) {
-  const [phase, setPhase] = reactExports.useState("flying");
+function DrawAnimation({
+  sourceRect,
+  targetRect,
+  cardKey = "back",
+  revealKey,
+  onComplete
+}) {
   const [mounted, setMounted] = reactExports.useState(true);
+  const [flipped, setFlipped] = reactExports.useState(false);
   const onCompleteRef = reactExports.useRef(onComplete);
   reactExports.useEffect(() => {
     onCompleteRef.current = onComplete;
   }, [onComplete]);
   reactExports.useEffect(() => {
-    const t1 = setTimeout(() => setPhase("landing"), FLIGHT_MS$1 - 80);
-    const t2 = setTimeout(() => setPhase("done"), FLIGHT_MS$1 + 40);
-    const t3 = setTimeout(() => {
-      setMounted(false);
-      onCompleteRef.current?.();
-    }, FLIGHT_MS$1 + 40 + VANISH_MS);
+    const tFlip = setTimeout(() => {
+      if (revealKey && revealKey !== "bomb") setFlipped(true);
+    }, FLIGHT_MS$1 * FLIP_AT_PCT);
+    const tDone = setTimeout(() => setMounted(false), FLIGHT_MS$1 + VANISH_MS);
     return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      clearTimeout(t3);
+      clearTimeout(tFlip);
+      clearTimeout(tDone);
     };
   }, []);
   if (!mounted || !sourceRect || !targetRect) return null;
@@ -842,82 +840,26 @@ function DrawAnimation({ sourceRect, targetRect, cardKey = "back", revealKey, on
   const startY = sourceRect.top + sourceRect.height / 2;
   const endX = targetRect.left + targetRect.width / 2;
   const endY = targetRect.top + targetRect.height / 2;
+  const cardW = 100;
+  const cardH = 143;
   const cardStyle = {
     position: "fixed",
     left: 0,
     top: 0,
-    width: 92,
-    height: 132,
+    width: cardW,
+    height: cardH,
     zIndex: 200,
     pointerEvents: "none",
-    "--start-x": `${startX - 46}px`,
-    "--start-y": `${startY - 66}px`,
-    "--end-x": `${endX - 46}px`,
-    "--end-y": `${endY - 66}px`
+    "--start-x": `${startX - cardW / 2}px`,
+    "--start-y": `${startY - cardH / 2}px`,
+    "--end-x": `${endX - cardW / 2}px`,
+    "--end-y": `${endY - cardH / 2}px`
   };
-  const showFace = !!revealKey;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "span",
-      {
-        className: "fx-magic-circle",
-        style: {
-          position: "fixed",
-          left: startX,
-          top: startY + sourceRect.height / 2 + 6,
-          transform: "translateX(-50%)",
-          zIndex: 198,
-          pointerEvents: "none"
-        },
-        "aria-hidden": "true"
-      }
-    ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "span",
-      {
-        className: "fx-draw-trail",
-        style: {
-          position: "fixed",
-          left: startX,
-          top: startY,
-          width: 200,
-          height: 200,
-          transform: "translate(-50%, -50%)",
-          zIndex: 199,
-          pointerEvents: "none"
-        },
-        "aria-hidden": "true"
-      }
-    ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `draw-anim draw-anim--${phase}${showFace ? " draw-anim--reveal" : ""}`, style: cardStyle, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "draw-anim__inner", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "draw-anim__face draw-anim__face--back", children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: cardImageUrl("back"), alt: "", draggable: false }) }),
-      showFace && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "draw-anim__face draw-anim__face--front", children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: cardImageUrl(revealKey), alt: revealKey, draggable: false }) })
-    ] }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "span",
-      {
-        className: "fx-magic-circle fx-magic-circle--target",
-        style: {
-          position: "fixed",
-          left: endX,
-          top: endY,
-          transform: "translate(-50%, -50%)",
-          zIndex: 197,
-          pointerEvents: "none"
-        },
-        "aria-hidden": "true"
-      }
-    ),
-    phase === "landing" && /* @__PURE__ */ jsxRuntimeExports.jsx(
-      FxBurst,
-      {
-        anchor: { x: endX, y: endY },
-        fxKey: showFace ? revealKey : "draw",
-        size: "lg",
-        id: `draw-${Date.now()}`
-      }
-    )
-  ] });
+  const showFace = flipped && !!revealKey && revealKey !== "bomb";
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "draw-anim", style: cardStyle, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `draw-anim__inner${showFace ? " draw-anim__inner--flipped" : ""}`, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "draw-anim__face draw-anim__face--back", children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: cardImageUrl("back"), alt: "", draggable: false }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "draw-anim__face draw-anim__face--front", children: showFace && /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: cardImageUrl(revealKey), alt: revealKey, draggable: false }) })
+  ] }) });
 }
 const FLIGHT_MS = 620;
 function PlayCardAnimation({ sourceRect, cardKey, targetRect }) {
@@ -1148,7 +1090,8 @@ function BombExplode({ memberName, onComplete }) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-explode-vignette", "aria-hidden": "true" })
   ] });
 }
-const ENTER_MS = 420;
+const FLIP_MS = 700;
+const HOLD_MS = 5e3;
 const EXIT_MS = 360;
 function ActionCardReveal({
   cardKey,
@@ -1156,122 +1099,72 @@ function ActionCardReveal({
   isNopeChain,
   chainCount,
   nopeRemainingMs,
-  onComplete
+  originRect
 }) {
-  const [phase, setPhase] = reactExports.useState("enter");
-  const [mounted, setMounted] = reactExports.useState(true);
-  const onCompleteRef = reactExports.useRef(onComplete);
+  const [show, setShow] = reactExports.useState(true);
+  const [phase, setPhase] = reactExports.useState("in");
   reactExports.useEffect(() => {
-    onCompleteRef.current = onComplete;
-  }, [onComplete]);
-  const fx = fxFor(cardKey || "general");
+    const t1 = setTimeout(() => setPhase("hold"), FLIP_MS);
+    const t2 = setTimeout(() => setPhase("out"), FLIP_MS + HOLD_MS);
+    const t3 = setTimeout(() => setShow(false), FLIP_MS + HOLD_MS + EXIT_MS);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
+  }, []);
+  if (!show) return null;
   const safeCardKey = cardKey || "general";
   const url = cardImageUrl(safeCardKey);
   const meta = getCardLabel(safeCardKey);
-  reactExports.useEffect(() => {
-    setPhase("enter");
-    const t1 = setTimeout(() => setPhase("hold"), ENTER_MS);
-    return () => clearTimeout(t1);
-  }, []);
-  reactExports.useEffect(() => {
-    if (nopeRemainingMs === 0) {
-      setPhase("exit");
-      const t = setTimeout(() => {
-        setMounted(false);
-        onCompleteRef.current?.();
-      }, EXIT_MS);
-      return () => clearTimeout(t);
-    }
-    return void 0;
-  }, [nopeRemainingMs]);
-  if (!mounted) return null;
-  const NOPE_WINDOW_MS2 = 5e3;
-  const ringPct = nopeRemainingMs != null ? Math.max(0, Math.min(1, nopeRemainingMs / NOPE_WINDOW_MS2)) : 0;
+  const vw = typeof window !== "undefined" ? window.innerWidth : 1280;
+  const vh = typeof window !== "undefined" ? window.innerHeight : 720;
+  const cardW = 180;
+  const cardH = 257;
+  const endX = vw / 2 - cardW / 2;
+  const endY = vh / 2 - cardH / 2;
+  let startX = endX;
+  let startY = endY;
+  let inFlight = false;
+  if (originRect && originRect.width) {
+    startX = originRect.left + (originRect.width - cardW) / 2;
+    startY = originRect.top + (originRect.height - cardH) / 2;
+    inFlight = true;
+  }
+  const wrapperStyle = inFlight ? {
+    "--start-x": `${startX}px`,
+    "--start-y": `${startY}px`,
+    "--end-x": `${endX}px`,
+    "--end-y": `${endY}px`
+  } : {
+    left: `${endX}px`,
+    top: `${endY}px`
+  };
+  const wrapperClass = `card-flip${inFlight ? " card-flip--in-flight" : ""}${phase === "out" ? " card-flip--out" : ""}`;
+  const remainingSec = nopeRemainingMs != null ? Math.max(0, nopeRemainingMs / 1e3) : null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       "div",
       {
-        className: `action-reveal__scrim action-reveal__scrim--${phase} action-reveal__scrim--${safeCardKey}`,
-        "aria-hidden": "true",
-        style: { "--fx-color": fx.color, "--fx-accent": fx.accent }
+        className: wrapperClass,
+        style: wrapperStyle,
+        "aria-label": `${byMemberName || ""} vừa dùng ${meta.label}`,
+        children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "card-flip__inner", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "card-flip__face card-flip__face--back", children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: cardImageUrl("back"), alt: "", draggable: false }) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "card-flip__face card-flip__face--front", children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: url, alt: meta.label, draggable: false }) })
+        ] })
       }
     ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "div",
-      {
-        className: `action-reveal__rays action-reveal__rays--${phase}`,
-        "aria-hidden": "true",
-        style: { "--fx-color": fx.color }
-      }
-    ),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs(
-      "div",
-      {
-        className: `action-reveal action-reveal--${phase} action-reveal--${safeCardKey}`,
-        style: { "--fx-color": fx.color, "--fx-accent": fx.accent },
-        children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "action-reveal__pulse-ring", "aria-hidden": "true" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "action-reveal__pulse-ring action-reveal__pulse-ring--2", "aria-hidden": "true" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "action-reveal__glyph", "aria-hidden": "true", children: fx.glyph }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "action-reveal__halo", "aria-hidden": "true" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "action-reveal__beam action-reveal__beam--1", "aria-hidden": "true" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "action-reveal__beam action-reveal__beam--2", "aria-hidden": "true" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "action-reveal__beam action-reveal__beam--3", "aria-hidden": "true" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "action-reveal__card", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: url, alt: meta.label, draggable: false }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "action-reveal__card-shine", "aria-hidden": "true" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "action-reveal__card-glow", "aria-hidden": "true" })
-          ] }),
-          nopeRemainingMs != null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "action-reveal__countdown", "aria-hidden": "true", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("svg", { viewBox: "0 0 160 160", className: "action-reveal__countdown-svg", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("defs", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("linearGradient", { id: `ac-grad-${safeCardKey}`, x1: "0%", y1: "0%", x2: "100%", y2: "100%", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "0%", stopColor: fx.color }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "100%", stopColor: fx.accent })
-              ] }) }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "circle",
-                {
-                  className: "action-reveal__countdown-track",
-                  cx: "80",
-                  cy: "80",
-                  r: "72",
-                  fill: "none",
-                  stroke: "rgba(255,255,255,0.1)",
-                  strokeWidth: "8"
-                }
-              ),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "circle",
-                {
-                  className: "action-reveal__countdown-bar",
-                  cx: "80",
-                  cy: "80",
-                  r: "72",
-                  fill: "none",
-                  stroke: `url(#ac-grad-${safeCardKey})`,
-                  strokeWidth: "8",
-                  strokeLinecap: "round",
-                  transform: "rotate(-90 80 80)",
-                  strokeDasharray: `${2 * Math.PI * 72 * ringPct} ${2 * Math.PI * 72}`
-                }
-              )
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "action-reveal__countdown-text", children: [
-              (nopeRemainingMs / 1e3).toFixed(1),
-              "s"
-            ] })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "action-reveal__label", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "action-reveal__name", children: byMemberName || (isNopeChain ? "Ai đó" : "Bạn") }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "action-reveal__action", children: isNopeChain ? `đã dùng "Cản"${chainCount > 1 ? ` × ${chainCount}` : ""}!` : `đã dùng "${meta.label}"` })
-          ] }),
-          chainCount > 1 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "action-reveal__chain-badge", "aria-hidden": "true", children: [
-            "×",
-            chainCount
-          ] })
-        ]
-      }
-    )
+    phase !== "out" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "card-flip-label", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+        byMemberName || (isNopeChain ? "Ai đó" : "Bạn"),
+        isNopeChain ? ` đã dùng Cản${chainCount > 1 ? ` × ${chainCount}` : ""}` : ` đã dùng ${meta.label}`
+      ] }),
+      remainingSec != null && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "card-flip-label__count", children: [
+        remainingSec.toFixed(1),
+        "s để cản"
+      ] })
+    ] })
   ] });
 }
 function FxScreenShake({ active, intensity = "md", durationMs = 600 }) {
@@ -1439,12 +1332,14 @@ function GamePage() {
   }, []);
   const opponents = reactExports.useMemo(() => {
     const nonSelf = members.filter((m) => m.id !== myId);
-    const nonHost = nonSelf.filter((m) => !m.isHost).sort((a, b) => new Date(a.joinedAt) - new Date(b.joinedAt));
+    const host = nonSelf.find((m) => m.isHost) || null;
+    const others = nonSelf.filter((m) => !m.isHost).sort((a, b) => new Date(a.joinedAt) - new Date(b.joinedAt));
     const left = [];
     const right = [];
-    for (let i = 0; i < nonHost.length; i++) {
-      if (i % 2 === 0) right.push(nonHost[i]);
-      else left.push(nonHost[i]);
+    if (host) left.push(host);
+    for (let i = 0; i < others.length; i++) {
+      if (i % 2 === 0) right.push(others[i]);
+      else left.push(others[i]);
     }
     return { left, right };
   }, [members, myId]);
@@ -1973,25 +1868,25 @@ function GamePage() {
     });
   }, [pendingAction?.cardKey, pendingAction?.createdAt]);
   reactExports.useEffect(() => {
-    if (!gs?.BombRevealActive || !gs?.LastDrawnAt || !gs?.LastDrawnBy) return;
-    if (gs.LastDrawnCardKey !== "bomb") return;
-    const stamp = `${gs.LastDrawnBy}::${gs.LastDrawnAt}`;
+    if (!gs?.bombRevealActive || !gs?.lastDrawnAt || !gs?.lastDrawnBy) return;
+    if (gs.lastDrawnCardKey !== "bomb") return;
+    const stamp = `${gs.lastDrawnBy}::${gs.lastDrawnAt}`;
     if (lastDrawnRef.current === stamp) return;
     lastDrawnRef.current = stamp;
-    const member = members.find((m) => m.id === gs.LastDrawnBy);
+    const member = members.find((m) => m.id === gs.lastDrawnBy);
     const memberName = member?.name || "Bạn";
-    const isLocal = gs.LastDrawnBy === myId;
-    const stillAlive = gs.Alive?.[gs.LastDrawnBy] !== false;
+    const isLocal = gs.lastDrawnBy === myId;
+    const stillAlive = gs.alive?.[gs.lastDrawnBy] !== false;
     const willDefuse = !!(isLocal && stillAlive && (myHand || []).some((c) => COMBO_KEYS.includes(c)));
     setBombReveal({
-      memberId: gs.LastDrawnBy,
+      memberId: gs.lastDrawnBy,
       memberName,
       willDefuse,
       key: stamp
     });
     const safety = setTimeout(() => setBombReveal(null), 4500);
     return () => clearTimeout(safety);
-  }, [gs?.BombRevealActive, gs?.LastDrawnAt, gs?.LastDrawnBy, gs?.LastDrawnCardKey, gs?.Alive, members, myId, myHand, room?.myHand]);
+  }, [gs?.bombRevealActive, gs?.lastDrawnAt, gs?.lastDrawnBy, gs?.lastDrawnCardKey, gs?.alive, members, myId, myHand, room?.myHand]);
   if (!room) {
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("main", { className: "game-page", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(FloatingBackdrop, {}),
@@ -2267,6 +2162,7 @@ function GamePage() {
         sourceRect: drawAnim.sourceRect,
         targetRect: drawAnim.targetRect,
         cardKey: drawAnim.cardKey,
+        revealKey: drawAnim.revealKey,
         onComplete: () => setDrawAnim(null)
       }
     ),
@@ -2333,14 +2229,15 @@ function GamePage() {
       bombExplode.key
     ),
     (() => {
-      const cardKey = gs?.LastPlayedCardKey;
-      const at = gs?.LastPlayedAt;
+      const cardKey = gs?.lastPlayedCardKey;
+      const at = gs?.lastPlayedAt;
       if (!cardKey || !at) return null;
-      const chain = gs?.PendingAction?.NopeChain?.length || 0;
-      const isNopeChain = !!gs?.LastPlayedByNope;
-      const memberId = isNopeChain ? gs?.LastPlayedByNope : gs?.LastPlayedBy;
+      const chain = gs?.pendingAction?.nopeChain?.length || 0;
+      const isNopeChain = !!gs?.lastPlayedByNope;
+      const memberId = isNopeChain ? gs?.lastPlayedByNope : gs?.lastPlayedBy;
       const memberName = members.find((m) => m.id === memberId)?.name || "Bạn";
       const remaining = nopeRemaining > 0 ? nopeRemaining : null;
+      const originRect = deckRef.current?.getBoundingClientRect?.() || null;
       return /* @__PURE__ */ jsxRuntimeExports.jsx(
         ActionCardReveal,
         {
@@ -2349,6 +2246,7 @@ function GamePage() {
           isNopeChain,
           chainCount: chain,
           nopeRemainingMs: remaining,
+          originRect,
           onComplete: void 0
         },
         `${at}::${chain}::${cardKey}`

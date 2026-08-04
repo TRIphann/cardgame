@@ -17,6 +17,7 @@ import { FlyingCards } from "./FlyingCards.jsx";
 import { Seats } from "./Seats.jsx";
 import { AvatarPicker } from "./AvatarPicker.jsx";
 import { CARD_CLOUDINARY } from "../../games/exploding-cats/cardCloudinary.js";
+import "../styles/lobby.css";
 
 // Cloudinary card URLs (basic exploding kittens deck).
 // Exclude the "back" card so flying cards only show real game faces.
@@ -448,12 +449,14 @@ export default function LobbyPage() {
   const isHost = myMember?.isHost || (isPending && session.session?.isHost);
   // Host can only start when:
   //   - room is still in waiting state
-  //   - there's at least one other player in the room
+  //   - there's at least MIN_PLAYERS (3) total members in the room
   //   - every other player has flipped "Sẵn sàng"
+  const MIN_PLAYERS = 3;
   const canStart =
     isHost &&
     room &&
     room.status === "waiting" &&
+    (members?.length ?? 0) >= MIN_PLAYERS &&
     allOtherPlayersReady;
 
   const playerCount = Math.max(members?.length ?? 0, 1);
@@ -634,6 +637,11 @@ export default function LobbyPage() {
         <p className="player-count">
           {t("lobby.playerCount", { count: playerCount })}
         </p>
+        {isHost && (members?.length ?? 0) < 3 && (
+          <p className="lobby-footer__hint">
+            Cần ít nhất 3 người chơi để bắt đầu. Hiện có {members?.length ?? 1}/3.
+          </p>
+        )}
         {isHost && (
           <button
             type="button"

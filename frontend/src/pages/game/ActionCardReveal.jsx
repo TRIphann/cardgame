@@ -1,19 +1,19 @@
-// ActionCardReveal — premium cinematic overlay hiển thị lá bài vừa được
-// đánh lên GIỮA MÀN HÌNH rất lớn, đảm bảo tất cả người chơi đều thấy rõ.
+// ActionCardReveal — 3D card flip rendered in the centre of the screen.
 //
-// 3 phases:
-//   enter: card bay từ deck lên giữa, scale up + halo expansion
-//   hold:  full size + breathing pulse + countdown ring + label
-//   exit:  card shrink fade xuống rồi unmount
+// Renders ONE card (back face) that flips to the front face (the played
+// action card). Originates from the deck pile (originRect) and flies
+// towards viewport centre while flipping. All players in the room see it
+// so anyone can chain a Nope during the 5s reaction window.
 //
-// Reset triggers: key thay đổi (LastPlayedAt mới) → remount với phase mới.
+// Minimal visual: no border, no box, no scrim, no rays, no glyph. The
+// card image itself does all the talking.
 
 import React, { useEffect, useRef, useState } from "react";
 import { cardImageUrl } from "@games/exploding-cats/cardCloudinary.js";
-import { fxFor } from "./cardFx.js";
 import { getCardLabel } from "./cardLabels.js";
 
-const ENTER_MS = 420;
+const FLIP_MS = 700;
+const HOLD_MS = 5000; // mirror server's 5s nope window
 const EXIT_MS = 360;
 
 export function ActionCardReveal({
@@ -22,141 +22,88 @@ export function ActionCardReveal({
   isNopeChain,
   chainCount,
   nopeRemainingMs,
-  onComplete,
+  originRect,
 }) {
-  const [phase, setPhase] = useState("enter");
-  const [mounted, setMounted] = useState(true);
-  const onCompleteRef = useRef(onComplete);
-  useEffect(() => { onCompleteRef.current = onComplete; }, [onComplete]);
+  const [show, setShow] = useState(true);
+  const [phase, setPhase] = useState("in"); // in → hold → out
 
-  const fx = fxFor(cardKey || "general");
+  // Auto unmount after hold + exit.
+  useEffect(() => {
+    const t1 = setTimeout(() => setPhase("hold"), FLIP_MS);
+    const t2 = setTimeout(() => setPhase("out"), FLIP_MS + HOLD_MS);
+    const t3 = setTimeout(() => setShow(false), FLIP_MS + HOLD_MS + EXIT_MS);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+  }, []);
+
+  if (!show) return null;
+
   const safeCardKey = cardKey || "general";
   const url = cardImageUrl(safeCardKey);
   const meta = getCardLabel(safeCardKey);
 
-  useEffect(() => {
-    setPhase("enter");
-    const t1 = setTimeout(() => setPhase("hold"), ENTER_MS);
-    return () => clearTimeout(t1);
-  }, []);
+  // Compute flight start/end coordinates. If we know the deck rect, fly
+  // from there to viewport centre. Otherwise just stay centred.
+  const vw = typeof window !== "undefined" ? window.innerWidth : 1280;
+  const vh = typeof window !== "undefined" ? window.innerHeight : 720;
+  const cardW = 180;
+  const cardH = 257;
+  const endX = vw / 2 - cardW / 2;
+  const endY = vh / 2 - cardH / 2;
+  let startX = endX;
+  let startY = endY;
+  let inFlight = false;
+  if (originRect && originRect.width) {
+    startX = originRect.left + (originRect.width - cardW) / 2;
+    startY = originRect.top + (originRect.height - cardH) / 2;
+    inFlight = true;
+  }
 
-  useEffect(() => {
-    if (nopeRemainingMs === 0) {
-      setPhase("exit");
-      const t = setTimeout(() => {
-        setMounted(false);
-        onCompleteRef.current?.();
-      }, EXIT_MS);
-      return () => clearTimeout(t);
-    }
-    return undefined;
-  }, [nopeRemainingMs]);
+  const wrapperStyle = inFlight
+    ? {
+        "--start-x": `${startX}px`,
+        "--start-y": `${startY}px`,
+        "--end-x": `${endX}px`,
+        "--end-y": `${endY}px`,
+      }
+    : {
+        left: `${endX}px`,
+        top: `${endY}px`,
+      };
 
-  if (!mounted) return null;
-
-  // The server allows a 5s Nope window. Mirror that here so the countdown
-  // ring matches what the server actually enforces.
-  const NOPE_WINDOW_MS = 5000;
-  const ringPct = nopeRemainingMs != null
-    ? Math.max(0, Math.min(1, nopeRemainingMs / NOPE_WINDOW_MS))
-    : 0;
+  const wrapperClass = `card-flip${inFlight ? " card-flip--in-flight" : ""}${phase === "out" ? " card-flip--out" : ""}`;
+  const remainingSec = nopeRemainingMs != null ? Math.max(0, nopeRemainingMs / 1000) : null;
 
   return (
     <>
-      {/* Backdrop — radial color tint per card type with animated gradient */}
       <div
-        className={`action-reveal__scrim action-reveal__scrim--${phase} action-reveal__scrim--${safeCardKey}`}
-        aria-hidden="true"
-        style={{ "--fx-color": fx.color, "--fx-accent": fx.accent }}
-      />
-
-      {/* Rotating radial burst behind card */}
-      <div
-        className={`action-reveal__rays action-reveal__rays--${phase}`}
-        aria-hidden="true"
-        style={{ "--fx-color": fx.color }}
-      />
-
-      {/* Main card reveal — large, centered, always visible */}
-      <div
-        className={`action-reveal action-reveal--${phase} action-reveal--${safeCardKey}`}
-        style={{ "--fx-color": fx.color, "--fx-accent": fx.accent }}
+        className={wrapperClass}
+        style={wrapperStyle}
+        aria-label={`${byMemberName || ""} vừa dùng ${meta.label}`}
       >
-        {/* Outer pulsing ring */}
-        <span className="action-reveal__pulse-ring" aria-hidden="true" />
-        <span className="action-reveal__pulse-ring action-reveal__pulse-ring--2" aria-hidden="true" />
-
-        {/* Big glyph floating above */}
-        <span className="action-reveal__glyph" aria-hidden="true">
-          {fx.glyph}
-        </span>
-
-        {/* Color-tinted halo */}
-        <span className="action-reveal__halo" aria-hidden="true" />
-
-        {/* Light beams emanating */}
-        <span className="action-reveal__beam action-reveal__beam--1" aria-hidden="true" />
-        <span className="action-reveal__beam action-reveal__beam--2" aria-hidden="true" />
-        <span className="action-reveal__beam action-reveal__beam--3" aria-hidden="true" />
-
-        {/* The card itself — LARGE */}
-        <div className="action-reveal__card">
-          <img src={url} alt={meta.label} draggable={false} />
-          <span className="action-reveal__card-shine" aria-hidden="true" />
-          <span className="action-reveal__card-glow" aria-hidden="true" />
-        </div>
-
-        {/* Countdown ring */}
-        {nopeRemainingMs != null && (
-          <div className="action-reveal__countdown" aria-hidden="true">
-            <svg viewBox="0 0 160 160" className="action-reveal__countdown-svg">
-              <defs>
-                <linearGradient id={`ac-grad-${safeCardKey}`} x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor={fx.color} />
-                  <stop offset="100%" stopColor={fx.accent} />
-                </linearGradient>
-              </defs>
-              <circle
-                className="action-reveal__countdown-track"
-                cx="80" cy="80" r="72"
-                fill="none"
-                stroke="rgba(255,255,255,0.1)"
-                strokeWidth="8"
-              />
-              <circle
-                className="action-reveal__countdown-bar"
-                cx="80" cy="80" r="72"
-                fill="none"
-                stroke={`url(#ac-grad-${safeCardKey})`}
-                strokeWidth="8"
-                strokeLinecap="round"
-                transform="rotate(-90 80 80)"
-                strokeDasharray={`${2 * Math.PI * 72 * ringPct} ${2 * Math.PI * 72}`}
-              />
-            </svg>
-            <span className="action-reveal__countdown-text">{(nopeRemainingMs / 1000).toFixed(1)}s</span>
+        <div className="card-flip__inner">
+          <div className="card-flip__face card-flip__face--back">
+            <img src={cardImageUrl("back")} alt="" draggable={false} />
           </div>
-        )}
-
-        {/* Bottom label — name + action text */}
-        <div className="action-reveal__label">
-          <span className="action-reveal__name">
-            {byMemberName || (isNopeChain ? "Ai đó" : "Bạn")}
-          </span>
-          <span className="action-reveal__action">
-            {isNopeChain
-              ? `đã dùng "Cản"${chainCount > 1 ? ` × ${chainCount}` : ""}!`
-              : `đã dùng "${meta.label}"`}
-          </span>
+          <div className="card-flip__face card-flip__face--front">
+            <img src={url} alt={meta.label} draggable={false} />
+          </div>
         </div>
-
-        {/* Nope chain badge */}
-        {chainCount > 1 && (
-          <span className="action-reveal__chain-badge" aria-hidden="true">
-            ×{chainCount}
-          </span>
-        )}
       </div>
+      {phase !== "out" && (
+        <div className="card-flip-label">
+          <span>
+            {byMemberName || (isNopeChain ? "Ai đó" : "Bạn")}
+            {isNopeChain
+              ? ` đã dùng Cản${chainCount > 1 ? ` × ${chainCount}` : ""}`
+              : ` đã dùng ${meta.label}`}
+          </span>
+          {remainingSec != null && (
+            <span className="card-flip-label__count">
+              {remainingSec.toFixed(1)}s để cản
+            </span>
+          )}
+        </div>
+      )}
     </>
   );
 }

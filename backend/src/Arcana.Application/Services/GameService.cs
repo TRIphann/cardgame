@@ -46,8 +46,8 @@ public class GameService
         // screen. Counting every room member is safer — if someone really
         // left, RoomService will have removed them.
         var players = room.Members.ToList();
-        if (players.Count < 2)
-            throw new DomainException("cannot_start", "Cần ít nhất 2 người chơi để bắt đầu.");
+        if (players.Count < 3)
+            throw new DomainException("cannot_start", "Cần ít nhất 3 người chơi để bắt đầu.");
 
         var deck = CardCatalog.BuildDeck(players.Count);
         var state = new GameState

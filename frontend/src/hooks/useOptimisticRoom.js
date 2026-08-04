@@ -135,7 +135,7 @@ export function useOptimisticRoom({ onNavigate } = {}) {
       hostId: "PENDING",
       hostName: name,
       status: "waiting",
-      maxPlayers: 8,
+      maxPlayers: 7,
       currentPlayers: 1,
       createdAt: new Date().toISOString(),
       members: [{ id: "PENDING-me", name, isHost: true, joinedAt: new Date().toISOString() }],
