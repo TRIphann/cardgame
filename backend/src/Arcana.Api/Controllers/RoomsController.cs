@@ -22,62 +22,51 @@ public class RoomsController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<ActionResult<CreateRoomResponse>> Create([FromBody] CreateRoomRequest request, CancellationToken ct)
+    public async Task<ActionResult<RoomDto>> Create([FromBody] CreateRoomRequest request, CancellationToken ct)
     {
         var room = await _roomService.CreateRoomAsync(request.HostName, ct);
-        return CreatedAtAction(nameof(GetById), new { id = room.Id }, new CreateRoomResponse(MapToDto(room, null)));
+        return Ok(MapToDto(room, null));
     }
 
     [HttpPost("join")]
-    public async Task<ActionResult<JoinRoomResponse>> Join([FromBody] JoinRoomRequest request, CancellationToken ct)
+    public async Task<ActionResult<RoomDto>> Join([FromBody] JoinRoomRequest request, CancellationToken ct)
     {
         var room = await _roomService.JoinRoomAsync(request.Code, request.PlayerName, ct);
         // On join we don't know which member is the new one — return no hand.
         var newMember = room.Members.FirstOrDefault(m => m.Name == request.PlayerName.Trim());
-        return Ok(new JoinRoomResponse(MapToDto(room, newMember?.Id)));
-    }
-
-    [HttpGet("{id}")]
-    public async Task<ActionResult<RoomDto>> GetById(
-        [FromRoute] string id,
-        [FromQuery(Name = "memberId")] string? memberId,
-        CancellationToken ct)
-    {
-        var room = await _roomService.GetRoomAsync(id, ct);
-        if (room is null) return NotFound(new ErrorResponse("room_not_found", "Phòng không tồn tại."));
-        return Ok(MapToDto(room, memberId));
+        return Ok(MapToDto(room, newMember?.Id));
     }
 
     [HttpPost("{id}/kick")]
-    public async Task<ActionResult<KickMemberResponse>> Kick(
+    public async Task<ActionResult<RoomDto>> Kick(
         [FromRoute] string id,
         [FromBody] KickMemberRequest request,
         CancellationToken ct)
     {
         var room = await _roomService.KickMemberAsync(id, request.HostId, request.TargetMemberId, ct);
-        return Ok(new KickMemberResponse(MapToDto(room!, request.HostId)));
+        return Ok(MapToDto(room!, request.HostId));
     }
 
     [HttpPost("{id}/ready")]
-    public async Task<ActionResult<SetReadyResponse>> SetReady(
+    public async Task<ActionResult<RoomMemberDto>> SetReady(
         [FromRoute] string id,
         [FromBody] SetReadyRequest request,
         CancellationToken ct)
     {
         var member = await _roomService.SetReadyAsync(id, request.MemberId, request.IsReady, ct);
         if (member is null) return NotFound(new ErrorResponse("member_not_found", "Thành viên không còn trong phòng."));
-        return Ok(new SetReadyResponse(MapMemberDto(member)));
+        return Ok(MapMemberDto(member));
     }
 
     [HttpPost("{id}/heartbeat")]
-    public async Task<ActionResult<HeartbeatResponse>> Heartbeat(
+    public async Task<IActionResult> Heartbeat(
         [FromRoute] string id,
         [FromBody] HeartbeatRequest request,
         CancellationToken ct)
     {
         var member = await _roomService.HeartbeatAsync(id, request.MemberId, ct);
         if (member is null) return NotFound(new ErrorResponse("member_not_found", "Thành viên không còn trong phòng."));
-        return Ok(new HeartbeatResponse(member.Id, member.IsOnline));
+        return NoContent();
     }
 
     [HttpGet("{id}/snapshot")]
@@ -125,30 +114,27 @@ public class RoomsController : ControllerBase
         return Ok(new GameActionResponse(
             MapToDto(result.Room, request.MemberId),
             result.Toast, null,
-            false, false, false,
-            false, null,
-            null, null,
-            null));
+            false, false, false, false, null, null));
     }
 
     [HttpPost("{id}/start")]
-    public async Task<ActionResult<StartGameResponse>> Start(
+    public async Task<ActionResult<RoomDto>> Start(
         [FromRoute] string id,
         [FromBody] StartGameRequest request,
         CancellationToken ct)
     {
         var room = await _gameService.StartGameAsync(id, request.HostId, ct);
-        return Ok(new StartGameResponse(MapToDto(room, request.HostId)));
+        return Ok(MapToDto(room, request.HostId));
     }
 
     [HttpPost("{id}/rotate")]
-    public async Task<ActionResult<RotateRoomResponse>> Rotate(
+    public async Task<ActionResult<RoomDto>> Rotate(
         [FromRoute] string id,
         [FromBody] RotateRoomRequest request,
         CancellationToken ct)
     {
         var room = await _gameService.RotateRoomAsync(id, request.HostId, ct);
-        return Ok(new RotateRoomResponse(MapToDto(room, request.HostId)));
+        return Ok(MapToDto(room, request.HostId));
     }
 
     [HttpPost("{id}/game/play-card")]
@@ -171,8 +157,7 @@ public class RoomsController : ControllerBase
             result.Toast, result.DrawnCardKey,
             result.RequiresDefuse, result.RequiresDiscardPick, result.RequiresTargetPick,
             result.RequiresFavorPick, result.FavorCandidates,
-            result.FuturePeek, result.PlayedCardKey,
-            result.ComboKind?.ToString(),
+            result.FuturePeek,
             result.RequiresMoreDraws, result.RemainingDraws));
     }
 
@@ -188,8 +173,7 @@ public class RoomsController : ControllerBase
             result.Toast, result.DrawnCardKey,
             result.RequiresDefuse, result.RequiresDiscardPick, result.RequiresTargetPick,
             result.RequiresFavorPick, result.FavorCandidates,
-            result.FuturePeek, result.PlayedCardKey,
-            result.ComboKind?.ToString(),
+            result.FuturePeek,
             result.RequiresMoreDraws, result.RemainingDraws));
     }
 
@@ -205,8 +189,7 @@ public class RoomsController : ControllerBase
             result.Toast, result.DrawnCardKey,
             result.RequiresDefuse, result.RequiresDiscardPick, result.RequiresTargetPick,
             false, null,
-            result.FuturePeek, result.PlayedCardKey,
-            result.ComboKind?.ToString()));
+            result.FuturePeek));
     }
 
     [HttpPost("{id}/game/nope")]
@@ -219,10 +202,7 @@ public class RoomsController : ControllerBase
         return Ok(new GameActionResponse(
             MapToDto(result.Room, request.MemberId),
             result.Toast, result.DrawnCardKey,
-            false, false, false,
-            false, null,
-            null, result.PlayedCardKey,
-            result.ComboKind?.ToString()));
+            false, false, false, false, null, null));
     }
 
     // ── Mappers ───────────────────────────────────────────────────────
@@ -280,7 +260,6 @@ public class RoomsController : ControllerBase
             gs.PendingAction is null ? null : new PendingActionDto(
                 gs.PendingAction.InitiatorId,
                 gs.PendingAction.CardKey,
-                gs.PendingAction.TargetMemberId,
                 gs.PendingAction.NopeChain,
                 gs.PendingAction.CreatedAt.ToString("O")),
             gs.LastDrawnBy,

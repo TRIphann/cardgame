@@ -78,24 +78,6 @@ async function jsonRequest(path, options = {}) {
   return res.json();
 }
 
-let prewarmPromise = null;
-export function prewarmBackend() {
-  if (prewarmPromise) return prewarmPromise;
-  prewarmPromise = (async () => {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 8000);
-    try {
-      await fetch(`${API_BASE_URL}/health`, {
-        method: "GET",
-        signal: ctrl.signal,
-        cache: "no-store",
-      });
-    } catch (_) { /* cold start still in progress */ }
-    clearTimeout(timer);
-  })();
-  return prewarmPromise;
-}
-
 export const roomsApi = {
   create(hostName) {
     return jsonRequest("/api/rooms", {
@@ -108,9 +90,6 @@ export const roomsApi = {
       method: "POST",
       body: JSON.stringify({ code, playerName }),
     });
-  },
-  get(roomId) {
-    return jsonRequest(`/api/rooms/${roomId}`);
   },
   // Snapshot endpoint also prunes stale members server-side. Used by the
   // polling loop instead of /api/rooms/{id} so we get fresh IsOnline flags.
@@ -195,5 +174,3 @@ export const roomsApi = {
     });
   },
 };
-
-export const getRoom = roomsApi.get;

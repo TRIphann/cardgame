@@ -35,7 +35,7 @@ function slotTransform(index, total) {
   };
 }
 
-export function HandArc({ hand, selectedIndex, onSelectCard, onHoverCard, lastDrawnKey }) {
+export function HandArc({ hand, selectedIndex, onSelectCard, lastDrawnKey }) {
   const [hoveredIdx, setHoveredIdx] = useState(null);
   const total = hand?.length || 0;
   if (total === 0) {
@@ -87,8 +87,8 @@ export function HandArc({ hand, selectedIndex, onSelectCard, onHoverCard, lastDr
             ].filter(Boolean).join(" ")}
             style={styleVars}
             onClick={() => onSelectCard?.(idx, key)}
-            onMouseEnter={() => { setHoveredIdx(idx); onHoverCard?.(idx, key, true); }}
-            onMouseLeave={() => { setHoveredIdx(null); onHoverCard?.(idx, key, false); }}
+            onMouseEnter={() => setHoveredIdx(idx)}
+            onMouseLeave={() => setHoveredIdx(null)}
             onFocus={() => setHoveredIdx(idx)}
             onBlur={() => setHoveredIdx(null)}
             aria-label={meta.label}

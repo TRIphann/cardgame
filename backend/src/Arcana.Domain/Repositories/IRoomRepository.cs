@@ -6,7 +6,6 @@ public interface IRoomRepository
 {
     Task<Room?> GetByIdAsync(string id, CancellationToken ct = default);
     Task<Room?> GetByCodeAsync(string code, CancellationToken ct = default);
-    Task<bool> CodeExistsAsync(string code, CancellationToken ct = default);
 
     /// <summary>
     /// Reserve a unique invitation code. Returns true if reservation succeeded,
@@ -15,8 +14,6 @@ public interface IRoomRepository
     Task<bool> TryReserveCodeAsync(string code, string roomId, CancellationToken ct = default);
 
     Task CreateAsync(Room room, CancellationToken ct = default);
-    Task AddMemberAsync(string roomId, RoomMember member, CancellationToken ct = default);
-    Task UpdateMemberAsync(string roomId, RoomMember member, CancellationToken ct = default);
 
     /// <summary>
     /// Atomically add a member only if the room still has capacity.

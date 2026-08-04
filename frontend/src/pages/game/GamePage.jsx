@@ -16,7 +16,7 @@ import { useAudio } from "@shared/audio/AudioManager.jsx";
 import { useToast } from "@shared/ui/toast.jsx";
 import { useGameChannel } from "@shared/realtime/useGameChannel.js";
 import { CARD_CLOUDINARY, cardImageUrl } from "@games/exploding-cats/cardCloudinary.js";
-import { CARD_LABELS, getCardLabel } from "./cardLabels.js";
+import { getCardLabel } from "./cardLabels.js";
 import { FloatingBackdrop } from "./FloatingBackdrop.jsx";
 import { HandArc } from "./HandArc.jsx";
 import { CardActionModal } from "./CardActionModal.jsx";
@@ -917,6 +917,36 @@ export default function GamePage() {
     return () => clearTimeout(safety);
   }, [gs?.bombRevealActive, gs?.lastDrawnAt, gs?.lastDrawnBy, gs?.lastDrawnCardKey, gs?.alive, members, myId, myHand, room?.myHand]);
 
+  // ── Auto-draw (turn timer expired) animation ────────────────
+  // When the server broadcasts a draw that the local player did NOT trigger
+  // (e.g. turn-clock expiry), the snapshot carries lastDrawnBy + lastDrawnAt
+  // but our local user didn't call onDrawCard() so no animation was queued.
+  // Detect "stale draw" = new stamp we haven't shown yet AND it's not our
+  // own optimistic draw (we'd have already set drawAnim in onDrawCard).
+  useEffect(() => {
+    if (!gs?.lastDrawnAt || !gs?.lastDrawnBy || !gs?.lastDrawnCardKey) return;
+    const stamp = `${gs.lastDrawnBy}::${gs.lastDrawnAt}`;
+    if (lastDrawnRef.current === stamp) return;
+    // If it's a bomb, the BombReveal effect above handles it first.
+    if (gs.bombRevealActive) return;
+    if (gs.lastDrawnCardKey === "bomb") return;
+    lastDrawnRef.current = stamp;
+    if (drawAnim) return; // local optimistic draw in flight
+    const srcRect = deckRef.current?.getBoundingClientRect?.() || null;
+    const tgtRect = handCenterRef.current?.getBoundingClientRect?.() || null;
+    if (!srcRect || !tgtRect) return;
+    setDrawAnim({
+      sourceRect: srcRect,
+      targetRect: tgtRect,
+      cardKey: "back",
+      revealKey: gs.lastDrawnCardKey,
+    });
+    if (gs.lastDrawnBy === myId) {
+      setLastDrawnKey(gs.lastDrawnCardKey);
+      setTimeout(() => setLastDrawnKey(null), 1400);
+    }
+  }, [gs?.lastDrawnAt, gs?.lastDrawnBy, gs?.lastDrawnCardKey, gs?.bombRevealActive, myId, drawAnim]);
+
   // ── Render ────────────────────────────────────────────────
   if (!room) {
     return (
@@ -932,17 +962,6 @@ export default function GamePage() {
 
   const deckCount = gs?.deckCount ?? null; // null = hidden from client
   const discardCount = gs?.discardCount ?? 0;
-  const lastDiscarded = null; // discard pile keys not exposed to client
-  const discardTop = null;
-
-  const elapsedSec = (() => {
-    if (!gs?.startedAt) return 0;
-    const start = new Date(gs.startedAt).getTime();
-    const end = gs.endedAt ? new Date(gs.endedAt).getTime() : Date.now();
-    return Math.max(0, Math.round((end - start) / 1000));
-  })();
-  const mm = String(Math.floor(elapsedSec / 60)).padStart(2, "0");
-  const ss = String(elapsedSec % 60).padStart(2, "0");
 
   // Turn timer — how many seconds the current player has left until the
   // server auto-draws on their behalf. We compute it client-side from the
@@ -1165,6 +1184,7 @@ export default function GamePage() {
         <FuturePeekModal
           peek={futurePeek}
           onClose={() => setFuturePeek(null)}
+          originRect={deckRef.current?.getBoundingClientRect?.() || null}
         />
       )}
 

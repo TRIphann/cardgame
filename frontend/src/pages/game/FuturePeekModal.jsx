@@ -1,90 +1,109 @@
 // FuturePeekModal — 3 lá trên cùng bộ bài chỉ player này nhìn được.
 //
-// 3 lá flip từ mặt sau (`back`) sang mặt trước (3 card image) lần lượt
-// theo stagger 250ms. Không border, không box — chỉ card image và label
-// phía dưới.
+// Hiệu ứng: 3 lá bay từ deck pile (originRect) lên giữa màn hình, flip từ
+// mặt sau sang mặt trước lần lượt theo stagger. Không border/box/scrim chỉ
+// có 3 card image + close button.
 
 import React, { useEffect, useState } from "react";
 import { cardImageUrl } from "@games/exploding-cats/cardCloudinary.js";
 import { getCardLabel } from "./cardLabels.js";
 
-export function FuturePeekModal({ peek, onClose }) {
+const REVEAL_INTERVAL_MS = 600;
+const TOTAL_HOLD_MS = 4500;
+
+function flightTransform(origin, target, progress) {
+  if (!origin || !target) {
+    return `translate3d(${target.left}px, ${target.top}px, 0)`;
+  }
+  const x = origin.left + (target.left - origin.left) * progress;
+  const y = origin.top + (target.top - origin.top) * progress;
+  const arc = Math.sin(progress * Math.PI) * 80;
+  return `translate3d(${x}px, ${y - arc}px, 0)`;
+}
+
+export function FuturePeekModal({ peek, onClose, originRect }) {
   const [revealedCount, setRevealedCount] = useState(0);
 
   useEffect(() => {
-    if (!peek || peek.length === 0) return;
+    if (!peek || peek.length === 0) return undefined;
+    // Reveal cards one at a time so the user sees the flip cascade.
     const timers = peek.map((_, idx) =>
-      setTimeout(() => setRevealedCount((c) => Math.max(c, idx + 1)), 400 + idx * 600)
+      setTimeout(() => setRevealedCount((c) => Math.max(c, idx + 1)),
+        500 + idx * REVEAL_INTERVAL_MS)
     );
     return () => timers.forEach(clearTimeout);
   }, [peek]);
 
+  useEffect(() => {
+    if (!peek || peek.length === 0) return undefined;
+    // Auto-dismiss after the hold window closes (4.5s after the last flip).
+    const lastReveal = 500 + (peek.length - 1) * REVEAL_INTERVAL_MS;
+    const t = setTimeout(() => onClose?.(), lastReveal + TOTAL_HOLD_MS);
+    return () => clearTimeout(t);
+  }, [peek, onClose]);
+
   if (!peek || peek.length === 0) return null;
 
-  const positions = [
-    { idx: 0, label: "Rút tiếp",  sub: "Lá bạn sẽ rút nếu rút ngay" },
-    { idx: 1, label: "Lượt sau",  sub: "Lá người kế tiếp rút (nếu bạn bỏ)" },
-    { idx: 2, label: "2 lượt sau", sub: "Lá người 2 turn sau rút" },
-  ];
+  const cardW = 130;
+  const cardH = 186;
+  const vw = typeof window !== "undefined" ? window.innerWidth : 1280;
+  const gap = 24;
+  const totalWidth = peek.length * cardW + (peek.length - 1) * gap;
+  const startX = vw / 2 - totalWidth / 2;
+  const baseY = typeof window !== "undefined" ? window.innerHeight / 2 - cardH / 2 : 300;
+
+  const targets = peek.map((_, i) => ({
+    left: startX + i * (cardW + gap),
+    top: baseY,
+  }));
 
   return (
-    <div className="game-modal__scrim future-peek-scrim" onClick={onClose}>
-      <div
-        className="game-modal future-peek-modal"
-        onClick={(e) => e.stopPropagation()}
-        style={{ "--fx-color": "#9a78ff", "--fx-accent": "#cdb9ff" }}
-      >
-        <button
-          className="game-modal__close"
-          type="button"
-          onClick={onClose}
-          aria-label="Đóng"
-        >
-          ×
-        </button>
-        <div className="future-peek-modal__icon" aria-hidden="true">◉</div>
-        <h3 className="game-modal__title">Xem trước 3 lá</h3>
-        <p className="game-modal__sub">
-          Chỉ bạn mới thấy — đếm từ đầu bộ bài (lá sẽ rút tiếp).
-        </p>
-
-        <div className="future-peek-modal__row">
-          {positions.map((p) => {
-            const key = peek[p.idx];
-            if (!key) return null;
-            const meta = getCardLabel(key);
-            const revealed = p.idx < revealedCount;
-            return (
-              <div
-                key={p.idx}
-                className={`future-peek-slot${revealed ? " future-peek-slot--revealed" : ""}`}
-                style={{ "--reveal-delay": `${p.idx * 0.6}s` }}
-              >
-                <div className="future-peek-slot__card-wrap">
-                  <div className="future-peek-slot__inner">
-                    <div className="future-peek-slot__face future-peek-slot__face--back">
-                      <img src={cardImageUrl("back")} alt="" draggable={false} />
-                    </div>
-                    <div className="future-peek-slot__face future-peek-slot__face--front">
-                      <img src={cardImageUrl(key)} alt={meta.label} draggable={false} />
-                    </div>
-                  </div>
-                  <span className="future-peek-slot__position">{p.idx + 1}</span>
+    <div className="future-peek-scene" aria-modal="true" role="dialog">
+      <div className="future-peek-stage">
+        {peek.map((key, i) => {
+          const target = targets[i];
+          const revealed = i < revealedCount;
+          const arrivalProgress = Math.min(1, revealedCount - i > 0 ? 1 : 0);
+          const transform = flightTransform(originRect, target, arrivalProgress);
+          const meta = getCardLabel(key);
+          return (
+            <div
+              key={i}
+              className={`future-peek-card${revealed ? " future-peek-card--revealed" : ""}`}
+              style={{
+                "--card-w": `${cardW}px`,
+                "--card-h": `${cardH}px`,
+                "--fly-x": `${target.left}px`,
+                "--fly-y": `${target.top}px`,
+                transform,
+                zIndex: 30 + i,
+              }}
+              aria-hidden="true"
+            >
+              <div className="future-peek-card__inner">
+                <div className="future-peek-card__face future-peek-card__face--back">
+                  <img src={cardImageUrl("back")} alt="" draggable={false} />
                 </div>
-                <div className="future-peek-slot__label">
-                  <strong>{p.label}</strong>
-                  <span>{p.sub}</span>
+                <div className="future-peek-card__face future-peek-card__face--front">
+                  <img src={cardImageUrl(key) || cardImageUrl("back")} alt={meta.label} draggable={false} />
                 </div>
               </div>
-            );
-          })}
+            </div>
+          );
+        })}
+      </div>
+      <div className="future-peek-info">
+        <div className="future-peek-info__title">Xem trước 3 lá</div>
+        <div className="future-peek-info__sub">
+          Lá trái = bạn sẽ rút tiếp. Hai lá còn lại = người kế tiếp.
         </div>
-
-        <div className="game-modal__actions">
-          <button type="button" className="game-action-btn game-action-btn--primary" onClick={onClose}>
-            Úp xuống & đặt lại theo thứ tự
-          </button>
-        </div>
+        <button
+          type="button"
+          className="future-peek-info__close"
+          onClick={() => onClose?.()}
+        >
+          Úp xuống &amp; đặt lại theo thứ tự
+        </button>
       </div>
     </div>
   );

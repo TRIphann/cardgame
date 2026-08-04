@@ -74,24 +74,6 @@
 }
 
 /* Subtle starfield overlay */
-.game-stars {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background-image:
-    radial-gradient(1px 1px at 20% 30%, rgba(255,255,255,0.7), transparent),
-    radial-gradient(1px 1px at 60% 70%, rgba(255,255,255,0.5), transparent),
-    radial-gradient(2px 2px at 80% 20%, rgba(255,255,255,0.7), transparent),
-    radial-gradient(1px 1px at 30% 80%, rgba(255,255,255,0.4), transparent),
-    radial-gradient(1px 1px at 90% 60%, rgba(255,255,255,0.5), transparent),
-    radial-gradient(1px 1px at 50% 50%, rgba(255,255,255,0.6), transparent),
-    radial-gradient(2px 2px at 10% 90%, rgba(255,255,255,0.7), transparent),
-    radial-gradient(1px 1px at 70% 10%, rgba(255,255,255,0.5), transparent);
-  background-size: 600px 600px;
-  animation: game-stars-twinkle 4s ease-in-out infinite alternate;
-}
-
 @keyframes game-stars-twinkle {
   from { opacity: 0.5; }
   to   { opacity: 1; }
@@ -832,11 +814,6 @@
   filter: brightness(1.2) saturate(1.15);
   z-index: 1000;
 }
-.hand-card:active {
-  /* Subtle press-down feedback for touch users — gives a physical cue
-     without the heavy spring of the hover state. */
-  filter: brightness(0.95) saturate(1.05);
-}
 .hand-card--fresh {
   animation: hand-card-fresh 1.2s cubic-bezier(0.16, 1.08, 0.34, 1) both;
   box-shadow:
@@ -1225,19 +1202,6 @@
   border-color: rgba(255, 215, 130, 0.85);
   box-shadow: 0 0 18px rgba(255, 215, 130, 0.5);
 }
-.defuse-slot--active {
-  border-style: solid;
-  border-color: rgba(255, 100, 100, 0.95);
-  background: linear-gradient(135deg, rgba(110, 20, 30, 0.9), rgba(70, 10, 20, 0.95));
-  box-shadow:
-    0 0 32px rgba(255, 80, 80, 0.75),
-    0 14px 28px rgba(0, 0, 0, 0.6);
-}
-.defuse-slot--disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-  filter: grayscale(0.7);
-}
 
 /* ── Action buttons ─────────────────────────────── */
 .game-actions {
@@ -1508,53 +1472,33 @@
 .summary-card__rank--silver { background: rgba(220, 220, 240, 0.6); color: #1a0a30; }
 .summary-card__rank--bronze { background: rgba(220, 150, 100, 0.6); color: #1a0a30; }
 
-/* ── Reaction toast (nope chain window) ─────────── */
-.nope-react-toast {
-  position: fixed;
-  bottom: 220px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 150;
-  background: linear-gradient(135deg, rgba(255, 120, 120, 0.95), rgba(140, 40, 40, 0.95));
-  border: 1.5px solid rgba(255, 100, 100, 0.7);
-  border-radius: 12px;
-  padding: 14px 22px;
-  color: white;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
-  animation: scrim-in 240ms ease;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.nope-react-toast__label { font-family: "Cinzel", serif; font-size: 14px; letter-spacing: 0.06em; }
-.nope-react-toast__timer { font-family: ui-monospace, monospace; font-size: 18px; font-weight: 700; }
-
 /* ── Draw animation overlay (cinematic 3D) ──────── */
 .draw-anim {
   position: fixed;
   z-index: 200;
   pointer-events: none;
-  animation: draw-flight 720ms cubic-bezier(0.5, 0, 0.25, 1) forwards;
+  animation: draw-flight 780ms cubic-bezier(0.5, 0, 0.25, 1) forwards;
+  filter: drop-shadow(0 0 12px rgba(255, 215, 130, 0.4));
 }
 @keyframes draw-flight {
   0% {
-    transform: translate(var(--start-x), var(--start-y)) scale(0.6);
+    transform: translate(var(--start-x), var(--start-y)) scale(0.6) rotateZ(-6deg);
     opacity: 0;
   }
   18%  { opacity: 1; }
   55% {
     transform: translate(
       calc((var(--start-x) + var(--end-x)) / 2),
-      calc((var(--start-y) + var(--end-y)) / 2 - 70px)
-    ) scale(1);
+      calc((var(--start-y) + var(--end-y)) / 2 - 90px)
+    ) scale(1.05) rotateZ(2deg);
     opacity: 1;
   }
   85% {
-    transform: translate(var(--end-x), var(--end-y)) scale(0.95);
+    transform: translate(var(--end-x), var(--end-y)) scale(0.95) rotateZ(0deg);
     opacity: 1;
   }
   100% {
-    transform: translate(var(--end-x), var(--end-y)) scale(0.85);
+    transform: translate(var(--end-x), var(--end-y)) scale(0.85) rotateZ(0deg);
     opacity: 0;
   }
 }
@@ -1571,6 +1515,7 @@
   -webkit-backface-visibility: hidden;
   border-radius: 9px;
   overflow: hidden;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
 }
 .draw-anim__face img {
   width: 100%;
@@ -1581,46 +1526,72 @@
 .draw-anim__face--back  { transform: rotateY(0deg); }
 .draw-anim__face--front { transform: rotateY(180deg); }
 .draw-anim__inner--flipped {
-  animation: draw-flip-y 600ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation: draw-flip-y 640ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 @keyframes draw-flip-y {
   0%   { transform: rotateY(0deg); }
   100% { transform: rotateY(180deg); }
 }
 
-/* Magic circles under deck + hand */
-.fx-magic-circle {
-  width: 140px;
-  height: 140px;
+/* Trail particles following the card mid-flight */
+.draw-anim-trail {
+  position: fixed;
+  inset: 0;
+  z-index: 198;
+  pointer-events: none;
+  animation: draw-flight 780ms cubic-bezier(0.5, 0, 0.25, 1) forwards;
+}
+.draw-anim-trail__spark {
+  position: absolute;
+  left: var(--end-x);
+  top: var(--end-y);
   border-radius: 50%;
-  border: 2px solid rgba(255, 215, 130, 0.6);
-  box-shadow:
-    0 0 24px rgba(255, 215, 130, 0.5),
-    inset 0 0 24px rgba(255, 215, 130, 0.25);
-  animation: magic-circle 1.4s ease-in-out infinite;
-  opacity: 0.85;
+  background: radial-gradient(circle, rgba(255, 235, 180, 0.95), rgba(255, 215, 130, 0.4) 60%, transparent 100%);
+  box-shadow: 0 0 8px rgba(255, 215, 130, 0.8);
+  opacity: 0;
+  animation: draw-trail-spark 780ms ease-out forwards;
+  animation-delay: var(--delay, 0ms);
 }
-.fx-magic-circle--target {
-  border-color: rgba(122, 223, 255, 0.7);
-  box-shadow:
-    0 0 28px rgba(122, 223, 255, 0.55),
-    inset 0 0 28px rgba(122, 223, 255, 0.25);
-}
-@keyframes magic-circle {
-  0%, 100% { transform: translateX(-50%) scale(0.85); opacity: 0.55; }
-  50%      { transform: translateX(-50%) scale(1.05); opacity: 0.95; }
+@keyframes draw-trail-spark {
+  0%   { opacity: 0; transform: translate(var(--start-x), var(--start-y)) scale(0.4); }
+  20%  { opacity: 1; }
+  80%  { opacity: 0.6; }
+  100% { opacity: 0; transform: translate(var(--end-x), var(--end-y)) scale(0.8); }
 }
 
-.fx-draw-trail {
+/* Halo at the source deck to signal something was drawn */
+.draw-anim-halo {
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 215, 130, 0.45), transparent 60%);
-  animation: draw-trail-pulse 850ms ease forwards;
+  background: radial-gradient(circle, rgba(255, 215, 130, 0.55) 0%, transparent 70%);
+  filter: blur(8px);
   opacity: 0;
+  animation: draw-halo-pulse 780ms ease-out forwards;
 }
-@keyframes draw-trail-pulse {
-  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.4); }
-  40%  { opacity: 0.85; transform: translate(-50%, -50%) scale(1.4); }
-  100% { opacity: 0; transform: translate(-50%, -50%) scale(2.2); }
+@keyframes draw-halo-pulse {
+  0%   { opacity: 0; transform: scale(0.6); }
+  25%  { opacity: 1; transform: scale(1.1); }
+  100% { opacity: 0; transform: scale(1.4); }
+}
+
+/* Sparkle burst at the landing target */
+.draw-anim-burst__spark {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 6px;
+  height: 6px;
+  margin-left: -3px;
+  margin-top: -3px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 235, 180, 1), rgba(255, 215, 130, 0.4) 60%, transparent 100%);
+  box-shadow: 0 0 8px rgba(255, 215, 130, 0.9);
+  opacity: 0;
+  animation: draw-burst-spark 520ms ease-out 500ms forwards;
+}
+@keyframes draw-burst-spark {
+  0%   { opacity: 0; transform: translate(0, 0) scale(0.4); }
+  40%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(calc(cos(var(--angle)) * 70px), calc(sin(var(--angle)) * 70px)) scale(0.6); }
 }
 
 /* ── Play card animation (hand → discard) ───────── */
@@ -1949,7 +1920,6 @@
 }
 
 /* ── Tiny utility ──────────────────────────────── */
-.center-row { display: flex; align-items: center; justify-content: center; gap: 18px; }
 
 /* ── Bomb reveal (center card for 3s) ─────────── */
 .bomb-reveal-scrim {
@@ -2014,6 +1984,19 @@
   height: 368px;
   pointer-events: none;
   animation: bomb-reveal-enter 380ms cubic-bezier(0.16, 1.08, 0.34, 1);
+  perspective: 1600px;
+}
+.bomb-reveal--face .bomb-reveal__inner {
+  animation: bomb-reveal-shake 1.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) infinite;
+}
+@keyframes bomb-reveal-shake {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  10%      { transform: translate3d(-3px, -2px, 0) rotate(-0.8deg); }
+  20%      { transform: translate3d(4px, 0, 0) rotate(0.6deg); }
+  30%      { transform: translate3d(-3px, 2px, 0) rotate(-0.5deg); }
+  40%      { transform: translate3d(3px, -1px, 0) rotate(0.4deg); }
+  50%      { transform: translate3d(-2px, 2px, 0) rotate(-0.3deg); }
+  60%      { transform: translate3d(2px, 0, 0) rotate(0.2deg); }
 }
 .bomb-reveal--fadeout { animation: bomb-reveal-fadeout 400ms ease forwards; }
 .bomb-reveal--explode {
@@ -2436,19 +2419,70 @@
   position: fixed;
   left: 0;
   top: 0;
-  width: 180px;
-  height: 257px;
+  width: var(--card-w, 180px);
+  height: var(--card-h, 257px);
   z-index: 240;
   pointer-events: none;
-  perspective: 1200px;
+  /* translate3d triggers the GPU layer so transform-style: preserve-3d
+     on the child renders the back face without flicker. */
+  transform: translate3d(var(--start-x, 0), var(--start-y, 0), 0);
   will-change: transform;
+}
+.card-flip-scene {
+  position: fixed;
+  inset: 0;
+  perspective: 1400px;
+  perspective-origin: 50% 45%;
+  pointer-events: none;
+  z-index: 240;
+}
+.card-flip-halo {
+  position: fixed;
+  left: var(--end-x, 0);
+  top: var(--end-y, 0);
+  width: var(--card-w, 220px);
+  height: var(--card-h, 314px);
+  margin-left: calc(var(--card-w, 220px) * -0.2);
+  margin-top: calc(var(--card-h, 314px) * -0.2);
+  width: calc(var(--card-w, 220px) * 1.4);
+  height: calc(var(--card-h, 314px) * 1.4);
+  pointer-events: none;
+  z-index: 239;
+  background: radial-gradient(circle, var(--halo-color, rgba(255, 215, 160, 0.55)) 0%, transparent 60%);
+  filter: blur(28px);
+  opacity: 0.85;
+  animation: card-flip-halo-pulse 1.8s ease-in-out infinite;
+}
+@keyframes card-flip-halo-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.65; }
+  50%      { transform: scale(1.12); opacity: 0.95; }
+}
+.card-flip-scene > .card-flip {
+  transform: translate3d(var(--end-x), var(--end-y), 0);
+  animation: card-flip-arrive 720ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+.card-flip-scene > .card-flip.card-flip--in-flight {
+  animation: card-flip-flight 720ms cubic-bezier(0.45, 0, 0.25, 1) forwards;
+}
+.card-flip--out {
+  animation: card-flip-exit 400ms ease forwards;
+}
+@keyframes card-flip-arrive {
+  0%   { transform: translate3d(var(--end-x), var(--end-y), 0) scale(0.6); opacity: 0; }
+  60%  { transform: translate3d(var(--end-x), var(--end-y), 0) scale(1.06); opacity: 1; }
+  100% { transform: translate3d(var(--end-x), var(--end-y), 0) scale(1); opacity: 1; }
+}
+@keyframes card-flip-exit {
+  0%   { transform: translate3d(var(--end-x), var(--end-y), 0) scale(1); opacity: 1; }
+  100% { transform: translate3d(var(--end-x), var(--end-y), 0) scale(0.85); opacity: 0; }
 }
 .card-flip__inner {
   position: relative;
   width: 100%;
   height: 100%;
   transform-style: preserve-3d;
-  animation: card-flip-y 700ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation: card-flip-y 720ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  will-change: transform;
 }
 .card-flip__face {
   position: absolute;
@@ -2457,6 +2491,7 @@
   -webkit-backface-visibility: hidden;
   border-radius: 14px;
   overflow: hidden;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55), 0 0 32px rgba(255, 215, 160, 0.18);
 }
 .card-flip__face img {
   width: 100%;
@@ -2470,43 +2505,48 @@
   0%   { transform: rotateY(0deg); }
   100% { transform: rotateY(180deg); }
 }
-.card-flip--in-flight {
-  animation: card-flip-flight 720ms cubic-bezier(0.45, 0, 0.25, 1) forwards;
-}
 @keyframes card-flip-flight {
   0% {
-    transform: translate(var(--start-x), var(--start-y)) scale(0.55);
+    transform: translate3d(var(--start-x), var(--start-y), 0) scale(0.55);
     opacity: 0;
   }
-  25% { opacity: 1; }
+  20% { opacity: 1; }
   55% {
-    transform: translate(
+    transform: translate3d(
       calc((var(--start-x) + var(--end-x)) / 2),
-      calc((var(--start-y) + var(--end-y)) / 2 - 60px)
-    ) scale(1);
+      calc((var(--start-y) + var(--end-y)) / 2 - 80px),
+      0
+    ) scale(1.05);
     opacity: 1;
   }
-  75% { transform: translate(var(--end-x), var(--end-y)) scale(1); opacity: 1; }
-  100% { transform: translate(var(--end-x), var(--end-y)) scale(1); opacity: 1; }
+  80% { transform: translate3d(var(--end-x), var(--end-y), 0) scale(1.08); opacity: 1; }
+  100% { transform: translate3d(var(--end-x), var(--end-y), 0) scale(1); opacity: 1; }
 }
 .card-flip--in-flight .card-flip__inner {
-  animation: card-flip-y 600ms cubic-bezier(0.4, 0, 0.2, 1) 120ms forwards;
+  animation: card-flip-y 640ms cubic-bezier(0.4, 0, 0.2, 1) 160ms forwards;
 }
 .card-flip-label {
   position: fixed;
   left: 50%;
-  top: calc(50% + 160px);
+  top: calc(50% + 180px);
   transform: translateX(-50%);
   z-index: 240;
   pointer-events: none;
   font-family: "DM Sans", sans-serif;
-  font-size: 16px;
-  color: rgba(255, 235, 200, 0.95);
-  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.85);
+  font-size: 17px;
+  font-weight: 600;
+  color: rgba(255, 235, 200, 0.98);
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.9), 0 0 22px rgba(255, 215, 160, 0.35);
   text-align: center;
   letter-spacing: 0.02em;
   white-space: nowrap;
-  animation: card-flip-label-rise 720ms ease forwards;
+  animation: card-flip-label-rise 720ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  padding: 8px 20px;
+  background: rgba(20, 12, 40, 0.5);
+  border-radius: 999px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 215, 160, 0.18);
 }
 .card-flip-label__count {
   display: block;
@@ -2521,205 +2561,119 @@
 }
 
 /* ── Future peek modal ───────────────────────────────── */
-.future-peek-modal {
-  max-width: 760px;
-  width: 92vw;
-  padding: 32px 28px;
-  background:
-    linear-gradient(135deg, rgba(40, 20, 80, 0.96), rgba(15, 5, 40, 0.98)),
-    radial-gradient(ellipse at top, rgba(154, 120, 255, 0.25), transparent 60%);
-  border: 2px solid color-mix(in srgb, var(--fx-color, #9a78ff) 75%, #ffd782 25%);
-  box-shadow:
-    0 30px 90px rgba(0, 0, 0, 0.85),
-    0 0 100px color-mix(in srgb, var(--fx-color, #9a78ff) 60%, transparent),
-    inset 0 0 60px rgba(154, 120, 255, 0.15);
-  animation: future-peek-modal-rise 480ms cubic-bezier(0.16, 1.08, 0.34, 1);
-}
-@keyframes future-peek-modal-rise {
-  0%   { opacity: 0; transform: translateY(40px) scale(0.85); }
-  100% { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-/* Magical orbs floating behind */
-.future-peek-magical-bg {
-  position: absolute;
-  inset: -40px;
+/* New layout: 3 cards fly in from the deck pile to center-screen, flip
+   cascade, hover above a small info pill. No big box / scrim. */
+.future-peek-scene {
+  position: fixed;
+  inset: 0;
+  z-index: 245;
   pointer-events: none;
-  overflow: hidden;
-  z-index: -1;
+  perspective: 1400px;
+  perspective-origin: 50% 45%;
 }
-.future-peek-magical-bg__orb {
-  position: absolute;
-  width: 200px;
-  height: 200px;
-  border-radius: 50%;
-  filter: blur(40px);
-  opacity: 0.5;
-  animation: future-peek-orb-float 8s ease-in-out infinite;
+.future-peek-stage {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
 }
-.future-peek-magical-bg__orb--1 {
-  background: rgba(154, 120, 255, 0.5);
-  top: 10%;
-  left: -10%;
-  animation-delay: 0s;
+.future-peek-card {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: var(--card-w, 130px);
+  height: var(--card-h, 186px);
+  transform-origin: 50% 50%;
+  animation: future-peek-fly 640ms cubic-bezier(0.45, 0, 0.25, 1) forwards;
 }
-.future-peek-magical-bg__orb--2 {
-  background: rgba(255, 215, 130, 0.4);
-  top: 60%;
-  right: -10%;
-  animation-delay: -3s;
+@keyframes future-peek-fly {
+  0%   { opacity: 0; }
+  35%  { opacity: 1; }
+  100% { opacity: 1; transform: translate3d(var(--fly-x), var(--fly-y), 0) scale(1); }
 }
-.future-peek-magical-bg__orb--3 {
-  background: rgba(255, 138, 170, 0.35);
-  bottom: -20%;
-  left: 40%;
-  animation-delay: -5s;
-}
-@keyframes future-peek-orb-float {
-  0%, 100% { transform: translate(0, 0); opacity: 0.4; }
-  50%      { transform: translate(20px, -20px); opacity: 0.7; }
-}
-
-.future-peek-modal__icon {
-  font-size: 64px;
-  text-align: center;
-  margin-bottom: 4px;
-  color: var(--fx-color);
-  filter: drop-shadow(0 0 24px var(--fx-color));
-  animation: future-peek-icon-pulse 2s ease-in-out infinite;
-}
-@keyframes future-peek-icon-pulse {
-  0%, 100% { transform: scale(1) rotate(0deg); opacity: 0.85; }
-  50%      { transform: scale(1.18) rotate(8deg); opacity: 1; }
-}
-
-.future-peek-modal__row {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 18px;
-  margin-top: 18px;
-  margin-bottom: 18px;
-}
-.future-peek-modal__slot {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  padding: 16px 10px;
-  background: rgba(255, 255, 255, 0.04);
-  border-radius: 14px;
-  border: 1px solid rgba(154, 120, 255, 0.25);
-  position: relative;
-  transition: all 0.3s ease;
-}
-.future-peek-modal__slot--revealed {
-  background: linear-gradient(135deg, rgba(154, 120, 255, 0.15), rgba(255, 215, 130, 0.08));
-  border-color: rgba(154, 120, 255, 0.5);
-  box-shadow: 0 0 28px rgba(154, 120, 255, 0.3);
-}
-
-.future-peek-slot__card-wrap {
-  position: relative;
-  width: 140px;
-  height: 200px;
-  perspective: 1200px;
-}
-.future-peek-slot__inner {
+.future-peek-card__inner {
   position: relative;
   width: 100%;
   height: 100%;
   transform-style: preserve-3d;
-  animation: future-peek-slot-flip 700ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
-  animation-delay: var(--reveal-delay, 0s);
-  animation-fill-mode: backwards;
 }
-.future-peek-slot__face {
+.future-peek-card__face {
   position: absolute;
   inset: 0;
-  border-radius: 12px;
+  border-radius: 14px;
   overflow: hidden;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
 }
-.future-peek-slot__face img {
+.future-peek-card__face img {
   width: 100%;
   height: 100%;
   object-fit: contain;
   display: block;
 }
-.future-peek-slot__face--back  { transform: rotateY(0deg); }
-.future-peek-slot__face--front { transform: rotateY(180deg); }
-.future-peek-slot--revealed .future-peek-slot__inner {
-  animation: future-peek-slot-flip 700ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+.future-peek-card__face--back  { transform: rotateY(0deg); }
+.future-peek-card__face--front { transform: rotateY(180deg); }
+.future-peek-card--revealed .future-peek-card__inner {
+  animation: future-peek-flip 700ms cubic-bezier(0.4, 0, 0.2, 1) 220ms forwards;
 }
-@keyframes future-peek-slot-flip {
+@keyframes future-peek-flip {
   0%   { transform: rotateY(0deg); }
   100% { transform: rotateY(180deg); }
 }
-.future-peek-slot__position {
-  position: absolute;
-  top: -10px;
-  left: -10px;
-  width: 32px;
-  height: 32px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: linear-gradient(135deg, var(--fx-color), var(--fx-accent));
-  font-family: "Cinzel", serif;
-  font-size: 14px;
-  font-weight: 700;
-  color: #fff;
-  box-shadow: 0 0 12px color-mix(in srgb, var(--fx-color) 60%, transparent);
-  z-index: 3;
-}
-.future-peek-slot__label {
-  margin-top: 10px;
-  text-align: center;
-  font-family: "DM Sans", sans-serif;
-  font-size: 12px;
-  color: rgba(255, 235, 215, 0.85);
-  letter-spacing: 0.02em;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.future-peek-slot__label strong {
-  font-size: 13px;
-  color: var(--fx-color);
-  font-family: "Cinzel", serif;
-  letter-spacing: 0.06em;
-}
-.future-peek-modal__slot-label {
+.future-peek-info {
+  position: fixed;
+  left: 50%;
+  top: calc(50% + 160px);
+  transform: translateX(-50%);
+  pointer-events: auto;
+  z-index: 246;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  text-align: center;
+  gap: 6px;
+  padding: 12px 18px;
+  border-radius: 999px;
+  background: rgba(20, 12, 40, 0.85);
+  border: 1px solid rgba(154, 120, 255, 0.45);
+  box-shadow: 0 16px 60px rgba(0, 0, 0, 0.5);
+  animation: future-peek-info-rise 480ms ease forwards;
+  opacity: 0;
 }
-.future-peek-modal__slot-label strong {
+@keyframes future-peek-info-rise {
+  0%   { opacity: 0; transform: translateX(-50%) translateY(20px); }
+  100% { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+.future-peek-info__title {
   font-family: "Cinzel", serif;
   font-size: 14px;
-  color: var(--fx-accent);
+  color: #cdb9ff;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  text-shadow: 0 0 8px var(--fx-color);
 }
-.future-peek-modal__slot-label span {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.65);
-  line-height: 1.4;
+.future-peek-info__sub {
+  font-family: "DM Sans", sans-serif;
+  font-size: 12px;
+  color: rgba(255, 235, 215, 0.75);
+  max-width: 320px;
+  text-align: center;
 }
-.future-peek-modal__slot-key {
-  font-family: ui-monospace, monospace;
-  font-size: 10px;
-  padding: 3px 10px;
+.future-peek-info__close {
+  font-family: "DM Sans", sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  padding: 6px 18px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.75);
-  border: 1px solid rgba(154, 120, 255, 0.3);
+  border: 1px solid rgba(154, 120, 255, 0.4);
+  background: linear-gradient(135deg, rgba(154, 120, 255, 0.18), rgba(255, 215, 130, 0.18));
+  color: #fff;
+  cursor: pointer;
+  margin-top: 4px;
 }
+.future-peek-info__close:hover {
+  background: linear-gradient(135deg, rgba(154, 120, 255, 0.32), rgba(255, 215, 130, 0.32));
+}
+
+/* (legacy block ends here) */
 
 /* ── Card pick modal (Favor / Combo3 / Combo5) ────── */
 .card-pick-modal {
@@ -3067,17 +3021,18 @@
   .discard-pile__card { width: 76px; height: 108px; }
   .card-action-modal__art { width: 110px; height: 156px; }
   .card-action-modal__layout { grid-template-columns: 110px 1fr; gap: 16px; }
-  .fx-magic-circle { width: 100px; height: 100px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .arc-dust, .arc-sweep, .floating-card__trail, .fx-burst__particle,
   .fx-burst__glyph, .fx-burst__ring, .play-card-anim__halo,
-  .draw-anim, .draw-anim__inner, .fx-magic-circle, .fx-draw-trail,
-  .deck-pile__glow, .nope-react-toast, .defuse-modal__bomb-pulse,
+  .draw-anim, .draw-anim__inner, .draw-anim-trail, .draw-anim-trail__spark,
+  .draw-anim-halo, .draw-anim-burst__spark,
+  .deck-pile__glow, .defuse-modal__bomb-pulse,
   .defuse-modal__bomb img, .game-you__status--your-turn,
   .game-seat--current, .card-action-modal__art-glyph, .card-action-modal__art img,
-  .card-flip, .card-flip__inner, .card-flip-label, .card-flip--in-flight {
+  .card-flip, .card-flip__inner, .card-flip-label, .card-flip--in-flight,
+  .card-flip-halo, .card-flip-scene {
     animation: none !important;
   }
 }

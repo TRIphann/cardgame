@@ -34,12 +34,6 @@ public class FirestoreRoomRepository : IRoomRepository
         return await GetByIdAsync(roomId, ct);
     }
 
-    public async Task<bool> CodeExistsAsync(string code, CancellationToken ct = default)
-    {
-        var snapshot = await _db.Collection(CodesCollection).Document(code).GetSnapshotAsync(ct);
-        return snapshot.Exists;
-    }
-
     public async Task<bool> TryReserveCodeAsync(string code, string roomId, CancellationToken ct = default)
     {
         var docRef = _db.Collection(CodesCollection).Document(code);
@@ -76,18 +70,6 @@ public class FirestoreRoomRepository : IRoomRepository
         }
 
         await batch.CommitAsync(ct);
-    }
-
-    public async Task AddMemberAsync(string roomId, RoomMember member, CancellationToken ct = default)
-    {
-        var docRef = _db.Collection(RoomsCollection).Document(roomId).Collection("members").Document(member.Id);
-        await docRef.SetAsync(BuildMemberDoc(member), cancellationToken: ct);
-    }
-
-    public async Task UpdateMemberAsync(string roomId, RoomMember member, CancellationToken ct = default)
-    {
-        var docRef = _db.Collection(RoomsCollection).Document(roomId).Collection("members").Document(member.Id);
-        await docRef.SetAsync(BuildMemberDoc(member), SetOptions.Overwrite, cancellationToken: ct);
     }
 
     public async Task<Room?> TryJoinRoomAsync(string roomId, RoomMember candidate, CancellationToken ct = default)
@@ -279,7 +261,6 @@ public class FirestoreRoomRepository : IRoomRepository
         {
             ["initiatorId"] = pa.InitiatorId,
             ["cardKey"] = pa.CardKey,
-            ["targetMemberId"] = pa.TargetMemberId ?? string.Empty,
             ["discardPickKey"] = pa.DiscardPickKey ?? string.Empty,
             ["nopeChain"] = pa.NopeChain,
             ["createdAt"] = Timestamp.FromDateTime(pa.CreatedAt.ToUniversalTime()),
@@ -403,7 +384,6 @@ public class FirestoreRoomRepository : IRoomRepository
             {
                 InitiatorId = paDict.TryGetValue("initiatorId", out var pid) ? pid as string ?? string.Empty : string.Empty,
                 CardKey = paDict.TryGetValue("cardKey", out var pck) ? pck as string ?? string.Empty : string.Empty,
-                TargetMemberId = paDict.TryGetValue("targetMemberId", out var ptm) ? ptm as string : null,
                 DiscardPickKey = paDict.TryGetValue("discardPickKey", out var dpk) ? dpk as string : null,
                 CreatedAt = paDict.TryGetValue("createdAt", out var pca) && pca is Timestamp cats ? cats.ToDateTime().ToUniversalTime() : DateTime.UtcNow,
                 NopeChain = paDict.TryGetValue("nopeChain", out var nc) && nc is IEnumerable<object> ncList
@@ -411,7 +391,6 @@ public class FirestoreRoomRepository : IRoomRepository
                     : new List<string>(),
             };
             // Clean empty strings to null
-            if (string.IsNullOrEmpty(gs.PendingAction.TargetMemberId)) gs.PendingAction.TargetMemberId = null;
             if (string.IsNullOrEmpty(gs.PendingAction.DiscardPickKey)) gs.PendingAction.DiscardPickKey = null;
         }
 

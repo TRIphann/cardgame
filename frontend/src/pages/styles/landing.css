@@ -333,7 +333,6 @@ h1 {
   box-shadow: 0 8px 24px rgba(82, 45, 160, 0.25);
 }
 .action-button:active { transform: translateY(0); }
-.action-button.form-attention { animation: form-attention 0.45s ease; }
 .action-button.primary {
   background: linear-gradient(105deg, #7040c4, #9b5de1);
   box-shadow: inset 0 1px rgba(255, 255, 255, 0.18), 0 8px 20px rgba(86, 42, 175, 0.2);
@@ -381,11 +380,6 @@ h1 {
 @keyframes float-one { 0%, 100% { translate: 0 0; } 50% { translate: 12px -24px; } }
 @keyframes float-two { 0%, 100% { translate: 0 0; } 50% { translate: -18px 22px; } }
 @keyframes float-three { 0%, 100% { translate: 0 0; } 50% { translate: 18px 12px; } }
-@keyframes form-attention {
-  0%, 100% { transform: translateX(0); }
-  25% { transform: translateX(-4px); }
-  75% { transform: translateX(4px); }
-}
 @keyframes panel-in {
   from { opacity: 0; transform: translateY(22px) scale(0.97); }
   to { opacity: 1; transform: translateY(0) scale(1); }

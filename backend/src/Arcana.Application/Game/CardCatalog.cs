@@ -70,7 +70,9 @@ public static class CardCatalog
     /// Card counts for N players (per the user-confirmed spec):
     ///   Bombs       = N - 1   (the last survivor dodges all)
     ///   Future      = N       ("Xem 1 tí")
-    ///   Defuse      = N + 1   (combo defuse variants + 5 base types)
+    ///   Defuse      = N       (combo defuse variants + 5 base types — exactly
+    ///                          1 per player, no leftover in deck to keep
+    ///                          distribution fair across players)
     ///   Combo N-1 each (robot, zombie, ninja, superman, hải-tặc)  = 5(N-1)
     ///   Attack      = N - 1   ("Bốc đi") — N-1 per spec
     ///   Favor       = N - 1   ("Cho xin") — N-1 per spec
@@ -95,10 +97,11 @@ public static class CardCatalog
         AddCopies(deck, Future, playerCount);
         AddCopies(deck, Nope, playerCount);
 
-        // Defuse base card + 5 combo variants = N + 1 total "cứu" cards.
-        // StartGame deals exactly 1 defuse to each player (N dealt) and the
-        // 1 leftover sits in the deck — it can land in anyone's 4-card deal.
-        AddCopies(deck, Defuse, playerCount + 1);
+        // Exactly N defuse-class cards distributed across the base defuse
+        // + 5 combo variants. StartGame deals exactly 1 to each player and
+        // nothing enters the deck — keeps every player's starting hand
+        // symmetric (1 cứu + 4 random action cards).
+        AddCopies(deck, Defuse, playerCount);
 
         // N - 1 copies each for the "consumable" action cards.
         AddCopies(deck, Attack, playerCount - 1);

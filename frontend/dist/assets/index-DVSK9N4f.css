@@ -333,7 +333,6 @@ h1 {
   box-shadow: 0 8px 24px rgba(82, 45, 160, 0.25);
 }
 .action-button:active { transform: translateY(0); }
-.action-button.form-attention { animation: form-attention 0.45s ease; }
 .action-button.primary {
   background: linear-gradient(105deg, #7040c4, #9b5de1);
   box-shadow: inset 0 1px rgba(255, 255, 255, 0.18), 0 8px 20px rgba(86, 42, 175, 0.2);
@@ -381,11 +380,6 @@ h1 {
 @keyframes float-one { 0%, 100% { translate: 0 0; } 50% { translate: 12px -24px; } }
 @keyframes float-two { 0%, 100% { translate: 0 0; } 50% { translate: -18px 22px; } }
 @keyframes float-three { 0%, 100% { translate: 0 0; } 50% { translate: 18px 12px; } }
-@keyframes form-attention {
-  0%, 100% { transform: translateX(0); }
-  25% { transform: translateX(-4px); }
-  75% { transform: translateX(4px); }
-}
 @keyframes panel-in {
   from { opacity: 0; transform: translateY(22px) scale(0.97); }
   to { opacity: 1; transform: translateY(0) scale(1); }
@@ -794,14 +788,12 @@ body { }
 }
 @keyframes seatFadeIn { to { opacity: 1; transform: translateY(0); } }
 
-.seat.is-filled,
-.seat.seat-host,
-.seat:not(.seat-empty) {
+.seat.seat-host {
   border-color: rgba(184, 142, 255, 0.55);
   background: linear-gradient(145deg, rgba(45, 30, 90, 0.55), rgba(15, 12, 36, 0.65));
   box-shadow: 0 6px 24px rgba(159, 113, 241, 0.15), inset 0 1px rgba(255, 255, 255, 0.04);
 }
-.seat:not(.seat-empty):hover {
+.seat.seat-host:hover {
   transform: translateY(-2px);
   border-color: rgba(220, 190, 255, 0.85);
   box-shadow: 0 8px 28px rgba(159, 113, 241, 0.25);
@@ -839,13 +831,6 @@ body { }
   box-shadow: 0 0 0 2px rgba(159, 113, 241, 0.25);
 }
 .seat-avatar__icon { line-height: 1; }
-.seat-empty .seat-avatar {
-  background: repeating-linear-gradient(45deg, rgba(180, 195, 255, 0.04), rgba(180, 195, 255, 0.04) 6px, transparent 6px, transparent 12px);
-  border-style: dashed;
-  color: var(--c-text-faint);
-  font-size: 22px;
-  cursor: default;
-}
 .seat-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
 .seat-name {
   font-weight: 600;
@@ -861,8 +846,6 @@ body { }
   text-transform: uppercase;
   color: #aaa1d4;
 }
-.seat:not(.seat-empty) .seat-tag { color: var(--c-accent-soft); }
-.seat.seat-host .seat-tag { color: var(--c-gold); }
 .seat-crown {
   position: absolute;
   top: -10px; right: -6px;
@@ -1431,31 +1414,6 @@ body { }
   letter-spacing: 0.04em;
   text-align: center;
 }
-.action-button {
-  height: 46px;
-  padding: 0 22px;
-  cursor: pointer;
-  border: 1px solid rgba(181, 147, 244, 0.32);
-  border-radius: 3px;
-  color: #efeaff;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
-  background: rgba(255, 255, 255, 0.025);
-}
-.action-button.primary {
-  background: linear-gradient(105deg, #7040c4, #9b5de1);
-  box-shadow: inset 0 1px rgba(255, 255, 255, 0.18), 0 8px 20px rgba(86, 42, 175, 0.2);
-}
-.action-button span { margin-left: 8px; font-size: 16px; vertical-align: -1px; }
-.action-button:hover:not(:disabled) {
-  transform: translateY(-2px);
-  border-color: rgba(220, 190, 255, 0.7);
-  box-shadow: 0 8px 24px rgba(82, 45, 160, 0.35);
-}
-.action-button:disabled { opacity: 0.45; cursor: not-allowed; }
-
 /* Lobby footer buttons */
 .start-button {
   height: 46px;
@@ -1505,34 +1463,6 @@ body { }
   transform: translateY(-2px);
   border-color: rgba(255, 79, 106, 0.65);
   background: rgba(255, 79, 106, 0.16);
-}
-
-/* Toast */
-.lobby-toast {
-  position: fixed;
-  bottom: 28px;
-  left: 50%;
-  transform: translateX(-50%) translateY(20px);
-  padding: 12px 22px;
-  background: var(--c-surface-strong);
-  border: 1px solid var(--c-border-strong);
-  border-radius: 999px;
-  font-size: 13px;
-  color: var(--c-text);
-  backdrop-filter: blur(20px);
-  box-shadow: 0 14px 50px rgba(0, 0, 0, 0.55);
-  opacity: 0;
-  transition: opacity 280ms cubic-bezier(0.16, 1, 0.3, 1), transform 280ms cubic-bezier(0.16, 1, 0.3, 1);
-  z-index: 100;
-  pointer-events: none;
-}
-.lobby-toast.is-visible {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
-}
-.lobby-toast[data-tone="error"] {
-  border-color: rgba(255, 79, 106, 0.55);
-  color: #ffd7df;
 }
 
 /* Corner accents */
@@ -2130,75 +2060,9 @@ input[type="range"]::-moz-range-thumb {
   text-decoration: line-through;
 }
 
-/* Members list inside the members tab */
-.members-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-height: 360px;
-  overflow-y: auto;
-  padding-right: 4px;
-}
-.member-row {
-  display: grid;
-  grid-template-columns: 36px 1fr auto;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
-  background: rgba(8, 10, 28, 0.45);
-  border: 1px solid var(--c-border);
-  border-radius: 8px;
-  transition: border-color 160ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-.member-row:hover { border-color: var(--c-border-strong); }
-.member-row.is-host { border-color: rgba(255, 212, 122, 0.45); }
-.member-row.is-me { outline: 1px dashed var(--c-accent); outline-offset: 2px; }
-.member-avatar {
-  width: 36px; height: 36px;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  background: linear-gradient(135deg, #2a2f6a, #16193d);
-  border: 1px solid var(--c-border-strong);
-}
-.member-info { min-width: 0; }
-.member-name {
-  font-weight: 600;
-  font-size: 14px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.member-tag {
-  font-size: 10px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--c-text-faint);
-}
-.member-row.is-host .member-tag { color: var(--c-gold); }
-.member-row.is-you { color: var(--c-accent-soft); }
-.kick-button {
-  width: 32px; height: 32px;
-  border-radius: 50%;
-  background: rgba(255, 79, 106, 0.12);
-  border: 1px solid rgba(255, 79, 106, 0.4);
-  color: #ff8a9b;
-  font-size: 14px;
-  transition: background 160ms cubic-bezier(0.16, 1, 0.3, 1), transform 160ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-.kick-button:hover {
-  background: rgba(255, 79, 106, 0.25);
-  color: #ffd7df;
-  transform: scale(1.05);
-}
-
 @media (prefers-reduced-motion: reduce) {
   .settings-backdrop,
   .settings-panel,
-  .member-row,
-  .kick-button,
   .settings-toggle,
   .settings-tab { animation: none !important; transition: none !important; }
 }

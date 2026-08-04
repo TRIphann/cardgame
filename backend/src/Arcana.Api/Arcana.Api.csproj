@@ -8,7 +8,6 @@
 
   <ItemGroup>
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
-    <PackageReference Include="CloudinaryDotNet" Version="1.29.2" />
     <!-- SignalR: real-time push so all players see the same game state
          without each tab polling every 1-2s. The Hub broadcasts
          "room-updated" after every GameService mutation. -->

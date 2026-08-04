@@ -135,7 +135,10 @@ public class GameService
         }
 
         // Step 4: deal 4 cards to each player from the top of the shuffled
-        // deck. The leftover defuse (1 copy) can land here — that's by design.
+        // deck. Player count is small (3-7) so the 4-card deals can drain
+        // 12-28 cards from the deck. The leftover defuse + N-1 bombs are
+        // inserted AFTER dealing so every player has a fair distribution
+        // and the dangerous cards live at draw-time only.
         foreach (var p in players)
         {
             for (var i = 0; i < 4 && state.Deck.Count > 0; i++)
@@ -286,7 +289,6 @@ public class GameService
                 gs.CardsPlayed[memberId] = gs.CardsPlayed.GetValueOrDefault(memberId) + 1;
                 gs.TurnsTaken[memberId] = gs.TurnsTaken.GetValueOrDefault(memberId) + 1;
                 QueueNopeWindow(gs, memberId, CardCatalog.Attack);
-                result.PlayedCardKey = CardCatalog.Attack;
                 result.Toast = "Tấn công! Đối phương phải chơi thêm 1 lượt.";
                 break;
 
@@ -304,7 +306,6 @@ public class GameService
                 {
                     result.Toast = "Bạn đã bỏ lượt.";
                 }
-                result.PlayedCardKey = CardCatalog.Skip;
                 break;
 
             case CardCatalog.Favor:
@@ -346,7 +347,6 @@ public class GameService
                         ShuffledCandidates = shuffled,
                     };
                     QueueNopeWindow(gs, memberId, CardCatalog.Favor);
-                    result.PlayedCardKey = CardCatalog.Favor;
                     result.RequiresFavorPick = true;
                     result.FavorCandidates = shuffled;
                     result.Toast = "Chọn 1 lá để lấy từ tay đối thủ.";
@@ -371,7 +371,6 @@ public class GameService
                 gs.CardsPlayed[memberId] = gs.CardsPlayed.GetValueOrDefault(memberId) + 1;
                 gs.TurnsTaken[memberId] = gs.TurnsTaken.GetValueOrDefault(memberId) + 1;
                 AdvanceTurn(gs);
-                result.PlayedCardKey = CardCatalog.Favor;
                 result.Toast = $"Lấy 1 lá từ đối thủ.";
                 break;
 
@@ -382,7 +381,6 @@ public class GameService
                 gs.FuturePeek = gs.Deck.TakeLast(3).Reverse().ToList();
                 result.FuturePeek = gs.FuturePeek;
                 QueueNopeWindow(gs, memberId, CardCatalog.Future);
-                result.PlayedCardKey = CardCatalog.Future;
                 result.Toast = $"Xem trước 3 lá.";
                 break;
 
@@ -396,7 +394,6 @@ public class GameService
                     (gs.Deck[i], gs.Deck[j]) = (gs.Deck[j], gs.Deck[i]);
                 }
                 QueueNopeWindow(gs, memberId, CardCatalog.Shuffle);
-                result.PlayedCardKey = CardCatalog.Shuffle;
                 result.Toast = "Đã xáo lại bộ bài.";
                 break;
 
@@ -423,7 +420,7 @@ public class GameService
     {
         var gs = room.GameState!;
         var hand = gs.Hands[memberId];
-        var result = new GameActionResult { ComboKind = combo, PlayedCardKey = cardKey };
+        var result = new GameActionResult();
 
         switch (combo)
         {
@@ -468,7 +465,6 @@ public class GameService
                 gs.TurnsTaken[memberId] = gs.TurnsTaken.GetValueOrDefault(memberId) + 1;
                 // Combo 2-same is NOT Nope-able per game rules.
                 AdvanceTurn(gs);
-                result.PlayedCardKey = cardKey;
                 result.Toast = "Lấy 1 lá từ tay đối thủ.";
                 break;
 
@@ -513,7 +509,6 @@ public class GameService
                 gs.TurnsTaken[memberId] = gs.TurnsTaken.GetValueOrDefault(memberId) + 1;
                 // Combo 3-same is NOT Nope-able.
                 AdvanceTurn(gs);
-                result.PlayedCardKey = cardKey;
                 break;
 
             case ComboKind.FiveAny:
@@ -547,7 +542,6 @@ public class GameService
                 gs.TurnsTaken[memberId] = gs.TurnsTaken.GetValueOrDefault(memberId) + 1;
                 // Combo 5-any is NOT Nope-able.
                 AdvanceTurn(gs);
-                result.PlayedCardKey = "5-any";
                 result.Toast = "Lấy 1 lá từ chồng bỏ.";
                 break;
         }
@@ -839,7 +833,6 @@ public class GameService
         {
             Room = (await _repository.GetByIdAsync(roomId, ct))!,
             Toast = "Bom đã được cứu và đặt lại vào chồng bài.",
-            PlayedCardKey = CardCatalog.Defuse,
         };
     }
 
@@ -905,7 +898,6 @@ public class GameService
         {
             Room = (await _repository.GetByIdAsync(roomId, ct))!,
             Toast = pending.NopeChain.Count % 2 == 1 ? "Hành động đã bị cản." : "Bạn đã cản, chờ phản ứng.",
-            PlayedCardKey = CardCatalog.Nope,
         };
     }
 
@@ -1056,13 +1048,12 @@ public class GameService
         }
     }
 
-    private static void QueueNopeWindow(GameState gs, string initiatorId, string cardKey, string? target = null)
+    private static void QueueNopeWindow(GameState gs, string initiatorId, string cardKey)
     {
         gs.PendingAction = new PendingAction
         {
             InitiatorId = initiatorId,
             CardKey = cardKey,
-            TargetMemberId = target,
             CreatedAt = DateTime.UtcNow,
             NopeChain = new List<string>(),
         };

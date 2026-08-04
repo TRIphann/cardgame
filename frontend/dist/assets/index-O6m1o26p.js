@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/GamePage-CHI-7wAK.js","assets/react-BhVOh7S1.js","assets/vendor-DcE7maHo.js","assets/router-DRJyKT9H.js","assets/react-dom-HPixZcWd.js","assets/GamePage-DOY4bVJm.css"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/GamePage-Di1F-SNt.js","assets/react-BhVOh7S1.js","assets/vendor-DcE7maHo.js","assets/router-DRJyKT9H.js","assets/react-dom-HPixZcWd.js","assets/GamePage-BG-JEZDo.css"])))=>i.map(i=>d[i]);
 var __defProp = Object.defineProperty;
 var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
 var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
@@ -796,9 +796,6 @@ const roomsApi = {
       body: JSON.stringify({ code, playerName })
     });
   },
-  get(roomId) {
-    return jsonRequest(`/api/rooms/${roomId}`);
-  },
   // Snapshot endpoint also prunes stale members server-side. Used by the
   // polling loop instead of /api/rooms/{id} so we get fresh IsOnline flags.
   // Pass memberId so the server marks us online on each call (prevents
@@ -929,7 +926,6 @@ function useOptimisticRoom({ onNavigate } = {}) {
   }, [navigate, onNavigate]);
   const [busy, setBusy] = reactExports.useState(false);
   const [error, setError] = reactExports.useState(null);
-  const pendingPostRef = reactExports.useRef(null);
   const run = reactExports.useCallback(async (action, { name, code }) => {
     setBusy(true);
     setError(null);
@@ -937,7 +933,6 @@ function useOptimisticRoom({ onNavigate } = {}) {
       const res = action === "create" ? await roomsApi.create(name) : await roomsApi.join(code, name);
       return res;
     })();
-    pendingPostRef.current = postPromise;
     const raced = await raceWithFallback(postPromise, action === "join" ? FAST_NAV_TIMEOUT_MS : 999999);
     const isJoinColdStart = action === "join" && raced.kind === "timeout";
     const finalize = (room, member) => {
@@ -2394,7 +2389,7 @@ function LobbyPage() {
     roomError && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lobby-error", role: "alert", children: String(roomError.message || roomError) })
   ] });
 }
-const GamePage = reactExports.lazy(() => __vitePreload(() => import("./GamePage-CHI-7wAK.js"), true ? __vite__mapDeps([0,1,2,3,4,5]) : void 0));
+const GamePage = reactExports.lazy(() => __vitePreload(() => import("./GamePage-Di1F-SNt.js"), true ? __vite__mapDeps([0,1,2,3,4,5]) : void 0));
 function App() {
   const location = useLocation();
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(ErrorBoundary, { children: [

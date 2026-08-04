@@ -15,16 +15,13 @@ public class RoomService : Abstractions.IRoomService
 
     private readonly IRoomRepository _repository;
     private readonly Abstractions.IInvitationCodeGenerator _codeGenerator;
-    private readonly GameService _gameService;
 
     public RoomService(
         IRoomRepository repository,
-        Abstractions.IInvitationCodeGenerator codeGenerator,
-        GameService gameService)
+        Abstractions.IInvitationCodeGenerator codeGenerator)
     {
         _repository = repository;
         _codeGenerator = codeGenerator;
-        _gameService = gameService;
     }
 
     public async Task<Room> CreateRoomAsync(string hostName, CancellationToken ct = default)
@@ -133,38 +130,11 @@ public class RoomService : Abstractions.IRoomService
         return await _repository.UpdateMemberFieldAsync(roomId, memberId, null, DateTime.UtcNow, ct);
     }
 
-    public async Task<int> PruneStaleMembersAsync(string roomId, CancellationToken ct = default)
-    {
-        return await _repository.MarkStaleMembersOfflineAsync(roomId, OfflineAfter, ct);
-    }
-
     public async Task<Room?> GetRoomWithPruneAsync(string roomId, CancellationToken ct = default)
     {
         await _repository.MarkStaleMembersOfflineAsync(roomId, OfflineAfter, ct);
         return await _repository.GetByIdAsync(roomId, ct);
     }
-
-    // ── Game lifecycle (delegate to GameService) ──────────────────────
-
-    public Task<Room> StartGameAsync(string roomId, string hostId, CancellationToken ct = default)
-        => _gameService.StartGameAsync(roomId, hostId, ct);
-
-    public Task<Room> RotateRoomAsync(string roomId, string hostId, CancellationToken ct = default)
-        => _gameService.RotateRoomAsync(roomId, hostId, ct);
-
-    // ── Game actions (delegate to GameService) ────────────────────────
-
-    public Task<GameActionResult> PlayCardAsync(string roomId, string memberId, string cardKey, string? targetMemberId, ComboKind? comboKind, string? discardPickKey, CancellationToken ct = default)
-        => _gameService.PlayCardAsync(roomId, memberId, cardKey, targetMemberId, comboKind, discardPickKey, ct);
-
-    public Task<GameActionResult> DrawCardAsync(string roomId, string memberId, CancellationToken ct = default)
-        => _gameService.DrawCardAsync(roomId, memberId, ct);
-
-    public Task<GameActionResult> UseDefuseAsync(string roomId, string memberId, int slotIndex, CancellationToken ct = default)
-        => _gameService.UseDefuseAsync(roomId, memberId, slotIndex, ct);
-
-    public Task<GameActionResult> ChainNopeAsync(string roomId, string memberId, CancellationToken ct = default)
-        => _gameService.ChainNopeAsync(roomId, memberId, ct);
 
     private async Task<string> ClaimUniqueCodeAsync(string roomId, CancellationToken ct)
     {

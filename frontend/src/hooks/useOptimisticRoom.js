@@ -12,7 +12,7 @@
 // The hook returns { create, join, busy, error } and the caller is responsible
 // for navigating after success.
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { roomsApi } from "@shared/api/roomsApi.js";
 import { ROUTES, saveSession, loadSession } from "@config/env.js";
@@ -60,7 +60,6 @@ export function useOptimisticRoom({ onNavigate } = {}) {
   }, [navigate, onNavigate]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
-  const pendingPostRef = useRef(null);
 
   const run = useCallback(async (action, { name, code }) => {
     setBusy(true);
@@ -72,8 +71,6 @@ export function useOptimisticRoom({ onNavigate } = {}) {
         : await roomsApi.join(code, name);
       return res;
     })();
-
-    pendingPostRef.current = postPromise;
 
     // CREATE: always wait for the real response — the room code must be
     // shown to the user immediately after the API resolves. No timeout.

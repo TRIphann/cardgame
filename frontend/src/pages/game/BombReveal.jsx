@@ -20,7 +20,7 @@ import { cardImageUrl } from "@games/exploding-cats/cardCloudinary.js";
 const REVEAL_DURATION_MS = 3000;
 const FLIP_DELAY_MS = 280;
 
-export function BombReveal({ memberName, memberId, willDefuse, onComplete }) {
+export function BombReveal({ memberName, willDefuse, onComplete }) {
   const [phase, setPhase] = useState("back");
   const [mounted, setMounted] = useState(true);
   // Stash onComplete in a ref so the parent re-rendering with a new

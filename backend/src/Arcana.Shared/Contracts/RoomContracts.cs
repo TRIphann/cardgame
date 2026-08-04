@@ -59,7 +59,7 @@ public record GameStateDto(
     // can re-render correctly when players reconnect.
     IReadOnlyList<string>? FuturePeek = null);
 
-public record PendingActionDto(string InitiatorId, string CardKey, string? TargetMemberId, IReadOnlyList<string> NopeChain, string CreatedAt);
+public record PendingActionDto(string InitiatorId, string CardKey, IReadOnlyList<string> NopeChain, string CreatedAt);
 
 public record RoomDto(
     string Id,
@@ -75,20 +75,6 @@ public record RoomDto(
     // Localized: only the requesting member's hand is exposed.
     IReadOnlyList<string>? MyHand);
 
-public record CreateRoomResponse(RoomDto Room);
-
-public record JoinRoomResponse(RoomDto Room);
-
-public record KickMemberResponse(RoomDto Room);
-
-public record SetReadyResponse(RoomMemberDto Member);
-
-public record HeartbeatResponse(string MemberId, bool IsOnline);
-
-public record StartGameResponse(RoomDto Room);
-
-public record RotateRoomResponse(RoomDto Room);
-
 public record GameActionResponse(
     RoomDto Room,
     string? Toast,
@@ -99,8 +85,6 @@ public record GameActionResponse(
     bool RequiresFavorPick,
     IReadOnlyList<string>? FavorCandidates,
     IReadOnlyList<string>? FuturePeek,
-    string? PlayedCardKey,
-    string? ComboKind,
     bool RequiresMoreDraws = false,
     int RemainingDraws = 0);
 

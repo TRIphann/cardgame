@@ -28,22 +28,6 @@ public interface IRoomService
     /// endpoint roughly every 8s from each tab.
     /// </summary>
     Task<RoomMember?> HeartbeatAsync(string roomId, string memberId, CancellationToken ct = default);
-
-    /// <summary>
-    /// Mark members who haven't sent a heartbeat inside the offline window
-    /// as IsOnline=false. Returns the number of members touched.
-    /// </summary>
-    Task<int> PruneStaleMembersAsync(string roomId, CancellationToken ct = default);
-
-    // ── Game lifecycle ────────────────────────────────────────────────
-    Task<Room> StartGameAsync(string roomId, string hostId, CancellationToken ct = default);
-    Task<Room> RotateRoomAsync(string roomId, string hostId, CancellationToken ct = default);
-
-    // ── Game actions (player-driven) ─────────────────────────────────
-    Task<GameActionResult> PlayCardAsync(string roomId, string memberId, string cardKey, string? targetMemberId, ComboKind? comboKind, string? discardPickKey, CancellationToken ct = default);
-    Task<GameActionResult> DrawCardAsync(string roomId, string memberId, CancellationToken ct = default);
-    Task<GameActionResult> UseDefuseAsync(string roomId, string memberId, int slotIndex, CancellationToken ct = default);
-    Task<GameActionResult> ChainNopeAsync(string roomId, string memberId, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -69,10 +53,6 @@ public class GameActionResult
     public List<string>? FavorCandidates { get; set; }
     // Set when future card peeked top-3 deck cards (3 cards max).
     public List<string>? FuturePeek { get; set; }
-    // Card played this turn (for active-card display).
-    public string? PlayedCardKey { get; set; }
-    // Combo variant used this turn (if any).
-    public ComboKind? ComboKind { get; set; }
     // Set when the player must draw more cards (Attack chain). The client
     // should auto-prompt for another draw rather than waiting for the
     // 60s turn timer.
