@@ -31,6 +31,7 @@ import { ActionCardReveal } from "./ActionCardReveal.jsx";
 import { FxBurst } from "./FxBurst.jsx";
 import { FxScreenShake } from "./FxScreenShake.jsx";
 import { SummaryScreen } from "./SummaryScreen.jsx";
+import { Seat } from "./Seat.jsx";
 import "../styles/game.css";
 
 // Combo card keys (server-side "defuse variants").
@@ -1656,32 +1657,6 @@ export default function GamePage() {
         </div>
       )}
     </main>
-  );
-}
-
-// ── Seat (other player card) ──────────────────────────────
-function Seat({ member, gs }) {
-  const isCurrent = gs?.currentTurnMemberId === member.id;
-  const isAlive = gs ? gs.alive?.[member.id] !== false : true;
-  const handCount = gs?.handCounts?.[member.id] ?? 0;
-  const turns = gs?.turnsTaken?.[member.id] ?? 0;
-  return (
-    <div
-      className={[
-        "game-seat",
-        isCurrent ? "game-seat--current" : "",
-        !isAlive ? "game-seat--dead" : "",
-      ].join(" ").trim()}
-    >
-      <div className="game-seat__avatar" aria-hidden="true">
-        {member.name?.[0]?.toUpperCase() || "?"}
-      </div>
-      <div className="game-seat__info">
-        <div className="game-seat__name">{member.name}</div>
-        <div className="game-seat__meta">{turns} lượt</div>
-        <div className="game-seat__handcount">{handCount} lá trên tay</div>
-      </div>
-    </div>
   );
 }
 

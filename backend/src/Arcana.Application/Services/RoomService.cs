@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Arcana.Application.Abstractions;
 using Arcana.Application.Game;
 using Arcana.Domain.Common;
@@ -13,6 +14,17 @@ public class RoomService : Abstractions.IRoomService
     private const int MaxCodeAttempts = 16;
     private static readonly TimeSpan OfflineAfter = TimeSpan.FromSeconds(35);
 
+    /// <summary>
+    /// Snapshot cache window. The frontend polls /snapshot ~once per
+    /// second; without a cache every poll reads Firestore (room doc +
+    /// members subcollection = 2 reads). With a 2s cache, even an
+    /// aggressive poll only triggers one Firestore round-trip every 2
+    /// seconds per room, slashing the read quota.
+    /// </summary>
+    private static readonly TimeSpan SnapshotCacheTtl = TimeSpan.FromSeconds(2);
+
+    private static readonly ConcurrentDictionary<string, (Room Room, DateTime ExpiresAt)> _snapshotCache = new();
+
     private readonly IRoomRepository _repository;
     private readonly Abstractions.IInvitationCodeGenerator _codeGenerator;
 
@@ -23,6 +35,14 @@ public class RoomService : Abstractions.IRoomService
         _repository = repository;
         _codeGenerator = codeGenerator;
     }
+
+    /// <summary>
+    /// Invalidates the cached snapshot for a room. Call after any write
+    /// that mutates room state (join, leave, start game, play card, etc.)
+    /// so the next reader gets fresh data.
+    /// </summary>
+    public static void InvalidateSnapshotCache(string roomId)
+        => _snapshotCache.TryRemove(roomId, out _);
 
     public async Task<Room> CreateRoomAsync(string hostName, CancellationToken ct = default)
     {
@@ -89,7 +109,33 @@ public class RoomService : Abstractions.IRoomService
 
     public async Task<Room?> GetRoomAsync(string id, CancellationToken ct = default)
     {
-        return await _repository.GetByIdAsync(id, ct);
+        return await ReadWithCacheAsync(id, ct);
+    }
+
+    /// <summary>
+    /// Shared read path for both <see cref="GetRoomAsync"/> and
+    /// <see cref="GetRoomWithPruneAsync"/>. The frontend polls /snapshot
+    /// ~once per second; without a cache every poll reads Firestore (room
+    /// doc + members subcollection = 2 reads). With a 2s cache, even an
+    /// aggressive poll only triggers one Firestore round-trip every 2
+    /// seconds per room, and the same cache absorbs the Leave endpoint's
+    /// reads too. Cache is invalidated on any write through
+    /// <see cref="InvalidateSnapshotCache"/>.
+    /// </summary>
+    private async Task<Room?> ReadWithCacheAsync(string roomId, CancellationToken ct)
+    {
+        var now = DateTime.UtcNow;
+        if (_snapshotCache.TryGetValue(roomId, out var cached) && cached.ExpiresAt > now)
+        {
+            return cached.Room;
+        }
+
+        var room = await _repository.GetByIdAsync(roomId, ct);
+        if (room is not null)
+        {
+            _snapshotCache[roomId] = (room, now + SnapshotCacheTtl);
+        }
+        return room;
     }
 
     public async Task<Room?> KickMemberAsync(string roomId, string hostId, string targetMemberId, CancellationToken ct = default)
@@ -132,8 +178,11 @@ public class RoomService : Abstractions.IRoomService
 
     public async Task<Room?> GetRoomWithPruneAsync(string roomId, CancellationToken ct = default)
     {
-        await _repository.MarkStaleMembersOfflineAsync(roomId, OfflineAfter, ct);
-        return await _repository.GetByIdAsync(roomId, ct);
+        // Snapshot reads must NOT trigger a prune — the prune is a subcollection
+        // scan that hammers Firestore when the client polls the snapshot every
+        // second. Pruning is now handled by OfflineMemberSweeperService on its
+        // own cadence; here we just read the room (cached via ReadWithCacheAsync).
+        return await ReadWithCacheAsync(roomId, ct);
     }
 
     private async Task<string> ClaimUniqueCodeAsync(string roomId, CancellationToken ct)

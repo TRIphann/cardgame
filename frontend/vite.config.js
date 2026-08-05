@@ -31,7 +31,12 @@ export default defineConfig({
     assetsDir: "assets",
     sourcemap: false,
     target: "es2020",
-    minify: false,
+    // Default minify (esbuild) is on. Disabling it makes prod bundles
+    // 2-4x larger with no real benefit — only kept off historically for
+    // readable stack traces in browser DevTools. We re-enable for real
+    // deploys; debug with `npm run dev` or pass `--mode debug`.
+    minify: "esbuild",
+    cssMinify: true,
     rollupOptions: {
       output: {
         manualChunks: (id) => {

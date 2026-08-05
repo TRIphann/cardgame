@@ -5,14 +5,21 @@ obj/
 *.suo
 .vs/
 
+## Frontend build output (Vite)
+frontend/dist/
+node_modules/
+
 ## Secrets — never commit
 backend/src/Arcana.Api/Secrets/
 *.firebase-adminsdk*.json
+# Ignore JSON files generically, then allow the safe ones below.
 *.json
 !backend/src/Arcana.Api/appsettings*.json
+!create_preset.json
 !frontend/src/config/firebase.js
 !frontend/package-lock.json
 !frontend/package.json
+!frontend/tsconfig*.json
 
 ## OS
 .DS_Store

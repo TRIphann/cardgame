@@ -1,0 +1,40 @@
+## Keep the build context small — only the backend folder is needed.
+**/frontend/**
+**/frontend/**
+
+## .git / GitHub metadata
+.git/
+.gitignore
+.gitattributes
+
+## Editor / OS
+.vs/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+## Docs (not needed for build)
+docs/
+README.md
+*.md
+
+## Tooling
+card-upload-results.json
+generate-cards.js
+preview-cards-standalone.html
+upload-cards.ps1
+*.log
+.fake
+.vite-preview*.err
+.vite-preview*.out
+backend/.api.err
+backend/.api.out
+
+## Terraform / IaC (Render owns deploy meta)
+render.yaml
+netlify.toml
+
+## Docker meta itself
+Dockerfile
+.dockerignore

@@ -165,28 +165,51 @@ public class FirestoreRoomRepository : IRoomRepository
         });
     }
 
-    public async Task<int> MarkStaleMembersOfflineAsync(string roomId, TimeSpan offlineAfter, CancellationToken ct = default)
+    /// <summary>
+    /// Sweep stale members across every active room in a single pass.
+    /// Used by OfflineMemberSweeperService so we touch Firestore once
+    /// per sweep rather than once per room read.
+    ///
+    /// Strategy: pull only member docs whose <c>lastSeenAt</c> is older
+    /// than the offline cutoff (single-field timestamp inequality,
+    /// auto-indexed). At most a handful of docs match; everything else
+    /// never leaves Firestore's index.
+    /// </summary>
+    public async Task<int> SweepStaleMembersAsync(TimeSpan offlineAfter, int maxRooms = 50, CancellationToken ct = default)
     {
-        var roomRef = _db.Collection(RoomsCollection).Document(roomId);
-        var membersRef = roomRef.Collection("members");
-
-        var snapshot = await membersRef.GetSnapshotAsync(ct);
         var cutoff = DateTime.UtcNow - offlineAfter;
+        var cutoffTs = Timestamp.FromDateTime(cutoff.ToUniversalTime());
+
+        // Find rooms that still have active members — single-field
+        // equality on status, no composite index required.
+        var roomsSnap = await _db.Collection(RoomsCollection)
+            .WhereEqualTo("status", "playing")
+            .Limit(maxRooms)
+            .GetSnapshotAsync(ct);
+
+        if (roomsSnap.Documents.Count == 0) return 0;
+
+        // Build a single collection-group query for stale members.
+        var staleQuery = _db.CollectionGroup("members")
+            .WhereLessThan("lastSeenAt", cutoffTs)
+            .WhereEqualTo("isOnline", true)
+            .Limit(200);
+
+        var staleSnap = await staleQuery.GetSnapshotAsync(ct);
+        if (staleSnap.Documents.Count == 0) return 0;
+
         var batch = _db.StartBatch();
         var touched = 0;
-        foreach (var doc in snapshot.Documents)
+        foreach (var doc in staleSnap.Documents)
         {
-            var data = doc.ToDictionary();
-            var isOnline = data.TryGetValue("isOnline", out var io) && io is bool iob && iob;
-            if (!isOnline) continue;
-            var lastSeen = data.TryGetValue("lastSeenAt", out var ls) && ls is Timestamp lts
-                ? lts.ToDateTime().ToUniversalTime()
-                : DateTime.UtcNow;
-            if (lastSeen >= cutoff) continue;
-
-            var updated = new Dictionary<string, object>(data) { ["isOnline"] = false };
-            batch.Update(doc.Reference, updated);
+            batch.Update(doc.Reference, "isOnline", false);
             touched += 1;
+            // Firestore batch caps at 500 ops — flush if we're close.
+            if (touched % 450 == 0)
+            {
+                await batch.CommitAsync(ct);
+                batch = _db.StartBatch();
+            }
         }
         if (touched > 0)
         {

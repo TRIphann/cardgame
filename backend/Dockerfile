@@ -43,6 +43,11 @@ RUN dotnet publish backend/src/Arcana.Api/Arcana.Api.csproj \
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 WORKDIR /app
 
+# Run as the pre-created non-root "app" user that ships with the
+# aspnet image. Avoids the "Container is running as root" warning
+# and limits blast radius if a managed dependency is ever compromised.
+COPY --from=build --chown=app:app /app/publish ./
+
 # Disable every code path that tries to register a FileSystemWatcher.
 # `DOTNET_hostBuilder__reloadConfigOnChange=false` is read by
 # HostingHostBuilderExtensions.ApplyDefaultAppConfiguration (see
@@ -58,8 +63,7 @@ ENV DOTNET_USE_POLLING_FILE_WATCHER=false \
     ASPNETCORE_ENVIRONMENT=Production \
     DOTNET_RUNNING_IN_CONTAINER=true
 
-COPY --from=build /app/publish ./
-
 EXPOSE 10000
 
+USER app
 ENTRYPOINT ["dotnet", "Arcana.Api.dll"]

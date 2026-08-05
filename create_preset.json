@@ -1,0 +1,12 @@
+{
+  "name": "arcana_deck_assets",
+  "unsigned": true,
+  "folder": "arcana/decks/default/cards",
+  "use_asset_folder_as_public_id_prefix": true,
+  "unique_filename": true,
+  "overwrite": false,
+  "use_filename": true,
+  "access_mode": "public",
+  "resource_type": "image",
+  "tags": ["arcana", "default-deck"]
+}

@@ -27,3 +27,18 @@
     X-Frame-Options = "SAMEORIGIN"
     Referrer-Policy = "strict-origin-when-cross-origin"
     X-Content-Type-Options = "nosniff"
+    # Content Security Policy — strict but functional for this app:
+    #   default-src 'self'                       — only own resources by default
+    #   script-src  'self' 'unsafe-inline'       — Vite injects an inline <script>
+    #                                              setting data-build-ts; 'unsafe-eval'
+    #                                              is intentionally NOT allowed.
+    #   style-src   'self' 'unsafe-inline'       — CSS files + inline style attrs
+    #   img-src     'self' https://res.cloudinary.com data: — Cloudinary cards + emoji SVGs
+    #   font-src    'self' https://fonts.gstatic.com        — Google Fonts (Cinzel, DM Sans)
+    #   connect-src 'self' https://cardgame-lwsk.onrender.com wss://cardgame-lwsk.onrender.com
+    #                                              — Render REST + SignalR WebSocket
+    #   media-src   'self'                       — local audio assets
+    #   frame-ancestors 'self'                   — clickjacking guard (X-Frame-Options backup)
+    #   base-uri    'self'                       — block <base> injection
+    #   form-action 'self'                       — keep forms inside the site
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' https://res.cloudinary.com data:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://cardgame-lwsk.onrender.com wss://cardgame-lwsk.onrender.com; media-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'"

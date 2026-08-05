@@ -32,6 +32,7 @@ builder.Services.AddSingleton<IGameBroadcaster, SignalRGameBroadcaster>();
 builder.Services.AddHostedService<TurnClockService>();
 builder.Services.AddHostedService<NopeTimeoutService>();
 builder.Services.AddHostedService<FuturePeekSweeperService>();
+builder.Services.AddHostedService<OfflineMemberSweeperService>();
 
 builder.Services.AddArcanaInfrastructure(builder.Configuration);
 

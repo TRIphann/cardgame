@@ -61,22 +61,6 @@ export function FuturePeekModal({ peek, onClose, originRect, turnRemainingSec = 
     return () => document.removeEventListener("keydown", handler);
   }, [showConfirm, turnRemainingSec, onClose]);
 
-  // ESC key: trigger confirm logic or direct close.
-  useEffect(() => {
-    const handler = (e) => {
-      if (e.key !== "Escape" && e.key !== "Esc") return;
-      if (showConfirm) { setShowConfirm(false); return; }
-      if (turnRemainingSec > CONFIRM_THRESHOLD_SEC) {
-        setShowConfirm(true);
-        setTimeout(() => confirmRef.current?.querySelector("button")?.focus(), 50);
-      } else {
-        onClose?.();
-      }
-    };
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, [showConfirm, turnRemainingSec, onClose]);
-
   // Focus management for confirm sub-dialog.
   useEffect(() => {
     if (showConfirm) {

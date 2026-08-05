@@ -36,12 +36,12 @@ public interface IRoomRepository
     Task<RoomMember?> UpdateMemberFieldAsync(string roomId, string memberId, bool? isReady, DateTime? lastSeenAt, CancellationToken ct = default);
 
     /// <summary>
-    /// Mark all members whose LastSeenAt is older than the threshold as offline.
-    /// Used by the polling endpoint to clean up stale tabs without an explicit
-    /// leave call (browser closed, network dropped, …).
-    /// Returns the number of members marked offline.
+    /// Sweep stale members across every active room in a single Firestore
+    /// pass. Used by OfflineMemberSweeperService on a long interval so we
+    /// don't drain the read quota from per-snapshot polling. Returns the
+    /// number of members marked offline.
     /// </summary>
-    Task<int> MarkStaleMembersOfflineAsync(string roomId, TimeSpan offlineAfter, CancellationToken ct = default);
+    Task<int> SweepStaleMembersAsync(TimeSpan offlineAfter, int maxRooms = 50, CancellationToken ct = default);
 
     /// <summary>
     /// Replace the room's gameState field. Returns the updated room, or null
