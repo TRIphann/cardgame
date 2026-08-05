@@ -716,7 +716,11 @@
      overflow:hidden on the page and overflow-y:auto on a scroll region inside
      .game-table keeps every section on-screen no matter how many opponents.
      isolation:isolate creates a new stacking context so layered backgrounds
-     don't bleed into siblings. */
+     don't bleed into siblings.
+     NO background here — the ambient backdrop (.arc-ambient) already paints
+     the scene gradient, and stacking two of them caused visible seams at the
+     viewport edges on shorter pages (e.g. when a player's hand had only 1-2
+     cards the page was < 100vh and the body color peeked through). */
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
@@ -726,13 +730,6 @@
   padding: 10px 12px 12px;
   box-sizing: border-box;
   isolation: isolate;
-  background:
-    radial-gradient(ellipse at 20% 10%, rgba(110, 60, 200, 0.28), transparent 60%),
-    radial-gradient(ellipse at 85% 90%, rgba(220, 70, 140, 0.22), transparent 65%),
-    radial-gradient(ellipse at 50% 50%, rgba(40, 30, 90, 0.4), transparent 80%),
-    linear-gradient(180deg, #0a0820 0%, #060314 100%);
-  background-attachment: fixed;
-  backdrop-filter: blur(8px);
   color: rgba(230, 215, 255, 0.95);
   font-family: "DM Sans", system-ui, sans-serif;
 }
@@ -1258,16 +1255,15 @@
 
 .discard-pile__count {
   position: absolute;
-  bottom: -26px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 13px;
+  bottom: -22px;
+  right: 6px;
+  font-size: 12px;
   font-weight: 600;
-  opacity: 0.85;
+  opacity: 0.9;
   font-family: "Cinzel", serif;
-  letter-spacing: 0.16em;
-  color: rgba(220, 200, 255, 0.85);
-  background: rgba(8, 5, 24, 0.65);
+  letter-spacing: 0.14em;
+  color: rgba(220, 200, 255, 0.9);
+  background: rgba(8, 5, 24, 0.7);
   padding: 3px 12px;
   border-radius: 999px;
   border: 1px solid rgba(168, 124, 245, 0.3);
@@ -2070,6 +2066,27 @@
   color: rgba(220, 200, 255, 0.8);
   margin-bottom: 18px;
   line-height: 1.5;
+}
+.game-attack-hint {
+  display: inline-block;
+  margin-bottom: 8px;
+  padding: 6px 12px;
+  background: rgba(255, 100, 100, 0.18);
+  border: 1px solid rgba(255, 130, 130, 0.45);
+  border-radius: 999px;
+  color: #ffd0c0;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  animation: game-attack-hint-pulse 1.6s ease-in-out infinite;
+}
+.game-attack-hint strong {
+  color: #ff8e8e;
+  font-size: 1.1em;
+  margin: 0 4px;
+}
+@keyframes game-attack-hint-pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 rgba(255, 100, 100, 0.0); }
+  50%      { transform: scale(1.05); box-shadow: 0 0 16px rgba(255, 100, 100, 0.35); }
 }
 .game-modal__close {
   position: absolute;

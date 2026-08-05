@@ -3,11 +3,32 @@
   command = "cd frontend && npm ci && npm run build"
 
 # SPA fallback — React Router handles client-side routes. Anything not under
-# /api, /assets, or a file extension falls back to /index.html.
+# /api, /hubs, /health, /assets, or a file extension falls back to /index.html.
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
+
+# Reverse-proxy REST + health endpoints to the Render backend so the browser
+# only ever talks to one origin (tricardgame.netlify.app). This dodges two
+# failure modes we keep hitting on Render free tier:
+#   1. Browser extensions (ad blockers, privacy filters) drop requests to
+#      *.onrender.com with ERR_BLOCKED_BY_CLIENT — see screenshots.
+#   2. CORS preflights add latency on top of the 30-60s cold start.
+# The frontend now calls `/api/...` and `/health` as relative URLs, and only
+# uses VITE_API_HUB_URL (the SignalR hub base) when the proxied hub isn't
+# reachable.
+[[redirects]]
+  from = "/api/*"
+  to = "https://cardgame-lwsk.onrender.com/api/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/health"
+  to = "https://cardgame-lwsk.onrender.com/health"
+  status = 200
+  force = true
 
 # Cache busting — short TTL on the index, long on hashed asset bundles.
 [[headers]]

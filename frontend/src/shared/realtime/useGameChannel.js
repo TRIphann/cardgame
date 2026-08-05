@@ -9,16 +9,20 @@
 
 import { useEffect, useRef, useState } from "react";
 import * as signalR from "@microsoft/signalr";
-import { API_BASE_URL } from "@config/env.js";
+import { API_BASE_URL, API_HUB_URL } from "@config/env.js";
 import { roomsApi } from "@shared/api/roomsApi.js";
 
 const FALLBACK_POLL_MS = 1500;
 const HUB_RETRY_MS = 3000;
 
 function hubUrl() {
-  // Translate REST base URL "https://host" -> "https://host/hubs/game"
-  // and "http://host:port" -> "http://host:port/hubs/game".
-  const base = API_BASE_URL.replace(/\/+$/, "");
+  // REST proxies through Netlify but the SignalR hub talks WebSockets, which
+  // Netlify redirect rules can't proxy. We send the hub straight to the
+  // Render URL (`API_HUB_URL`), keeping the REST API on a same-origin path.
+  // The browser only opens one WebSocket — ad-blocker heuristics are also
+  // less aggressive against wss://cardgame-lwsk.onrender.com than against
+  // *.onrender.com plain fetch (see screenshots in the bug report).
+  const base = (API_HUB_URL || API_BASE_URL).replace(/\/+$/, "");
   return `${base}/hubs/game`;
 }
 

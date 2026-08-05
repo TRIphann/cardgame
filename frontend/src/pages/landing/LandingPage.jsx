@@ -22,12 +22,14 @@ import "../styles/landing.css";
 // create or join button — that catches the case where someone lands on the
 // page and immediately moves their mouse toward the action.
 if (typeof window !== "undefined") {
-  // 1) Immediate fire on module load.
-  fetch(`${API_BASE_URL}/health`, { method: "GET", cache: "no-store" }).catch(() => {});
+  // 1) Immediate fire on module load. Health URL is resolved at call-time so
+  // it picks up the same-origin Netlify proxy when one is configured.
+  const healthUrl = `${API_BASE_URL}/health`;
+  fetch(healthUrl, { method: "GET", cache: "no-store" }).catch(() => {});
   // 2) Re-fire every 60s while the tab is open so we never go cold during
   //    a long lobby session. Render sleeps after ~15min idle.
   setInterval(() => {
-    fetch(`${API_BASE_URL}/health`, { method: "GET", cache: "no-store" }).catch(() => {});
+    fetch(healthUrl, { method: "GET", cache: "no-store" }).catch(() => {});
   }, 60_000);
 }
 
@@ -134,7 +136,8 @@ export default function LandingPage() {
   // the backend is already awake. This is in addition to the module-level
   // prewarm and 60s keepalive above.
   const prewarmOnHover = useCallback(() => {
-    fetch(`${API_BASE_URL}/health`, { method: "GET", cache: "no-store" }).catch(() => {});
+    const healthUrl = `${API_BASE_URL}/health`;
+    fetch(healthUrl, { method: "GET", cache: "no-store" }).catch(() => {});
   }, []);
 
   return (

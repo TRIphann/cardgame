@@ -1,12 +1,30 @@
 // Application config — kept tiny so the bundler can tree-shake unused branches.
 //
-// `import.meta.env.PROD` is true in production builds. We use that instead of
-// a hostname check so the same bundle works for preview deploys, local
-// production builds, and the live site without any environment wiring.
+// REST endpoints are reached via the Netlify reverse-proxy at `/api/*` and
+// `/health` (see `netlify.toml`). Using relative URLs guarantees the browser
+// only talks to `tricardgame.netlify.app`, which:
+//
+//   - Skips the CORS preflight (same-origin).
+//   - Sidesteps ad blockers / privacy filters that block `*.onrender.com`
+//     with `ERR_BLOCKED_BY_CLIENT`.
+//   - Removes the 30-60s Render cold-start spike from the first request.
+//
+// SignalR (the GameHub at `/hubs/game`) does NOT go through the redirect —
+// Netlify proxies are pure HTTP, WebSockets need a different plumbing. Set
+// `VITE_API_HUB_URL` to the direct Render URL when SignalR should bypass
+// the proxy; otherwise it falls back to the same origin (so it works in
+// local dev and when the hub is hosted on the same domain in production).
 
-export const API_BASE_URL =
+const RELATIVE_REST_BASE = "";
+const FALLBACK_REST_BASE =
   (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_BASE_URL) ||
   "https://cardgame-lwsk.onrender.com";
+const FALLBACK_HUB_BASE =
+  (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_HUB_URL) ||
+  FALLBACK_REST_BASE;
+
+export const API_BASE_URL = RELATIVE_REST_BASE || FALLBACK_REST_BASE;
+export const API_HUB_URL = FALLBACK_HUB_BASE;
 
 // React Router paths. Anything you want to be deep-linkable lives here.
 export const ROUTES = {

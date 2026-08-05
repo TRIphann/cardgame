@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/GamePage-BOCdgmS-.js","assets/react-BhVOh7S1.js","assets/vendor-DcE7maHo.js","assets/router-DRJyKT9H.js","assets/react-dom-HPixZcWd.js","assets/GamePage-D3wEXZWx.css"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/GamePage-DH6ePSwl.js","assets/react-BhVOh7S1.js","assets/vendor-DcE7maHo.js","assets/router-DRJyKT9H.js","assets/react-dom-HPixZcWd.js","assets/GamePage-DokJDNQq.css"])))=>i.map(i=>d[i]);
 var __defProp = Object.defineProperty;
 var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
 var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
@@ -107,7 +107,10 @@ const __vitePreload = function preload(baseModule, deps, importerUrl) {
     return baseModule().catch(handlePreloadError);
   });
 };
-const API_BASE_URL = "https://cardgame-lwsk.onrender.com";
+const FALLBACK_REST_BASE = "https://cardgame-lwsk.onrender.com";
+const FALLBACK_HUB_BASE = FALLBACK_REST_BASE;
+const API_BASE_URL = FALLBACK_REST_BASE;
+const API_HUB_URL = FALLBACK_HUB_BASE;
 const ROUTES = {
   landing: "/",
   lobby: "/lobby",
@@ -851,6 +854,15 @@ const roomsApi = {
       body: JSON.stringify(payload)
     });
   },
+  // Cancel a pending combo target pick after the user dismissed the
+  // picker. Spent combo cards + advance the turn so the player doesn't
+  // stay stuck on a "phase 1" combo action they no longer want to finish.
+  cancelPending(roomId, payload) {
+    return jsonRequest(`/api/rooms/${roomId}/game/cancel-pending`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+  },
   drawCard(roomId, memberId) {
     return jsonRequest(`/api/rooms/${roomId}/game/draw-card`, {
       method: "POST",
@@ -1008,10 +1020,11 @@ function useOptimisticRoom({ onNavigate } = {}) {
   return { run, busy, error };
 }
 if (typeof window !== "undefined") {
-  fetch(`${API_BASE_URL}/health`, { method: "GET", cache: "no-store" }).catch(() => {
+  const healthUrl = `${API_BASE_URL}/health`;
+  fetch(healthUrl, { method: "GET", cache: "no-store" }).catch(() => {
   });
   setInterval(() => {
-    fetch(`${API_BASE_URL}/health`, { method: "GET", cache: "no-store" }).catch(() => {
+    fetch(healthUrl, { method: "GET", cache: "no-store" }).catch(() => {
     });
   }, 6e4);
 }
@@ -1100,7 +1113,8 @@ function LandingPage() {
     submit("join");
   }, [stage, name, audio, submit, flash, triggerShake, t]);
   const prewarmOnHover = reactExports.useCallback(() => {
-    fetch(`${API_BASE_URL}/health`, { method: "GET", cache: "no-store" }).catch(() => {
+    const healthUrl = `${API_BASE_URL}/health`;
+    fetch(healthUrl, { method: "GET", cache: "no-store" }).catch(() => {
     });
   }, []);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("main", { className: `landing-page ${shake > 0 ? "form-attention" : ""}`, children: [
@@ -1985,7 +1999,8 @@ function LobbyPage() {
     if (!fromStorage && location.pathname.startsWith(ROUTES.lobby)) {
       navigate(ROUTES.landing, { replace: true });
     }
-    fetch(`${API_BASE_URL}/health`, { method: "GET", cache: "no-store" }).catch(() => {
+    const healthUrl = `${API_BASE_URL}/health`;
+    fetch(healthUrl, { method: "GET", cache: "no-store" }).catch(() => {
     });
   }, [session, location.pathname, navigate]);
   reactExports.useEffect(() => {
@@ -2407,7 +2422,7 @@ function LobbyPage() {
     roomError && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lobby-error", role: "alert", children: String(roomError.message || roomError) })
   ] });
 }
-const GamePage = reactExports.lazy(() => __vitePreload(() => import("./GamePage-BOCdgmS-.js"), true ? __vite__mapDeps([0,1,2,3,4,5]) : void 0));
+const GamePage = reactExports.lazy(() => __vitePreload(() => import("./GamePage-DH6ePSwl.js"), true ? __vite__mapDeps([0,1,2,3,4,5]) : void 0));
 function App() {
   const location = useLocation();
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(ErrorBoundary, { children: [
@@ -2441,7 +2456,7 @@ createRoot(container).render(
   /* @__PURE__ */ jsxRuntimeExports.jsx(React.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(BrowserRouter, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(AppProviders, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) }) }) })
 );
 export {
-  API_BASE_URL as A,
+  API_HUB_URL as A,
   CARD_CLOUDINARY as C,
   ROUTES as R,
   useToast as a,

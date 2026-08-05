@@ -163,7 +163,8 @@ export default function LobbyPage() {
     }
     // Prewarm the backend so the polling loop's first /snapshot call is
     // already on a warm container.
-    fetch(`${API_BASE_URL}/health`, { method: "GET", cache: "no-store" }).catch(() => {});
+    const healthUrl = `${API_BASE_URL}/health`;
+    fetch(healthUrl, { method: "GET", cache: "no-store" }).catch(() => {});
   }, [session, location.pathname, navigate]);
 
   // ---------------------------------------------------------------------

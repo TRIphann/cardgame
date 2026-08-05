@@ -1,12 +1,12 @@
 import { r as reactExports, j as jsxRuntimeExports } from "./react-BhVOh7S1.js";
-import { r as roomsApi, A as API_BASE_URL, c as cardImageUrl, u as useSession, a as useToast, b as useAudio, R as ROUTES, C as CARD_CLOUDINARY } from "./index-BEacFBS4.js";
+import { r as roomsApi, A as API_HUB_URL, c as cardImageUrl, u as useSession, a as useToast, b as useAudio, R as ROUTES, C as CARD_CLOUDINARY } from "./index-xHZgjXI0.js";
 import { H as HubConnectionBuilder, L as LogLevel } from "./vendor-DcE7maHo.js";
 import { c as useParams, a as useNavigate } from "./router-DRJyKT9H.js";
 import "./react-dom-HPixZcWd.js";
 const FALLBACK_POLL_MS = 1500;
 const HUB_RETRY_MS = 3e3;
 function hubUrl() {
-  const base = API_BASE_URL.replace(/\/+$/, "");
+  const base = API_HUB_URL.replace(/\/+$/, "");
   return `${base}/hubs/game`;
 }
 function useGameChannel({ roomId, memberId, onUpdate, enabled }) {
@@ -876,9 +876,8 @@ function DefuseModal({ onConfirm, onSkip }) {
     )
   ] });
 }
-const FLIP_STAGGER_MS = 500;
-const HOLD_MS$1 = 4e3;
-const AUTO_DISMISS_MS = FLIP_STAGGER_MS * 2 + HOLD_MS$1;
+const FLIP_STAGGER_MS = 400;
+const AUTO_CLOSE_SEC = 10;
 const CONFIRM_THRESHOLD_SEC = 20;
 function FuturePeekModal({ peek, onClose, originRect, turnRemainingSec = 60 }) {
   const [revealedCount, setRevealedCount] = reactExports.useState(0);
@@ -894,9 +893,28 @@ function FuturePeekModal({ peek, onClose, originRect, turnRemainingSec = 60 }) {
   }, [peek]);
   reactExports.useEffect(() => {
     if (!peek || peek.length === 0) return void 0;
-    const t = setTimeout(() => onClose?.(), AUTO_DISMISS_MS);
+    if (typeof turnRemainingSec !== "number") return void 0;
+    if (turnRemainingSec > AUTO_CLOSE_SEC) return void 0;
+    const t = setTimeout(() => onClose?.(), 50);
     return () => clearTimeout(t);
-  }, [peek, onClose]);
+  }, [peek, turnRemainingSec, onClose]);
+  reactExports.useEffect(() => {
+    const handler = (e) => {
+      if (e.key !== "Escape" && e.key !== "Esc") return;
+      if (showConfirm) {
+        setShowConfirm(false);
+        return;
+      }
+      if (turnRemainingSec > CONFIRM_THRESHOLD_SEC) {
+        setShowConfirm(true);
+        setTimeout(() => confirmRef.current?.querySelector("button")?.focus(), 50);
+      } else {
+        onClose?.();
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [showConfirm, turnRemainingSec, onClose]);
   reactExports.useEffect(() => {
     const handler = (e) => {
       if (e.key !== "Escape" && e.key !== "Esc") return;
@@ -993,7 +1011,7 @@ function FuturePeekModal({ peek, onClose, originRect, turnRemainingSec = 60 }) {
     }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "future-peek-info", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "future-peek-info__title", children: "Xem trước 3 lá" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "future-peek-info__sub", children: turnRemainingSec <= CONFIRM_THRESHOLD_SEC ? `Còn ${turnRemainingSec}s — đóng không cần xác nhận` : "Lá trái = bạn rút tiếp. Hai lá còn lại = người kế tiếp." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "future-peek-info__sub", children: turnRemainingSec <= AUTO_CLOSE_SEC ? `Còn ${turnRemainingSec}s — sẽ tự đóng sau khi bạn sẵn sàng` : turnRemainingSec <= CONFIRM_THRESHOLD_SEC ? `Còn ${turnRemainingSec}s — đóng không cần xác nhận` : "Lá trái = bạn rút tiếp. Hai lá còn lại = người kế tiếp." }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         "button",
         {
@@ -1630,6 +1648,9 @@ function GamePage() {
   const [actionModal, setActionModal] = reactExports.useState(null);
   const [pickModal, setPickModal] = reactExports.useState(null);
   const [futurePeek, setFuturePeek] = reactExports.useState(null);
+  const [futureDismissedAt, setFutureDismissedAt] = reactExports.useState(null);
+  const lastPeekStampRef = reactExports.useRef(null);
+  const lastPeekContentRef = reactExports.useRef(null);
   const [defuseModal, setDefuseModal] = reactExports.useState(false);
   const [concedeConfirm, setConcedeConfirm] = reactExports.useState(false);
   const [drawAnim, setDrawAnim] = reactExports.useState(null);
@@ -1760,13 +1781,41 @@ function GamePage() {
   }, [roomId]);
   reactExports.useEffect(() => {
     if (!gs?.futurePeek || gs.futurePeek.length === 0) return;
+    const stamp = gs.futurePeekAt || null;
+    const lastStamp = lastPeekStampRef.current;
+    const samePeek = lastPeekStampRef.current && lastStamp === stamp && lastPeekContentRef.current && JSON.stringify(lastPeekContentRef.current) === JSON.stringify(gs.futurePeek);
+    if (futureDismissedAt && samePeek) return;
+    lastPeekStampRef.current = stamp;
+    lastPeekContentRef.current = gs.futurePeek;
     setFuturePeek(gs.futurePeek);
-  }, [gs?.futurePeek]);
+  }, [gs?.futurePeek, gs?.futurePeekAt, futureDismissedAt]);
+  reactExports.useEffect(() => {
+    const fp = gs?.pendingFavorPick;
+    if (!fp || !fp.targetMemberId || fp.targetMemberId !== myId) return;
+    setPickModal((cur) => {
+      if (cur && cur.kind === "cardPick" && cur.purpose === "FavorGive" && cur.initiatorId === fp.initiatorId) {
+        return cur;
+      }
+      return {
+        kind: "cardPick",
+        purpose: "FavorGive",
+        cardKey: "favor",
+        title: "Xin — bạn phải đưa 1 lá",
+        sub: `${members.find((m) => m.id === fp.initiatorId)?.name || "Đối thủ"} đã dùng Xin. Hãy chọn 1 lá trên tay để đưa.`,
+        candidates: fp.shuffledCandidates || [],
+        fxColor: "#ffd86b",
+        fxAccent: "#ffeaa3",
+        initiatorId: fp.initiatorId,
+        targetId: myId
+      };
+    });
+  }, [gs?.pendingFavorPick, myId, members]);
   reactExports.useEffect(() => {
     if (futurePeek) return;
     const order = gs?.turnOrder;
     if (!order || order.length === 0) {
       lastTurnOrderRef.current = null;
+      if (turnIntro && gameEnded) setTurnIntro(null);
       return;
     }
     const orderKey = order.join(",");
@@ -1775,7 +1824,9 @@ function GamePage() {
     const myIdx = order.indexOf(myId);
     if (myIdx < 0) return;
     setTurnIntro({ order: myIdx + 1, total: order.length, memberId: myId });
-  }, [gs?.turnOrder, myId, futurePeek]);
+    const dismissT = setTimeout(() => setTurnIntro(null), 2400);
+    return () => clearTimeout(dismissT);
+  }, [gs?.turnOrder, myId, futurePeek, gameEnded, turnIntro]);
   const onContinueFromSummary = reactExports.useCallback(async () => {
     if (!roomId) return;
     if (rotatingRef.current) return;
@@ -1816,12 +1867,18 @@ function GamePage() {
     (hand, cardKey) => {
       const comboCount = (hand || []).filter(isComboCard).length;
       if (comboCount >= 5) return "FiveAny";
+      const aliveCount = gs?.alive ? Object.values(gs.alive).filter(Boolean).length : 5;
+      if (aliveCount < 5) {
+        if (comboCount >= 3) return "ThreeSame";
+        if (comboCount >= 2) return "TwoSame";
+        return null;
+      }
       const sameCount = (hand || []).filter((c) => c === cardKey).length;
       if (sameCount >= 3) return "ThreeSame";
       if (sameCount >= 2) return "TwoSame";
       return null;
     },
-    [isComboCard]
+    [isComboCard, gs?.alive]
   );
   const onConfirmAction = reactExports.useCallback(async () => {
     if (!actionModal) return;
@@ -1853,6 +1910,32 @@ function GamePage() {
       }
       emitFx(card.key, discardRect, { size: "lg", durationMs: 1500 });
       try {
+        const comboCountInHand = (myHand || []).filter(isComboCard).length;
+        if (comboCountInHand >= 5 && !isComboCard(card.key)) {
+          const anyComboKey = (myHand || []).find(isComboCard);
+          const res2 = await roomsApi.playCard(roomId, {
+            memberId: myId,
+            cardKey: anyComboKey,
+            comboKind: "FiveAny"
+          });
+          audio.playSfx?.("buttonClick");
+          setRoom(res2.Room);
+          if (res2?.RequiresDiscardPick) {
+            setPickModal({
+              kind: "cardPick",
+              purpose: "FiveAny",
+              cardKey: anyComboKey,
+              title: "Chọn 1 lá từ chồng bỏ",
+              sub: "Các lá đã đánh (trùng nhau chỉ hiện 1 lần).",
+              candidates: res2.FavorCandidates || [],
+              fxColor: "#ffd86b",
+              fxAccent: "#a4f2dc"
+            });
+            return;
+          }
+          if (res2?.Toast) toast?.info?.(res2.Toast);
+          return;
+        }
         if (isComboCard(card.key)) {
           const combo = detectComboFor(myHand, card.key);
           if (!combo) {
@@ -2080,6 +2163,18 @@ function GamePage() {
           if (res?.Toast) toast?.info?.(res.Toast);
           return;
         }
+        if (ctx.purpose === "FavorGive") {
+          const res = await roomsApi.playCard(roomId, {
+            memberId: myId,
+            cardKey: "favor",
+            targetMemberId: ctx.initiatorId,
+            discardPickKey: key
+          });
+          audio.playSfx?.("buttonClick");
+          setRoom(res.Room);
+          if (res?.Toast) toast?.info?.(res.Toast);
+          return;
+        }
         if (ctx.purpose === "ThreeSame") {
           const res = await roomsApi.playCard(roomId, {
             memberId: myId,
@@ -2168,11 +2263,11 @@ function GamePage() {
           if (!cur) return;
           const stillAlive = cur.alive?.[myId] !== false;
           const stillMyTurn = cur.currentTurnMemberId === myId;
-          const stillAttacking = cur.pendingAction?.cardKey === "attack" || cur.pendingAction?.cardKey === "attack-1" || cur.pendingAction?.cardKey === "attack-2";
+          const stillAttacking = cur.pendingAction?.cardKey === "attack" && cur.attackCounter > 0;
           if (stillAlive && stillMyTurn && stillAttacking) {
             onDrawCard();
           }
-        }, 1200);
+        }, 450);
       } else if (res?.Toast) {
         if (res?.DrawnCardKey === "bomb") {
           toast?.error?.(res.Toast);
@@ -2311,8 +2406,12 @@ function GamePage() {
     if (typeof gs?.turnRemainingSec === "number" && gs.turnRemainingSec > 0) {
       return Math.min(gs.turnRemainingSec, turnLimitSec);
     }
+    if (typeof gs?.turnRemainingSec === "number") {
+      return gs.turnRemainingSec;
+    }
     if (!gs?.turnStartedAt) return null;
     const start = new Date(gs.turnStartedAt).getTime();
+    if (!Number.isFinite(start)) return null;
     const remaining = turnLimitSec * 1e3 - (now - start);
     if (remaining <= 0) return 0;
     return Math.ceil(remaining / 1e3);
@@ -2385,6 +2484,11 @@ function GamePage() {
           }
         ),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "game-actions", children: [
+          isMyTurn && isAlive && !gameEnded && gs?.attackCounter > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "game-modal__sub game-attack-hint", "aria-live": "polite", children: [
+            "Bạn phải rút ",
+            /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: gs.attackCounter }),
+            " lá"
+          ] }),
           isMyTurn && isAlive && !gameEnded && /* @__PURE__ */ jsxRuntimeExports.jsx(
             "button",
             {
@@ -2460,11 +2564,12 @@ function GamePage() {
         onPick: async (tid) => {
           if (pickInFlightRef.current) return;
           pickInFlightRef.current = true;
+          const savedCardKey = actionModal?.card?.key;
           setActionModal(null);
           try {
             const res = await roomsApi.playCard(roomId, {
               memberId: myId,
-              cardKey: actionModal.card.key,
+              cardKey: savedCardKey,
               targetMemberId: tid
             });
             audio.playSfx?.("buttonClick");
@@ -2473,7 +2578,7 @@ function GamePage() {
               setPickModal({
                 kind: "cardPick",
                 purpose: "Favor",
-                cardKey: actionModal.card.key,
+                cardKey: savedCardKey,
                 title: "Xin — chọn 1 lá từ tay đối thủ",
                 sub: "Hệ thống đã xáo các lá trên tay đối thủ — chọn 1.",
                 candidates: res.FavorCandidates || [],
@@ -2490,9 +2595,21 @@ function GamePage() {
             pickInFlightRef.current = false;
           }
         },
-        onCancel: () => {
+        onCancel: async () => {
+          const savedCardKey = actionModal?.card?.key;
           setActionModal(null);
           setSelectedCardIdx(null);
+          if (savedCardKey !== "favor") return;
+          try {
+            const res = await roomsApi.cancelPending(roomId, {
+              memberId: myId,
+              cardKey: savedCardKey,
+              comboKind: "Favor"
+            });
+            if (res?.Room) setRoom(res.Room);
+            if (res?.Toast) toast?.info?.(res.Toast);
+          } catch (e) {
+          }
         }
       }
     ),
@@ -2504,7 +2621,26 @@ function GamePage() {
         opponents: members.filter((m) => m.id !== myId).map((m) => ({ ...m, alive: gs?.alive?.[m.id] !== false, handCount: gs?.handCounts?.[m.id] || 0 })),
         myId,
         onPick: onPickPlayer,
-        onCancel: () => setPickModal(null)
+        onCancel: async () => {
+          const ctx = pickModal;
+          const purpose = ctx?.purpose;
+          setPickModal(null);
+          if (purpose !== "TwoSame" && purpose !== "ThreeSame") return;
+          try {
+            const comboKind = purpose === "TwoSame" ? "TwoSame" : "ThreeSame";
+            const cardKey = ctx?.cardKey;
+            if (!cardKey) return;
+            const res = await roomsApi.cancelPending(roomId, {
+              memberId: myId,
+              cardKey,
+              comboKind
+            });
+            if (res?.Room) setRoom(res.Room);
+            if (res?.Toast) toast?.info?.(res.Toast);
+          } catch (e) {
+            toast?.error?.(e?.message || "Không thể hủy combo.");
+          }
+        }
       }
     ),
     pickModal && pickModal.kind === "cardPick" && /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -2516,7 +2652,27 @@ function GamePage() {
         fxColor: pickModal.fxColor,
         fxAccent: pickModal.fxAccent,
         onPick: onPickCard,
-        onCancel: () => setPickModal(null)
+        onCancel: async () => {
+          const ctx = pickModal;
+          const purpose = ctx?.purpose;
+          setPickModal(null);
+          if (!purpose) return;
+          const comboPurpose = purpose === "ThreeSame" || purpose === "FiveAny";
+          if (!comboPurpose && purpose !== "Favor") return;
+          try {
+            const comboKind = comboPurpose ? purpose : "Favor";
+            const cardKey = ctx?.cardKey;
+            if (!cardKey) return;
+            const res = await roomsApi.cancelPending(roomId, {
+              memberId: myId,
+              cardKey,
+              comboKind
+            });
+            if (res?.Room) setRoom(res.Room);
+            if (res?.Toast) toast?.info?.(res.Toast);
+          } catch (e) {
+          }
+        }
       }
     ),
     defuseModal && /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -2530,7 +2686,10 @@ function GamePage() {
       FuturePeekModal,
       {
         peek: futurePeek,
-        onClose: () => setFuturePeek(null),
+        onClose: () => {
+          setFuturePeek(null);
+          setFutureDismissedAt(Date.now());
+        },
         originRect: deckRef.current?.getBoundingClientRect?.() || null,
         turnRemainingSec: turnRemainingSec ?? 60
       }
