@@ -98,16 +98,16 @@ export default function LobbyPage() {
 
   const deckAnimation = useDeckAnimation({ cardImageUrls: CARD_URLS });
 
-  const roomId = session.session?.roomId;
+  const roomId = session?.roomId;
   // Only poll for real room IDs, not pending placeholders
   const isPending = !roomId || (typeof roomId === "string" && roomId.startsWith("PENDING-"));
   const pollRoomId = isPending ? null : roomId;
-  const myPlayerId = session.session?.playerId;
+  const myPlayerId = session?.playerId;
   const { room, error: roomError, refresh } = useRoomPolling(pollRoomId, { memberId: myPlayerId });
 
   // NOTE: displayCode and showCode are defined AFTER room is declared.
   // Prefer server code, fall back to session code
-  const displayCode = room?.code || session.session?.roomCode || "";
+  const displayCode = room?.code || session?.roomCode || "";
   // Real code = 6-character A-Z/0-9 string, NOT a placeholder
   const isPlaceholderCode = displayCode && (displayCode.startsWith("PENDING") || !/^[A-Z0-9]{6}$/.test(displayCode));
   const hasRealCode = displayCode && displayCode.length === 6 && !isPlaceholderCode;
@@ -117,8 +117,8 @@ export default function LobbyPage() {
   const showCode = codeVisible && hasRealCode;
 
   // Merge local-only avatar choice and isHost status from session.
-  const localAvatar = session.session?.avatar;
-  const myIsHost = session.session?.isHost;
+  const localAvatar = session?.avatar;
+  const myIsHost = session?.isHost;
   const members = useMemo(() => {
     // When pending (or before server response), make sure the local player
     // shows up in the member list so the count is at least 1.
@@ -137,14 +137,14 @@ export default function LobbyPage() {
     if (myPlayerId && !merged.some((m) => m.id === myPlayerId) && (isPending || merged.length === 0)) {
       merged.push({
         id: myPlayerId,
-        name: session.session?.playerName || "Bạn",
-        isHost: !!session.session?.isHost,
+        name: session?.playerName || "Bạn",
+        isHost: !!session?.isHost,
         isReady: !!optimisticReady,
         joinedAt: new Date().toISOString(),
       });
     }
     return merged;
-  }, [room, localAvatar, myIsHost, myPlayerId, isPending, session.session?.playerName, optimisticReady]);
+  }, [room, localAvatar, myIsHost, myPlayerId, isPending, session?.playerName, optimisticReady]);
 
   // Redirect when session is missing. We read the raw session from storage as
   // a fallback because `useSession()` may not have flushed its state yet on
@@ -152,14 +152,14 @@ export default function LobbyPage() {
   // fires synchronously, but React state updates are async and `navigate`
   // races ahead of the re-render).
   useEffect(() => {
-    const fromStorage = session.session?.roomId || readSessionRoomId();
+    const fromStorage = session?.roomId || readSessionRoomId();
     if (!fromStorage && location.pathname.startsWith(ROUTES.lobby)) {
       navigate(ROUTES.landing, { replace: true });
     }
     // Prewarm the backend so the polling loop's first /snapshot call is
     // already on a warm container.
     fetch(`${API_BASE_URL}/health`, { method: "GET", cache: "no-store" }).catch(() => {});
-  }, [session.session, location.pathname, navigate]);
+  }, [session, location.pathname, navigate]);
 
   // ---------------------------------------------------------------------
   // Heartbeat — every 15s ping /api/rooms/{id}/heartbeat so the server knows
@@ -171,7 +171,7 @@ export default function LobbyPage() {
   // ---------------------------------------------------------------------
   useEffect(() => {
     if (!pollRoomId) return undefined;
-    const myId = session.session?.playerId;
+    const myId = session?.playerId;
     if (!myId) return undefined;
 
     let cancelled = false;
@@ -193,7 +193,7 @@ export default function LobbyPage() {
       cancelled = true;
       clearInterval(id);
     };
-  }, [pollRoomId, session.session?.playerId]);
+  }, [pollRoomId, session?.playerId]);
 
   // ---------------------------------------------------------------------
   // Online guard — differentiate "user switched tab" from "user closed tab".
@@ -211,7 +211,7 @@ export default function LobbyPage() {
   // ---------------------------------------------------------------------
   useEffect(() => {
     if (!pollRoomId) return undefined;
-    const myId = session.session?.playerId;
+    const myId = session?.playerId;
     if (!myId) return undefined;
     const leaveUrl = `${API_BASE_URL}/api/rooms/${pollRoomId}/members/${myId}/leave`;
     let sentLeave = false;
@@ -250,12 +250,12 @@ export default function LobbyPage() {
       window.removeEventListener("beforeunload", sendLeave);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [pollRoomId, session.session?.playerId, refresh]);
+  }, [pollRoomId, session?.playerId, refresh]);
 
   // Register settings tabs (members list if host, otherwise just defaults).
   useEffect(() => {
-    const myMember = members?.find((m) => m.id === session.session?.playerId);
-    const isHost = session.session?.isHost && myMember?.isHost;
+    const myMember = members?.find((m) => m.id === session?.playerId);
+    const isHost = session?.isHost && myMember?.isHost;
     if (!room || !isHost) {
       settings.registerTabs([]);
       return;
@@ -269,7 +269,7 @@ export default function LobbyPage() {
             {members.map((m) => (
               <li key={m.id} className="settings-member">
                 <span>{m.name}{m.isHost ? " 👑" : ""}</span>
-                {!m.isHost && m.id !== session.session.playerId && (
+                {!m.isHost && m.id !== session.playerId && (
                   <button
                     type="button"
                     className="settings-button-danger"
@@ -289,14 +289,14 @@ export default function LobbyPage() {
               // Use the shared wrapper so the request goes to the configured
               // backend (relative URLs would hit the Netlify SPA fallback and
               // silently serve index.html instead of reaching the API).
-              await roomsApi.kick(roomId, session.session.playerId, payload.memberId);
+              await roomsApi.kick(roomId, session.playerId, payload.memberId);
               refresh();
             } catch (e) { toast.error("Kick thất bại."); }
           }
         },
       },
     ]);
-  }, [members, session.session, settings, roomId, refresh, toast]);
+  }, [members, session, settings, roomId, refresh, toast]);
 
   // Once room status flips to "playing", navigate to the game route.
   useEffect(() => {
@@ -311,14 +311,14 @@ export default function LobbyPage() {
   // successful poll will reconcile.
   useEffect(() => {
     if (optimisticReady === null) return;
-    const myId = session.session?.playerId;
+    const myId = session?.playerId;
     if (!myId) return;
     const me = room?.members?.find((m) => m.id === myId);
     if (!me) return;
     if (!!me.isReady === optimisticReady) {
       setOptimisticReady(null);
     }
-  }, [room?.members, session.session?.playerId, optimisticReady]);
+  }, [room?.members, session?.playerId, optimisticReady]);
 
   // ---------------------------------------------------------------------
   // Auto-leave — if the server snapshot no longer contains our player id
@@ -329,8 +329,8 @@ export default function LobbyPage() {
   // ---------------------------------------------------------------------
   const offlineAtRef = useRef(null);
   useEffect(() => {
-    if (!room || !session.session?.playerId) return;
-    const me = room.members.find((m) => m.id === session.session.playerId);
+    if (!room || !session?.playerId) return;
+    const me = room.members.find((m) => m.id === session.playerId);
     // Still in the room → reset the offline timer.
     if (me) {
       offlineAtRef.current = null;
@@ -342,10 +342,10 @@ export default function LobbyPage() {
       session.clear();
       navigate(ROUTES.landing, { replace: true });
     }
-  }, [room, session.session, session, navigate]);
+  }, [room, session, session, navigate]);
 
   const handleCopy = useCallback(async () => {
-    const code = room?.code || session.session?.roomCode;
+    const code = room?.code || session?.roomCode;
     if (!code) return;
     try {
       await navigator.clipboard.writeText(code);
@@ -356,7 +356,7 @@ export default function LobbyPage() {
     } catch (e) {
       toast.error("Không thể sao chép. Hãy copy thủ công.");
     }
-  }, [room, session.session, audio, toast, t]);
+  }, [room, session, audio, toast, t]);
 
   const handleLeave = useCallback(async () => {
     audio.playSfx("buttonClick");
@@ -378,7 +378,7 @@ export default function LobbyPage() {
   // we still guard on the server (SetReadyAsync rejects hosts). The host's
   // start button is gated on `allOtherPlayersReady` (computed below).
   const handleToggleReady = useCallback(async () => {
-    const myId = session.session?.playerId;
+    const myId = session?.playerId;
     if (!myId || !roomId) return;
     const me = members.find((m) => m.id === myId);
     const nextIsReady = me ? !me.isReady : true;
@@ -394,7 +394,7 @@ export default function LobbyPage() {
       setOptimisticReady(me?.isReady ?? false);
       toast.error(e.message || "Không cập nhật được trạng thái sẵn sàng.");
     }
-  }, [audio, roomId, session.session, members, refresh, toast]);
+  }, [audio, roomId, session, members, refresh, toast]);
 
   // True only when every NON-HOST member is ready. The host always starts
   // the game; they don't need to mark themselves ready.
@@ -414,12 +414,12 @@ export default function LobbyPage() {
     try {
       // Use the shared wrapper so we get the same timeout/retry/error
       // handling as the rest of the app.
-      await roomsApi.startGame(roomId, session.session.playerId);
+      await roomsApi.startGame(roomId, session.playerId);
       refresh();
     } catch (e) {
       toast.error(e.message || "Không bắt đầu được ván.");
     }
-  }, [audio, roomId, session.session, refresh, toast, allOtherPlayersReady]);
+  }, [audio, roomId, session, refresh, toast, allOtherPlayersReady]);
 
   const handlePrevMode = useCallback(() => {
     audio.playSfx("buttonClick");
@@ -446,10 +446,10 @@ export default function LobbyPage() {
   );
 
   const myMember = useMemo(
-    () => members?.find((m) => m.id === session.session?.playerId),
-    [members, session.session],
+    () => members?.find((m) => m.id === session?.playerId),
+    [members, session],
   );
-  const isHost = myMember?.isHost || (isPending && session.session?.isHost);
+  const isHost = myMember?.isHost || (isPending && session?.isHost);
   // Host can only start when:
   //   - room is still in waiting state
   //   - there's at least MIN_PLAYERS (3) total members in the room
@@ -540,7 +540,7 @@ export default function LobbyPage() {
           <Seats
             side="left"
             members={members}
-            myId={session.session?.playerId}
+            myId={session?.playerId}
             onPickAvatar={() => setPickerOpen(true)}
             onToggleReady={handleToggleReady}
           />
@@ -618,7 +618,7 @@ export default function LobbyPage() {
 
           {pickerOpen && (
             <AvatarPicker
-              initial={session.session?.avatar}
+              initial={session?.avatar}
               onSelect={handleAvatarSelect}
               onClose={() => setPickerOpen(false)}
             />
@@ -629,7 +629,7 @@ export default function LobbyPage() {
           <Seats
             side="right"
             members={members}
-            myId={session.session?.playerId}
+            myId={session?.playerId}
             onPickAvatar={() => setPickerOpen(true)}
             onToggleReady={handleToggleReady}
           />

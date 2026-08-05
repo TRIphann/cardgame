@@ -1,5 +1,5 @@
 import { r as reactExports, j as jsxRuntimeExports } from "./react-BhVOh7S1.js";
-import { r as roomsApi, A as API_BASE_URL, c as cardImageUrl, u as useSession, a as useToast, b as useAudio, R as ROUTES, C as CARD_CLOUDINARY } from "./index-9vwMpF5s.js";
+import { r as roomsApi, A as API_BASE_URL, c as cardImageUrl, u as useSession, a as useToast, b as useAudio, R as ROUTES, C as CARD_CLOUDINARY } from "./index-XumO9n8R.js";
 import { H as HubConnectionBuilder, L as LogLevel } from "./vendor-DcE7maHo.js";
 import { c as useParams, a as useNavigate } from "./router-DRJyKT9H.js";
 import "./react-dom-HPixZcWd.js";
@@ -1613,7 +1613,7 @@ function statusToText(s) {
   return s;
 }
 function getLocalPlayerId(session) {
-  return session?.session?.playerId || readSessionRoomId()?.playerId || null;
+  return session?.playerId || readSessionRoomId()?.playerId || null;
 }
 function GamePage() {
   const { roomId } = useParams();
@@ -1624,6 +1624,7 @@ function GamePage() {
   const myId = getLocalPlayerId(session);
   const [room, setRoom] = reactExports.useState(null);
   const [now, setNow] = reactExports.useState(Date.now());
+  const gs = room?.gameState || null;
   const [selectedCardIdx, setSelectedCardIdx] = reactExports.useState(null);
   const [actionModal, setActionModal] = reactExports.useState(null);
   const [pickModal, setPickModal] = reactExports.useState(null);
@@ -1656,7 +1657,6 @@ function GamePage() {
   const handCenterRef = reactExports.useRef(null);
   const discardRef = reactExports.useRef(null);
   const rotatingRef = reactExports.useRef(false);
-  const gs = room?.gameState || null;
   const members = room?.members || [];
   const myMember = members.find((m) => m.id === myId) || null;
   const myHand = room?.myHand || (gs && myId ? [] : []);
@@ -1720,11 +1720,11 @@ function GamePage() {
   reactExports.useEffect(() => {
     if (!roomId) return;
     const fromStorage = readSessionRoomId();
-    if (!fromStorage && !session?.session?.roomId) {
+    if (!fromStorage && !session?.roomId) {
       navigate(ROUTES.landing, { replace: true });
       return;
     }
-  }, [roomId, session?.session?.roomId, navigate]);
+  }, [roomId, session?.roomId, navigate]);
   reactExports.useEffect(() => {
     const prevTurn = lastTurnRef.current;
     const curTurn = gs?.currentTurnMemberId;
@@ -1780,12 +1780,12 @@ function GamePage() {
     if (rotatingRef.current) return;
     rotatingRef.current = true;
     try {
-      if (session?.session?.isHost) {
-        const res = await roomsApi.rotateRoom(roomId, session.session.playerId);
+      if (session?.isHost) {
+        const res = await roomsApi.rotateRoom(roomId, session.playerId);
         const newRoomId = res?.room?.id;
         if (newRoomId) {
           const updatedSession = {
-            ...session.session || {},
+            ...session || {},
             roomId: newRoomId
           };
           session.patch?.({ roomId: newRoomId });

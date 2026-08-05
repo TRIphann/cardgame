@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/GamePage-N__w-G14.js","assets/react-BhVOh7S1.js","assets/vendor-DcE7maHo.js","assets/router-DRJyKT9H.js","assets/react-dom-HPixZcWd.js","assets/GamePage-D3wEXZWx.css"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/GamePage-CK4ZAwqk.js","assets/react-BhVOh7S1.js","assets/vendor-DcE7maHo.js","assets/router-DRJyKT9H.js","assets/react-dom-HPixZcWd.js","assets/GamePage-D3wEXZWx.css"])))=>i.map(i=>d[i]);
 var __defProp = Object.defineProperty;
 var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
 var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
@@ -1948,17 +1948,17 @@ function LobbyPage() {
   const pickerAnchorRef = reactExports.useRef(null);
   const [optimisticReady, setOptimisticReady] = reactExports.useState(null);
   const deckAnimation = useDeckAnimation({ cardImageUrls: CARD_URLS });
-  const roomId = session.session?.roomId;
+  const roomId = session?.roomId;
   const isPending = !roomId || typeof roomId === "string" && roomId.startsWith("PENDING-");
   const pollRoomId = isPending ? null : roomId;
-  const myPlayerId = session.session?.playerId;
+  const myPlayerId = session?.playerId;
   const { room, error: roomError, refresh } = useRoomPolling(pollRoomId, { memberId: myPlayerId });
-  const displayCode = room?.code || session.session?.roomCode || "";
+  const displayCode = room?.code || session?.roomCode || "";
   const isPlaceholderCode = displayCode && (displayCode.startsWith("PENDING") || !/^[A-Z0-9]{6}$/.test(displayCode));
   const hasRealCode = displayCode && displayCode.length === 6 && !isPlaceholderCode;
   const showCode = codeVisible && hasRealCode;
-  const localAvatar = session.session?.avatar;
-  const myIsHost = session.session?.isHost;
+  const localAvatar = session?.avatar;
+  const myIsHost = session?.isHost;
   const members = reactExports.useMemo(() => {
     const list = room?.members || [];
     const merged = list.map((m) => {
@@ -1971,25 +1971,25 @@ function LobbyPage() {
     if (myPlayerId && !merged.some((m) => m.id === myPlayerId) && (isPending || merged.length === 0)) {
       merged.push({
         id: myPlayerId,
-        name: session.session?.playerName || "Bạn",
-        isHost: !!session.session?.isHost,
+        name: session?.playerName || "Bạn",
+        isHost: !!session?.isHost,
         isReady: !!optimisticReady,
         joinedAt: (/* @__PURE__ */ new Date()).toISOString()
       });
     }
     return merged;
-  }, [room, localAvatar, myIsHost, myPlayerId, isPending, session.session?.playerName, optimisticReady]);
+  }, [room, localAvatar, myIsHost, myPlayerId, isPending, session?.playerName, optimisticReady]);
   reactExports.useEffect(() => {
-    const fromStorage = session.session?.roomId || readSessionRoomId();
+    const fromStorage = session?.roomId || readSessionRoomId();
     if (!fromStorage && location.pathname.startsWith(ROUTES.lobby)) {
       navigate(ROUTES.landing, { replace: true });
     }
     fetch(`${API_BASE_URL}/health`, { method: "GET", cache: "no-store" }).catch(() => {
     });
-  }, [session.session, location.pathname, navigate]);
+  }, [session, location.pathname, navigate]);
   reactExports.useEffect(() => {
     if (!pollRoomId) return void 0;
-    const myId = session.session?.playerId;
+    const myId = session?.playerId;
     if (!myId) return void 0;
     let cancelled = false;
     const ping = async () => {
@@ -2006,10 +2006,10 @@ function LobbyPage() {
       cancelled = true;
       clearInterval(id);
     };
-  }, [pollRoomId, session.session?.playerId]);
+  }, [pollRoomId, session?.playerId]);
   reactExports.useEffect(() => {
     if (!pollRoomId) return void 0;
-    const myId = session.session?.playerId;
+    const myId = session?.playerId;
     if (!myId) return void 0;
     const leaveUrl = `${API_BASE_URL}/api/rooms/${pollRoomId}/members/${myId}/leave`;
     let sentLeave = false;
@@ -2043,10 +2043,10 @@ function LobbyPage() {
       window.removeEventListener("beforeunload", sendLeave);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [pollRoomId, session.session?.playerId, refresh]);
+  }, [pollRoomId, session?.playerId, refresh]);
   reactExports.useEffect(() => {
-    const myMember2 = members?.find((m) => m.id === session.session?.playerId);
-    const isHost2 = session.session?.isHost && myMember2?.isHost;
+    const myMember2 = members?.find((m) => m.id === session?.playerId);
+    const isHost2 = session?.isHost && myMember2?.isHost;
     if (!room || !isHost2) {
       settings.registerTabs([]);
       return;
@@ -2060,7 +2060,7 @@ function LobbyPage() {
             m.name,
             m.isHost ? " 👑" : ""
           ] }),
-          !m.isHost && m.id !== session.session.playerId && /* @__PURE__ */ jsxRuntimeExports.jsx(
+          !m.isHost && m.id !== session.playerId && /* @__PURE__ */ jsxRuntimeExports.jsx(
             "button",
             {
               type: "button",
@@ -2074,7 +2074,7 @@ function LobbyPage() {
         onAction: async (action, payload) => {
           if (action === "kick") {
             try {
-              await roomsApi.kick(roomId, session.session.playerId, payload.memberId);
+              await roomsApi.kick(roomId, session.playerId, payload.memberId);
               refresh();
             } catch (e) {
               toast.error("Kick thất bại.");
@@ -2083,7 +2083,7 @@ function LobbyPage() {
         }
       }
     ]);
-  }, [members, session.session, settings, roomId, refresh, toast]);
+  }, [members, session, settings, roomId, refresh, toast]);
   reactExports.useEffect(() => {
     if (room?.status === "playing") {
       navigate(ROUTES.game(roomId), { replace: true });
@@ -2091,18 +2091,18 @@ function LobbyPage() {
   }, [room, navigate, roomId]);
   reactExports.useEffect(() => {
     if (optimisticReady === null) return;
-    const myId = session.session?.playerId;
+    const myId = session?.playerId;
     if (!myId) return;
     const me = room?.members?.find((m) => m.id === myId);
     if (!me) return;
     if (!!me.isReady === optimisticReady) {
       setOptimisticReady(null);
     }
-  }, [room?.members, session.session?.playerId, optimisticReady]);
+  }, [room?.members, session?.playerId, optimisticReady]);
   const offlineAtRef = reactExports.useRef(null);
   reactExports.useEffect(() => {
-    if (!room || !session.session?.playerId) return;
-    const me = room.members.find((m) => m.id === session.session.playerId);
+    if (!room || !session?.playerId) return;
+    const me = room.members.find((m) => m.id === session.playerId);
     if (me) {
       offlineAtRef.current = null;
       return;
@@ -2113,9 +2113,9 @@ function LobbyPage() {
       session.clear();
       navigate(ROUTES.landing, { replace: true });
     }
-  }, [room, session.session, session, navigate]);
+  }, [room, session, session, navigate]);
   const handleCopy = reactExports.useCallback(async () => {
-    const code = room?.code || session.session?.roomCode;
+    const code = room?.code || session?.roomCode;
     if (!code) return;
     try {
       await navigator.clipboard.writeText(code);
@@ -2126,7 +2126,7 @@ function LobbyPage() {
     } catch (e) {
       toast.error("Không thể sao chép. Hãy copy thủ công.");
     }
-  }, [room, session.session, audio, toast, t]);
+  }, [room, session, audio, toast, t]);
   const handleLeave = reactExports.useCallback(async () => {
     audio.playSfx("buttonClick");
     try {
@@ -2140,7 +2140,7 @@ function LobbyPage() {
     navigate(ROUTES.landing);
   }, [audio, navigate, session]);
   const handleToggleReady = reactExports.useCallback(async () => {
-    const myId = session.session?.playerId;
+    const myId = session?.playerId;
     if (!myId || !roomId) return;
     const me = members.find((m) => m.id === myId);
     const nextIsReady = me ? !me.isReady : true;
@@ -2153,7 +2153,7 @@ function LobbyPage() {
       setOptimisticReady(me?.isReady ?? false);
       toast.error(e.message || "Không cập nhật được trạng thái sẵn sàng.");
     }
-  }, [audio, roomId, session.session, members, refresh, toast]);
+  }, [audio, roomId, session, members, refresh, toast]);
   const allOtherPlayersReady = reactExports.useMemo(() => {
     if (!members || members.length <= 1) return false;
     const nonHost = members.filter((m) => !m.isHost);
@@ -2167,12 +2167,12 @@ function LobbyPage() {
       return;
     }
     try {
-      await roomsApi.startGame(roomId, session.session.playerId);
+      await roomsApi.startGame(roomId, session.playerId);
       refresh();
     } catch (e) {
       toast.error(e.message || "Không bắt đầu được ván.");
     }
-  }, [audio, roomId, session.session, refresh, toast, allOtherPlayersReady]);
+  }, [audio, roomId, session, refresh, toast, allOtherPlayersReady]);
   const handlePrevMode = reactExports.useCallback(() => {
     audio.playSfx("buttonClick");
     setModeIndex((i) => (i - 1 + GAME_MODES.length) % GAME_MODES.length);
@@ -2194,10 +2194,10 @@ function LobbyPage() {
     [audio, session, toast]
   );
   const myMember = reactExports.useMemo(
-    () => members?.find((m) => m.id === session.session?.playerId),
-    [members, session.session]
+    () => members?.find((m) => m.id === session?.playerId),
+    [members, session]
   );
-  const isHost = myMember?.isHost || isPending && session.session?.isHost;
+  const isHost = myMember?.isHost || isPending && session?.isHost;
   const MIN_PLAYERS = 3;
   const canStart = isHost && room && room.status === "waiting" && (members?.length ?? 0) >= MIN_PLAYERS && allOtherPlayersReady;
   const playerCount = Math.max(members?.length ?? 0, 1);
@@ -2293,7 +2293,7 @@ function LobbyPage() {
         {
           side: "left",
           members,
-          myId: session.session?.playerId,
+          myId: session?.playerId,
           onPickAvatar: () => setPickerOpen(true),
           onToggleReady: handleToggleReady
         }
@@ -2367,7 +2367,7 @@ function LobbyPage() {
         pickerOpen && /* @__PURE__ */ jsxRuntimeExports.jsx(
           AvatarPicker,
           {
-            initial: session.session?.avatar,
+            initial: session?.avatar,
             onSelect: handleAvatarSelect,
             onClose: () => setPickerOpen(false)
           }
@@ -2378,7 +2378,7 @@ function LobbyPage() {
         {
           side: "right",
           members,
-          myId: session.session?.playerId,
+          myId: session?.playerId,
           onPickAvatar: () => setPickerOpen(true),
           onToggleReady: handleToggleReady
         }
@@ -2406,7 +2406,7 @@ function LobbyPage() {
     roomError && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lobby-error", role: "alert", children: String(roomError.message || roomError) })
   ] });
 }
-const GamePage = reactExports.lazy(() => __vitePreload(() => import("./GamePage-N__w-G14.js"), true ? __vite__mapDeps([0,1,2,3,4,5]) : void 0));
+const GamePage = reactExports.lazy(() => __vitePreload(() => import("./GamePage-CK4ZAwqk.js"), true ? __vite__mapDeps([0,1,2,3,4,5]) : void 0));
 function App() {
   const location = useLocation();
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(ErrorBoundary, { children: [

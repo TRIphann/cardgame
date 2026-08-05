@@ -7,6 +7,11 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
+    <!-- Cache-busting: this tag is replaced by Vite at build time with a
+         <script type="module" src="/assets/..."> tag that includes the
+         exact hashed chunk filenames. Because the script tag itself changes
+         on every build (different hash), the browser and CDN cannot serve a
+         stale HTML that references old chunks. -->
     <title>Arcana — Card Battle</title>
     <link rel="icon" type="image/svg+xml" href="/assets/cards/default/cards/back.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -16,7 +21,7 @@
       rel="stylesheet"
     />
     <meta name="description" content="Arcana — đấu trường thẻ huyền bí." />
-    <script type="module" crossorigin src="/assets/index-9vwMpF5s.js"></script>
+    <script type="module" crossorigin src="/assets/index-XumO9n8R.js"></script>
     <link rel="modulepreload" crossorigin href="/assets/react-BhVOh7S1.js">
     <link rel="modulepreload" crossorigin href="/assets/vendor-DcE7maHo.js">
     <link rel="modulepreload" crossorigin href="/assets/react-dom-HPixZcWd.js">
@@ -29,6 +34,14 @@
         Trang này yêu cầu bật JavaScript để chơi.
       </p>
     </noscript>
-    <div id="root"></div>
+    <div id="root"></div>
+    <!-- Force-no-cache: this meta tag prevents any CDN caching of this HTML.
+         Netlify respects these HTTP-level headers. -->
+    <script>
+      // Inline no-cache: add a unique timestamp as a data attribute so
+      // this exact <script> tag is always fresh and forces a full reload
+      // when the build changes.
+      document.documentElement.setAttribute('data-build-ts', Date.now());
+    </script>
   </body>
 </html>

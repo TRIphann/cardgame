@@ -60,7 +60,7 @@ function statusToText(s) {
 }
 
 function getLocalPlayerId(session) {
-  return session?.session?.playerId || readSessionRoomId()?.playerId || null;
+  return session?.playerId || readSessionRoomId()?.playerId || null;
 }
 
 export default function GamePage() {
@@ -75,6 +75,7 @@ export default function GamePage() {
   // ── Core state ──────────────────────────────────────────────
   const [room, setRoom] = useState(null);
   const [now, setNow] = useState(Date.now());
+  const gs = room?.gameState || null;
 
   // ── Selection / modal state ────────────────────────────────
   const [selectedCardIdx, setSelectedCardIdx] = useState(null);
@@ -135,7 +136,6 @@ export default function GamePage() {
   const rotatingRef = useRef(false);
 
   // ── Helpers ────────────────────────────────────────────────
-  const gs = room?.gameState || null;
   const members = room?.members || [];
   const myMember = members.find((m) => m.id === myId) || null;
   const myHand = room?.myHand || (gs && myId ? [] : []); // server returns myHand
@@ -238,11 +238,11 @@ export default function GamePage() {
   useEffect(() => {
     if (!roomId) return;
     const fromStorage = readSessionRoomId();
-    if (!fromStorage && !session?.session?.roomId) {
+    if (!fromStorage && !session?.roomId) {
       navigate(ROUTES.landing, { replace: true });
       return;
     }
-  }, [roomId, session?.session?.roomId, navigate]);
+  }, [roomId, session?.roomId, navigate]);
 
   // Track opponent draw events for the cross-table animation. When the turn
   // pointer flips to another player AND their hand count went UP, that's a
@@ -333,13 +333,13 @@ export default function GamePage() {
       // Rotate regardless of who presses continue — the server keeps the
       // host, but the API only allows host. If we're not the host, we'll
       // navigate to the existing room's lobby view as a guest.
-      if (session?.session?.isHost) {
-        const res = await roomsApi.rotateRoom(roomId, session.session.playerId);
+      if (session?.isHost) {
+        const res = await roomsApi.rotateRoom(roomId, session.playerId);
         const newRoomId = res?.room?.id;
         if (newRoomId) {
           // Update session to the new room id so the lobby sees it.
           const updatedSession = {
-            ...(session.session || {}),
+            ...(session || {}),
             roomId: newRoomId,
           };
           // Use the existing patch helper on the SessionContext.
