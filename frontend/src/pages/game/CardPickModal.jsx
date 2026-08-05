@@ -11,7 +11,7 @@
 //   onPick      — (key) => void
 //   onCancel    — () => void
 
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { cardImageUrl } from "@games/exploding-cats/cardCloudinary.js";
 import { getCardLabel } from "./cardLabels.js";
 
@@ -26,11 +26,44 @@ export function CardPickModal({
 }) {
   if (!candidates) return null;
   const list = Array.from(new Set(candidates));
+  const modalRef = useRef(null);
+  const titleId = "cpm-title";
+
+  // A11Y: ESC key + focus trap + role="dialog".
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key === "Escape" || e.key === "Esc") onCancel?.();
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [onCancel]);
+
+  useEffect(() => {
+    const el = modalRef.current;
+    if (!el) return;
+    const focusable = el.querySelectorAll('button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    first?.focus();
+    const trap = (e) => {
+      if (e.key !== "Tab") return;
+      if (e.shiftKey ? document.activeElement === first : document.activeElement === last) {
+        e.preventDefault();
+        (e.shiftKey ? last : first)?.focus();
+      }
+    };
+    el.addEventListener("keydown", trap);
+    return () => el.removeEventListener("keydown", trap);
+  }, []);
 
   return (
     <div className="game-modal__scrim card-pick-scrim" onClick={onCancel}>
       <div
+        ref={modalRef}
         className="game-modal card-pick-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
         onClick={(e) => e.stopPropagation()}
         style={{ "--fx-color": fxColor, "--fx-accent": fxAccent }}
       >
@@ -42,7 +75,7 @@ export function CardPickModal({
         >
           ×
         </button>
-        <h3 className="game-modal__title">{title || "Chọn 1 lá"}</h3>
+        <h3 className="game-modal__title" id={titleId}>{title || "Chọn 1 lá"}</h3>
         {sub && <p className="game-modal__sub">{sub}</p>}
 
         <div className="card-pick-grid">
@@ -60,6 +93,7 @@ export function CardPickModal({
                 className={`card-pick-card card-pick-card--${key}`}
                 onClick={() => onPick(key)}
                 title={meta.label}
+                aria-label={`Chọn lá ${meta.label}`}
               >
                 <img src={cardImageUrl(key)} alt={meta.label} draggable={false} />
                 <span className="card-pick-card__glow" aria-hidden="true" />

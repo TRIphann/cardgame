@@ -53,6 +53,10 @@ public record GameStateDto(
     // and how many seconds they have until the server auto-draws.
     string? TurnStartedAt = null,
     int TurnTimeLimitSec = 60,
+    // F-1 fix: remaining seconds on the current turn clock. Used by the
+    // FuturePeekModal to decide whether to show a confirm dialog when
+    // the player closes the peek early (confirm required if > 20s remain).
+    int TurnRemainingSec = 60,
     // Frozen turn order for the current game. Index 0 = first player.
     IReadOnlyList<string>? TurnOrder = null,
     // Persisted FuturePeek — survives SignalR snapshot re-fetch so the modal

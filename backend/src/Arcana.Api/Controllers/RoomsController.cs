@@ -272,6 +272,9 @@ public class RoomsController : ControllerBase
             gs.LastPlayedByNope,
             gs.TurnStartedAt?.ToString("O"),
             60,
+            gs.TurnStartedAt.HasValue
+                ? Math.Max(0, (int)(60 - (DateTime.UtcNow - gs.TurnStartedAt.Value).TotalSeconds))
+                : 60,
             gs.TurnOrder?.ToList() ?? new List<string>(),
             futurePeek?.ToList() ?? new List<string>());
     }

@@ -259,7 +259,13 @@ public class GameService
             && !string.IsNullOrEmpty(targetMemberId)
             && !string.IsNullOrEmpty(discardPickKey);
 
-        if (!isFavorPhase2)
+        // B-5 fix: Combo phase 2 — player already spent combo cards in phase 1
+        // (turn advanced, hand updated) and is now picking a target or card.
+        // Skip hand validation so the combo cards don't need to still be in hand.
+        var isComboPhase2 = CardCatalog.IsComboDefuse(cardKey)
+            && (!string.IsNullOrEmpty(targetMemberId) || !string.IsNullOrEmpty(discardPickKey));
+
+        if (!isFavorPhase2 && !isComboPhase2)
         {
             // Combo defuse variants are only playable as part of a combo (2/3/5).
             // If the client sends a combo card directly, detect the combo.
@@ -288,7 +294,9 @@ public class GameService
                 RemoveFromHand(hand, CardCatalog.Attack);
                 gs.CardsPlayed[memberId] = gs.CardsPlayed.GetValueOrDefault(memberId) + 1;
                 gs.TurnsTaken[memberId] = gs.TurnsTaken.GetValueOrDefault(memberId) + 1;
-                QueueNopeWindow(gs, memberId, CardCatalog.Attack);
+                // B-1 fix: Attack is NOT Nope-able per spec.
+                // Commit immediately — end current turn, next player draws AttackCounter cards.
+                AdvanceTurn(gs);
                 result.Toast = "Tấn công! Đối phương phải chơi thêm 1 lượt.";
                 break;
 
@@ -296,7 +304,8 @@ public class GameService
                 RemoveFromHand(hand, CardCatalog.Skip);
                 gs.CardsPlayed[memberId] = gs.CardsPlayed.GetValueOrDefault(memberId) + 1;
                 gs.TurnsTaken[memberId] = gs.TurnsTaken.GetValueOrDefault(memberId) + 1;
-                QueueNopeWindow(gs, memberId, CardCatalog.Skip);
+                // B-2 fix: Skip is NOT Nope-able per spec.
+                // Commit immediately — consume 1 draw from attack chain (if any), end turn.
                 if (gs.AttackCounter > 0)
                 {
                     gs.AttackCounter -= 1;
@@ -306,6 +315,7 @@ public class GameService
                 {
                     result.Toast = "Bạn đã bỏ lượt.";
                 }
+                AdvanceTurn(gs);
                 break;
 
             case CardCatalog.Favor:
@@ -393,7 +403,8 @@ public class GameService
                     var j = Random.Shared.Next(i + 1);
                     (gs.Deck[i], gs.Deck[j]) = (gs.Deck[j], gs.Deck[i]);
                 }
-                QueueNopeWindow(gs, memberId, CardCatalog.Shuffle);
+                // B-3 fix: Shuffle is NOT Nope-able per spec. Commit immediately.
+                AdvanceTurn(gs);
                 result.Toast = "Đã xáo lại bộ bài.";
                 break;
 
@@ -428,6 +439,8 @@ public class GameService
                 if (string.IsNullOrEmpty(targetMemberId))
                 {
                     result.RequiresTargetPick = true;
+                    // B-5 fix: show combo cinematic even though there's no Nope window.
+                    SetComboCinematic(gs, memberId, cardKey);
                     return result; // client will retry
                 }
                 var t2 = gs.Hands.TryGetValue(targetMemberId, out var t2Hand) ? t2Hand : null;
@@ -472,6 +485,8 @@ public class GameService
                 if (string.IsNullOrEmpty(targetMemberId))
                 {
                     result.RequiresTargetPick = true;
+                    // B-5 fix: show combo cinematic even though there's no Nope window.
+                    SetComboCinematic(gs, memberId, cardKey);
                     return result;
                 }
                 var t3 = gs.Hands.TryGetValue(targetMemberId, out var t3Hand) ? t3Hand : null;
@@ -480,30 +495,35 @@ public class GameService
                     result.Toast = "Đối thủ không hợp lệ.";
                     return result;
                 }
-                // Per spec: SERVER randomly picks 1 card from the target's hand.
-                // The actor names a card and the server resolves it.
+                // Phase 1: show the catalogue for the actor to name a card.
+                // B-4 fix: actor names a SPECIFIC card, not random.
+                // B-4 fix: exclude defuse from the catalogue (defuse should not be nameable).
                 if (string.IsNullOrEmpty(discardPickKey))
                 {
-                    // Return ALL non-bomb/non-back card keys for the actor to name.
+                    // Return all non-bomb/non-back/non-defuse card keys for the actor to name.
                     result.RequiresDiscardPick = true;
-                    result.FavorCandidates = CardCatalog.PublicCardKeys.ToList();
+                    result.FavorCandidates = CardCatalog.PublicCardKeys
+                        .Where(k => k != CardCatalog.Bomb && k != "back" && k != CardCatalog.Defuse)
+                        .ToList();
                     result.Toast = "Chọn 1 lá để yêu cầu đối thủ đưa.";
+                    // B-5 fix: show combo cinematic even though there's no Nope window.
+                    SetComboCinematic(gs, memberId, cardKey);
                     return result;
                 }
                 // Phase 2: actor named discardPickKey. Resolve server-side.
+                // B-4 fix: if target HAS the named card → steal it. Otherwise → combo invalid.
                 SpendComboFromHand(hand, cardKey, 3);
-                if (t3.Count > 0)
+                if (t3.Count > 0 && t3.Contains(discardPickKey))
                 {
-                    // Random pick from target's hand.
-                    var stolenIdx3 = Random.Shared.Next(t3.Count);
-                    var stolenKey3 = t3[stolenIdx3];
-                    t3.RemoveAt(stolenIdx3);
-                    hand.Add(stolenKey3);
-                    result.Toast = $"Đối thủ có lá — nhận được {CardCatalog.Names.GetValueOrDefault(stolenKey3, stolenKey3)}.";
+                    // Actor named a card that the target has → steal it.
+                    t3.Remove(discardPickKey);
+                    hand.Add(discardPickKey);
+                    result.Toast = $"Đối thủ có lá — nhận được {CardCatalog.Names.GetValueOrDefault(discardPickKey, discardPickKey)}.";
                 }
                 else
                 {
-                    result.Toast = "Đối thủ không còn bài — combo vô hiệu.";
+                    // Actor named a card the target doesn't have → combo invalid.
+                    result.Toast = $"Đối thủ không có lá '{CardCatalog.Names.GetValueOrDefault(discardPickKey, discardPickKey)}' — combo vô hiệu.";
                 }
                 gs.CardsPlayed[memberId] = gs.CardsPlayed.GetValueOrDefault(memberId) + 1;
                 gs.TurnsTaken[memberId] = gs.TurnsTaken.GetValueOrDefault(memberId) + 1;
@@ -1058,6 +1078,16 @@ public class GameService
             NopeChain = new List<string>(),
         };
         // Cinematic: surface the played card for everyone.
+        gs.LastPlayedBy = initiatorId;
+        gs.LastPlayedCardKey = cardKey;
+        gs.LastPlayedAt = DateTime.UtcNow;
+        gs.LastPlayedByNope = null;
+    }
+
+    // B-5 fix: set cinematic for combo cards (not Nope-able) so everyone sees the
+    // combo animation on screen even though no Nope window is opened.
+    private static void SetComboCinematic(GameState gs, string initiatorId, string cardKey)
+    {
         gs.LastPlayedBy = initiatorId;
         gs.LastPlayedCardKey = cardKey;
         gs.LastPlayedAt = DateTime.UtcNow;

@@ -62,7 +62,6 @@ export function HandArc({ hand, selectedIndex, onSelectCard, lastDrawnKey }) {
           "--arc-tx": tx,
           "--arc-tr": tr,
           "--arc-ty": ty,
-          "--hover-lift": hovered ? "translateY(-22px)" : ty,
           // NOTE: don't add `tx` here — the horizontal fan is already done
           // via `left`. Adding translateX(tx) on top doubled the spread and
           // pushed cards off-screen. Only the rotation + vertical lift come

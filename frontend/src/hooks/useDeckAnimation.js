@@ -282,12 +282,18 @@ export function useDeckAnimation({ cardImageUrls }) {
   useEffect(() => {
     if (!reduced) return undefined;
     setPhase("idle"); setWiggleLevel(0);
+    const idleTimerRef = { current: null };
     const id = setInterval(() => {
       setPhase("flying");
-      setTimeout(() => setPhase("idle"), 3000);
+      // BUG-LEAK-2 fix: store the inner setTimeout in a ref so clearAll() can cancel it.
+      idleTimerRef.current = setTimeout(() => setPhase("idle"), 3000);
     }, 12000);
     timeoutsRef.current.push(id);
-    return () => clearAll();
+    return () => {
+      clearInterval(id);
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+      clearAll();
+    };
   }, [reduced]);
 
   useEffect(() => {

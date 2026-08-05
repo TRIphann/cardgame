@@ -101,6 +101,10 @@ export default function GamePage() {
   const [bombExplode, setBombExplode] = useState(null);
   const lastTurnRef = useRef(null);
   const lastDrawnRef = useRef(null); // dedupe by `(memberId, lastDrawnAt)`
+  // BUG-4 fix: keep a live ref to gs so auto-draw setTimeout can re-check
+  // the current snapshot when it fires, instead of using a stale closure.
+  const gsRef = useRef(gs);
+  useEffect(() => { gsRef.current = gs; }, [gs]);
   // Active timer for the corner opponent-draw toast. Tracked so we can
   // clear it if the game unmounts mid-animation (avoids "setState on
   // unmounted component" warnings).
@@ -559,7 +563,8 @@ export default function GamePage() {
     async (targetId) => {
       const ctx = pickModal;
       if (!ctx) return;
-      setPickModal(null);
+      if (pickInFlightRef.current) return;
+      pickInFlightRef.current = true;
 
       try {
         if (ctx.purpose === "TwoSame") {
@@ -587,6 +592,7 @@ export default function GamePage() {
             return;
           }
           if (res?.Toast) toast?.info?.(res.Toast);
+          setPickModal(null);
           return;
         }
         if (ctx.purpose === "ThreeSame") {
@@ -614,6 +620,7 @@ export default function GamePage() {
             return;
           }
           if (res?.Toast) toast?.info?.(res.Toast);
+          setPickModal(null);
           return;
         }
         // Favor phase 1 → server shuffles target hand + returns candidates.
@@ -640,10 +647,13 @@ export default function GamePage() {
             return;
           }
           if (res?.Toast) toast?.info?.(res.Toast);
+          setPickModal(null);
           return;
         }
       } catch (e) {
         toast?.error?.(e.message || "Thao tác thất bại.");
+      } finally {
+        pickInFlightRef.current = false;
       }
     },
     [audio, myId, pickModal, roomId, toast],
@@ -739,6 +749,16 @@ export default function GamePage() {
   );
 
   // ── Draw card ──────────────────────────────────────────────
+  // BUG-6 fix: close any open action modal if the turn changes away from us.
+  // This prevents the stale-modal scenario where the user presses Confirm
+  // after the turn has already advanced and gets a confusing error.
+  useEffect(() => {
+    if (isMyTurn) return;
+    if (!actionModal && !pickModal) return;
+    setActionModal(null);
+    setSelectedCardIdx(null);
+    setPickModal(null);
+  }, [isMyTurn]);
   const onDrawCard = useCallback(async () => {
     if (!isMyTurn || !isAlive || gameEnded) return;
     if (drawInFlightRef.current) return;
@@ -776,11 +796,18 @@ export default function GamePage() {
       } else if (res?.RequiresMoreDraws) {
         // Attack chain: more draws required. Auto-prompt the user but also
         // offer a small delay so the UI doesn't feel like a firehose.
+        // BUG-4 fix: read from gsRef (live) not the stale closure to check
+        // whether the player is still alive and it's still their turn.
         if (res?.Toast) toast?.info?.(res.Toast);
         setTimeout(() => {
-          // only auto-draw if the AttackCounter is still positive on the
-          // local snapshot — the user might have died on the previous draw.
-          if (isAlive && isMyTurn) {
+          const cur = gsRef.current;
+          if (!cur) return;
+          const stillAlive = cur.alive?.[myId] !== false;
+          const stillMyTurn = cur.currentTurnMemberId === myId;
+          const stillAttacking = (cur.pendingAction?.cardKey === "attack" ||
+            cur.pendingAction?.cardKey === "attack-1" ||
+            cur.pendingAction?.cardKey === "attack-2");
+          if (stillAlive && stillMyTurn && stillAttacking) {
             onDrawCard();
           }
         }, 1200);
@@ -824,6 +851,9 @@ export default function GamePage() {
   // who mashes the button only sees the message once per 1.5s — the user
   // asked for this so the UI doesn't spam toasts on every click.
   const lastNoNopeToastRef = useRef(0);
+  // Guard: prevent picking while a server request is in-flight (double-click guard
+  // for the inline Favor target picker and onPickPlayer).
+  const pickInFlightRef = useRef(false);
 
   const onNope = useCallback(async () => {
     const hasNopeCard = (myHand || []).includes("nope");
@@ -853,8 +883,10 @@ export default function GamePage() {
   const hasNopeCard = (myHand || []).includes("nope");
   // Window open = someone just played an action card; everyone can SEE the
   // 3s countdown. Only members with a Nope card in hand can actually play.
+  // BUG-3 fix: initiator CANNOT nope their own action (server rejects "cannot_nope_self").
   const nopeWindowOpen =
     pendingAction &&
+    pendingAction.initiatorId !== myId &&
     nopeRemaining > 0 &&
     !pendingAction.nopeChain.includes(myId);
   // True when this player can actually click "Cản!".
@@ -927,6 +959,9 @@ export default function GamePage() {
     if (!gs?.lastDrawnAt || !gs?.lastDrawnBy || !gs?.lastDrawnCardKey) return;
     const stamp = `${gs.lastDrawnBy}::${gs.lastDrawnAt}`;
     if (lastDrawnRef.current === stamp) return;
+    // BUG-5 fix: only skip if THIS PLAYER'S own draw is already being animated.
+    // If an opponent drew, we should still trigger their flying-card animation.
+    if (gs.lastDrawnBy === myId && drawAnim) return;
     // If it's a bomb, the BombReveal effect above handles it first.
     if (gs.bombRevealActive) return;
     if (gs.lastDrawnCardKey === "bomb") return;
@@ -974,12 +1009,17 @@ export default function GamePage() {
   const ss = String(elapsedSec % 60).padStart(2, "0");
 
   // Turn timer — how many seconds the current player has left until the
-  // server auto-draws on their behalf. We compute it client-side from the
-  // server-provided turnStartedAt; the server's own clock is the source of
-  // truth but this gives the UI a smooth countdown between snapshots.
+  // server auto-draws on their behalf. Use the server-provided value when
+  // available (more accurate than client-side computation which can drift).
+  // Fall back to client-side computation for real-time ticking between snapshots.
   const turnLimitSec = gs?.turnTimeLimitSec ?? 60;
   const turnRemainingSec = (() => {
-    if (gameEnded || !gs?.turnStartedAt) return null;
+    if (gameEnded) return null;
+    // Prefer the server-computed value when present.
+    if (typeof gs?.turnRemainingSec === "number" && gs.turnRemainingSec > 0) {
+      return Math.min(gs.turnRemainingSec, turnLimitSec);
+    }
+    if (!gs?.turnStartedAt) return null;
     const start = new Date(gs.turnStartedAt).getTime();
     const remaining = turnLimitSec * 1000 - (now - start);
     if (remaining <= 0) return 0;
@@ -1129,8 +1169,15 @@ export default function GamePage() {
             .filter((m) => m.id !== myId)
             .map((m) => ({ ...m, alive: gs?.alive?.[m.id] !== false, handCount: gs?.handCounts?.[m.id] || 0 }))}
           myId={myId}
+          pickingForFavor={true}
           onPick={async (tid) => {
-            setActionModal(null);
+            // BUG-1 fix: await API result before clearing modal.
+            // If Nope cancels the action, the server will return a "no_pending_action"
+            // error (or OK with no RequiresFavorPick). Either way, we capture
+            // ctx before calling so we can reopen the correct modal on error.
+            if (pickInFlightRef.current) return;
+            pickInFlightRef.current = true;
+            setActionModal(null); // close the player picker
             try {
               const res = await roomsApi.playCard(roomId, {
                 memberId: myId,
@@ -1156,6 +1203,8 @@ export default function GamePage() {
               }
             } catch (e) {
               toast?.error?.(e.message || "Không thể dùng lá bài.");
+            } finally {
+              pickInFlightRef.current = false;
             }
           }}
           onCancel={() => { setActionModal(null); setSelectedCardIdx(null); }}
@@ -1195,6 +1244,7 @@ export default function GamePage() {
           peek={futurePeek}
           onClose={() => setFuturePeek(null)}
           originRect={deckRef.current?.getBoundingClientRect?.() || null}
+          turnRemainingSec={turnRemainingSec ?? 60}
         />
       )}
 

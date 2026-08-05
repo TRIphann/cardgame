@@ -85,7 +85,7 @@
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 12px;
   padding: 8px 14px;
   background:
     linear-gradient(140deg, rgba(50, 30, 100, 0.55), rgba(20, 12, 52, 0.65));
@@ -604,15 +604,27 @@
 }
 .game-seat--current {
   border-color: rgba(255, 215, 130, 0.95);
-  box-shadow:
-    0 0 32px rgba(255, 200, 100, 0.6),
-    inset 0 0 40px rgba(255, 200, 100, 0.18),
-    0 8px 24px rgba(0, 0, 0, 0.5);
-  animation: seat-pulse 1.6s ease-in-out infinite;
+  /* CSS-4 fix: replace expensive box-shadow animation with a GPU-accelerated
+     pseudo-element that scales. The base box-shadow stays static (rendered once);
+     only the glow overlay pulses via transform:scale, which composes on GPU. */
+  box-shadow: 0 0 32px rgba(255, 200, 100, 0.6), inset 0 0 40px rgba(255, 200, 100, 0.18), 0 8px 24px rgba(0, 0, 0, 0.5);
+  position: relative;
+  overflow: visible;
 }
-@keyframes seat-pulse {
-  0%, 100% { box-shadow: 0 0 32px rgba(255, 200, 100, 0.6), inset 0 0 40px rgba(255, 200, 100, 0.18), 0 8px 24px rgba(0, 0, 0, 0.5); }
-  50%      { box-shadow: 0 0 48px rgba(255, 200, 100, 0.95), inset 0 0 60px rgba(255, 200, 100, 0.28), 0 8px 24px rgba(0, 0, 0, 0.5); }
+/* GPU-accelerated pulse overlay — replaces the box-shadow animation */
+.game-seat--current::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: inherit;
+  background: transparent;
+  box-shadow: 0 0 16px rgba(255, 200, 100, 0.5);
+  animation: seat-pulse-glow 1.6s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes seat-pulse-glow {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50%      { opacity: 1;   transform: scale(1.04); }
 }
 .game-seat--current::before {
   content: "⟶ Lượt";
@@ -1249,6 +1261,23 @@
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
+}
+/* A11Y CSS-2 fix: custom focus-visible ring matching the game's dark aesthetic */
+.game-action-btn:focus-visible {
+  outline: 2px solid rgba(168, 124, 245, 0.8);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 4px rgba(168, 124, 245, 0.25), 0 4px 14px rgba(0, 0, 0, 0.5);
+}
+.combo-card:focus-visible,
+.player-pick-card:focus-visible,
+.defuse-slot:focus-visible {
+  outline: 2px solid rgba(168, 124, 245, 0.8);
+  outline-offset: 3px;
+}
+.future-peek-info__close:focus-visible,
+.turn-intro__btn:focus-visible {
+  outline: 2px solid rgba(168, 124, 245, 0.8);
+  outline-offset: 3px;
 }
 .game-action-btn--primary {
   background: linear-gradient(135deg, rgba(255, 200, 90, 0.85), rgba(230, 130, 70, 0.95));
@@ -2870,13 +2899,7 @@
   border: 1px solid rgba(255, 215, 130, 0.3);
 }
 
-/* ── Game header: concede button ──────────────────── */
-.game-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
+/* ── Game header: actions (concede button) ───────────────── */
 .game-header__actions {
   display: flex;
   align-items: center;
@@ -3021,6 +3044,19 @@
   .discard-pile__card { width: 76px; height: 108px; }
   .card-action-modal__art { width: 110px; height: 156px; }
   .card-action-modal__layout { grid-template-columns: 110px 1fr; gap: 16px; }
+  /* CSS-6 fix: mobile overrides */
+  .game-header { flex-wrap: wrap; gap: 8px; padding: 6px 10px; }
+  .game-header__title { font-size: 17px; }
+  .game-header__elapsed { font-size: 14px; padding: 5px 10px; }
+  .game-header__turn-timer { font-size: 14px; padding: 5px 10px; }
+  .game-modal { padding: 18px; max-width: 96vw; }
+  .game-modal__title { font-size: 16px; }
+  /* Defuse modal: 3 columns instead of 6 on narrow screens */
+  .defuse-slots { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .defuse-slot { font-size: 11px; padding: 6px 4px; }
+  /* Future peek: reduce card size on mobile */
+  .future-peek-info { font-size: 13px; padding: 10px 14px; }
+  .future-peek-info__title { font-size: 14px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -3032,7 +3068,34 @@
   .defuse-modal__bomb img, .game-you__status--your-turn,
   .game-seat--current, .card-action-modal__art-glyph, .card-action-modal__art img,
   .card-flip, .card-flip__inner, .card-flip-label, .card-flip--in-flight,
-  .card-flip-halo, .card-flip-scene {
+  .card-flip-halo, .card-flip-scene,
+  /* CSS-3 fix: add missing infinite animations */
+  .game-header__title,
+  .game-page::after,
+  .game-seat--current,
+  .game-seat--current::before,
+  .bomb-aura-spin,
+  .bomb-reveal__aura,
+  .bomb-reveal-rings__ring,
+  .bomb-reveal-sparks__spark,
+  .bomb-reveal__countdown-bar,
+  .bomb-ring,
+  .bomb-explode__core,
+  .bomb-explode__ring,
+  .bomb-explode__flame-ring,
+  .bomb-explode__shard,
+  .bomb-explode__spark,
+  .bomb-explode__puff,
+  .bomb-explode-vignette,
+  .defuse-modal__bomb-halo,
+  .nope-pulse,
+  .defuse-border-rotate,
+  .game-aurora-drift,
+  .seat-pulse,
+  .game-seat-badge-bounce,
+  .game-seat--current::before,
+  .opponent-draw-toast {
     animation: none !important;
+    transition: none !important;
   }
 }

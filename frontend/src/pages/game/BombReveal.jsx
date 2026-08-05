@@ -30,20 +30,30 @@ export function BombReveal({ memberName, willDefuse, onComplete }) {
   useEffect(() => { onCompleteRef.current = onComplete; }, [onComplete]);
 
   useEffect(() => {
+    // BUG-LEAK-1 fix: store t4 in a ref so the outer cleanup can cancel it.
+    // Previously t4 was created inside t3's callback and returned from that
+    // callback — React never registers it, so unmount between t3→t4 leaked.
+    const t4Ref = { current: null };
+
     const t1 = setTimeout(() => setPhase("flip"), FLIP_DELAY_MS);
     const t2 = setTimeout(() => setPhase("face"), FLIP_DELAY_MS + 400);
     const t3 = setTimeout(() => {
       if (willDefuse) {
         setPhase("fadeout");
-        const t4 = setTimeout(() => {
+        t4Ref.current = setTimeout(() => {
           setMounted(false);
           onCompleteRef.current?.();
         }, 400);
-        return () => clearTimeout(t4);
+      } else {
+        setPhase("explode");
       }
-      setPhase("explode");
     }, REVEAL_DURATION_MS);
-    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+      if (t4Ref.current) clearTimeout(t4Ref.current);
+    };
   }, [willDefuse]);
 
   if (!mounted) return null;
@@ -129,7 +139,7 @@ export function BombReveal({ memberName, willDefuse, onComplete }) {
           <span className="bomb-reveal__text">
             {phase === "back" && "Đang rút..."}
             {(phase === "flip" || phase === "face" || phase === "hold") && "rút trúng bom!"}
-            {phase === "explode" && (willDefuse ? "💣" : "💥 NỔ!")}
+            {phase === "explode" && "💥 NỔ!"}
             {phase === "fadeout" && "An toàn — có lá Cứu"}
           </span>
         </div>

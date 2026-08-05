@@ -1,5 +1,5 @@
 import { r as reactExports, j as jsxRuntimeExports } from "./react-BhVOh7S1.js";
-import { r as roomsApi, A as API_BASE_URL, c as cardImageUrl, u as useSession, a as useToast, b as useAudio, R as ROUTES, C as CARD_CLOUDINARY } from "./index-DQ5xEm0y.js";
+import { r as roomsApi, A as API_BASE_URL, c as cardImageUrl, u as useSession, a as useToast, b as useAudio, R as ROUTES, C as CARD_CLOUDINARY } from "./index-Cwtjn2SD.js";
 import { H as HubConnectionBuilder, L as LogLevel } from "./vendor-DcE7maHo.js";
 import { c as useParams, a as useNavigate } from "./router-DRJyKT9H.js";
 import "./react-dom-HPixZcWd.js";
@@ -280,7 +280,6 @@ function HandArc({ hand, selectedIndex, onSelectCard, lastDrawnKey }) {
       "--arc-tx": tx,
       "--arc-tr": tr,
       "--arc-ty": ty,
-      "--hover-lift": hovered ? "translateY(-22px)" : ty,
       // NOTE: don't add `tx` here — the horizontal fan is already done
       // via `left`. Adding translateX(tx) on top doubled the spread and
       // pushed cards off-screen. Only the rotation + vertical lift come
@@ -368,6 +367,38 @@ function CardActionModal({
   onPickTarget
 }) {
   const fx = reactExports.useMemo(() => fxFor(card?.key || "general"), [card?.key]);
+  const [pickedId, setPickedId] = reactExports.useState(null);
+  const handlePick = reactExports.useCallback((id) => {
+    if (pickedId !== null) return;
+    setPickedId(id);
+    onPickTarget(id);
+  }, [pickedId, onPickTarget]);
+  const modalRef = reactExports.useRef(null);
+  const titleId = "cam-title";
+  reactExports.useEffect(() => {
+    const handler = (e) => {
+      if (e.key === "Escape" || e.key === "Esc") onClose?.();
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [onClose]);
+  reactExports.useEffect(() => {
+    const el = modalRef.current;
+    if (!el) return;
+    const focusable = el.querySelectorAll('button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    first?.focus();
+    const trap = (e) => {
+      if (e.key !== "Tab") return;
+      if (e.shiftKey ? document.activeElement === first : document.activeElement === last) {
+        e.preventDefault();
+        (e.shiftKey ? last : first)?.focus();
+      }
+    };
+    el.addEventListener("keydown", trap);
+    return () => el.removeEventListener("keydown", trap);
+  }, []);
   if (!card) return null;
   const url = cardImageUrl(card.key);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "game-modal__scrim card-action-scrim", onClick: onClose, children: [
@@ -385,7 +416,11 @@ function CardActionModal({
     /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "div",
       {
+        ref: modalRef,
         className: `game-modal card-action-modal card-action-modal--${card.key}`,
+        role: "dialog",
+        "aria-modal": "true",
+        "aria-labelledby": titleId,
         onClick: (e) => e.stopPropagation(),
         style: { "--fx-color": fx.color, "--fx-accent": fx.accent },
         children: [
@@ -397,7 +432,7 @@ function CardActionModal({
               /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "card-action-modal__art-glyph", "aria-hidden": "true", children: fx.glyph })
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "card-action-modal__body", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "game-modal__title", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "game-modal__title", id: titleId, children: [
                 "Dùng lá: ",
                 card.label || card.key
               ] }),
@@ -409,8 +444,11 @@ function CardActionModal({
                   {
                     type: "button",
                     className: "combo-card",
+                    disabled: pickedId !== null,
+                    "aria-disabled": pickedId !== null,
+                    "aria-label": `Chọn ${o.name}`,
                     style: { display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Cinzel, serif" },
-                    onClick: () => onPickTarget(o.id),
+                    onClick: () => handlePick(o.id),
                     children: o.name
                   },
                   o.id
@@ -433,13 +471,51 @@ function PlayerPickerModal({
   opponents,
   myId,
   onPick,
-  onCancel
+  onCancel,
+  // A11Y-3 fix: indicate whether picking is a Favor (needs cards) or Combo (always valid).
+  pickingForFavor = false
 }) {
-  const list = (opponents || []).filter((o) => o.alive && o.id !== myId);
+  const modalRef = reactExports.useRef(null);
+  const titleId = "ppm-title";
+  reactExports.useEffect(() => {
+    const handler = (e) => {
+      if (e.key === "Escape" || e.key === "Esc") onCancel?.();
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [onCancel]);
+  reactExports.useEffect(() => {
+    const el = modalRef.current;
+    if (!el) return;
+    const focusable = el.querySelectorAll(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    );
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    first?.focus();
+    const trap = (e) => {
+      if (e.key !== "Tab") return;
+      if (e.shiftKey ? document.activeElement === first : document.activeElement === last) {
+        e.preventDefault();
+        (e.shiftKey ? last : first)?.focus();
+      }
+    };
+    el.addEventListener("keydown", trap);
+    return () => el.removeEventListener("keydown", trap);
+  }, []);
+  const list = (opponents || []).filter((o) => {
+    if (!o.alive || o.id === myId) return false;
+    if (pickingForFavor && (o.handCount || 0) === 0) return false;
+    return true;
+  });
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-modal__scrim player-pick-scrim", onClick: onCancel, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "div",
     {
+      ref: modalRef,
       className: "game-modal player-pick-modal",
+      role: "dialog",
+      "aria-modal": "true",
+      "aria-labelledby": titleId,
       onClick: (e) => e.stopPropagation(),
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -452,7 +528,7 @@ function PlayerPickerModal({
             children: "×"
           }
         ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "game-modal__title", children: title }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "game-modal__title", id: titleId, children: title }),
         sub && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "game-modal__sub", children: sub }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "player-pick-grid", children: [
           list.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "game-modal__sub", style: { textAlign: "center" }, children: "Không có đối thủ hợp lệ." }),
@@ -462,6 +538,7 @@ function PlayerPickerModal({
               type: "button",
               className: "player-pick-card",
               onClick: () => onPick(o.id),
+              "aria-label": `Chọn ${o.name}${o.handCount != null ? `, ${o.handCount} lá trên tay` : ""}`,
               children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "player-pick-card__avatar", children: o.name?.[0]?.toUpperCase() || "?" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "player-pick-card__name", children: o.name }),
@@ -490,10 +567,40 @@ function CardPickModal({
 }) {
   if (!candidates) return null;
   const list = Array.from(new Set(candidates));
+  const modalRef = reactExports.useRef(null);
+  const titleId = "cpm-title";
+  reactExports.useEffect(() => {
+    const handler = (e) => {
+      if (e.key === "Escape" || e.key === "Esc") onCancel?.();
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [onCancel]);
+  reactExports.useEffect(() => {
+    const el = modalRef.current;
+    if (!el) return;
+    const focusable = el.querySelectorAll('button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    first?.focus();
+    const trap = (e) => {
+      if (e.key !== "Tab") return;
+      if (e.shiftKey ? document.activeElement === first : document.activeElement === last) {
+        e.preventDefault();
+        (e.shiftKey ? last : first)?.focus();
+      }
+    };
+    el.addEventListener("keydown", trap);
+    return () => el.removeEventListener("keydown", trap);
+  }, []);
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-modal__scrim card-pick-scrim", onClick: onCancel, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "div",
     {
+      ref: modalRef,
       className: "game-modal card-pick-modal",
+      role: "dialog",
+      "aria-modal": "true",
+      "aria-labelledby": titleId,
       onClick: (e) => e.stopPropagation(),
       style: { "--fx-color": fxColor, "--fx-accent": fxAccent },
       children: [
@@ -507,7 +614,7 @@ function CardPickModal({
             children: "×"
           }
         ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "game-modal__title", children: title || "Chọn 1 lá" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "game-modal__title", id: titleId, children: title || "Chọn 1 lá" }),
         sub && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "game-modal__sub", children: sub }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "card-pick-grid", children: [
           list.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "game-modal__sub", style: { textAlign: "center" }, children: "Không có lá nào khả dụng." }),
@@ -520,6 +627,7 @@ function CardPickModal({
                 className: `card-pick-card card-pick-card--${key}`,
                 onClick: () => onPick(key),
                 title: meta.label,
+                "aria-label": `Chọn lá ${meta.label}`,
                 children: [
                   /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: cardImageUrl(key), alt: meta.label, draggable: false }),
                   /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "card-pick-card__glow", "aria-hidden": "true" }),
@@ -683,61 +791,96 @@ const SLOTS = [
 function DefuseModal({ onConfirm, onSkip }) {
   const [tickKey, setTickKey] = reactExports.useState(0);
   const [selectedSlot, setSelectedSlot] = reactExports.useState(null);
+  const modalRef = reactExports.useRef(null);
+  const titleId = "dm-title";
+  const [vp, setVp] = reactExports.useState(
+    () => typeof window !== "undefined" ? { w: window.innerWidth, h: window.innerHeight } : { w: 1280, h: 720 }
+  );
+  reactExports.useEffect(() => {
+    const measure = () => setVp({ w: window.innerWidth, h: window.innerHeight });
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
   reactExports.useEffect(() => {
     const id = setInterval(() => setTickKey((k) => k + 1), 1400);
     return () => clearInterval(id);
   }, []);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "game-modal__scrim defuse-scrim", children: [
+  reactExports.useEffect(() => {
+    const handler = (e) => {
+      if (e.key === "Escape" || e.key === "Esc") onSkip?.();
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [onSkip]);
+  reactExports.useEffect(() => {
+    const el = modalRef.current;
+    if (!el) return;
+    const focusable = el.querySelectorAll("button:not([disabled])");
+    focusable[0]?.focus();
+  }, []);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "game-modal__scrim defuse-scrim", role: "presentation", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "defuse-scrim__danger", "aria-hidden": "true" }),
     [0, 1].map((corner) => /* @__PURE__ */ jsxRuntimeExports.jsx(
       FxBurst,
       {
-        anchor: corner === 0 ? { x: window.innerWidth / 2 - 240, y: window.innerHeight / 2 - 140 } : { x: window.innerWidth / 2 + 240, y: window.innerHeight / 2 + 140 },
+        anchor: corner === 0 ? { x: vp.w / 2 - 240, y: vp.h / 2 - 140 } : { x: vp.w / 2 + 240, y: vp.h / 2 + 140 },
         fxKey: "bomb",
         size: "md",
         id: `defuse-tick-${corner}`
       },
       `${corner}-${tickKey}`
     )),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "game-modal defuse-modal", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "defuse-modal__bomb", "aria-hidden": "true", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "defuse-modal__bomb-halo" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: cardImageUrl("bomb"), alt: "", draggable: false }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "defuse-modal__bomb-pulse" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "defuse-modal__bomb-pulse defuse-modal__bomb-pulse--late" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "defuse-modal__bomb-pulse defuse-modal__bomb-pulse--late2" })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "game-modal__title defuse-modal__title", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "defuse-modal__title-glyph", "aria-hidden": "true", children: "💣" }),
-        "Cứu bom!"
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "game-modal__sub", children: "Chọn vị trí đặt bom trở lại vào chồng bài (0 = trên cùng, 5 = sâu hơn)." }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "defuse-slots", children: SLOTS.map((s) => {
-        const isSelected = selectedSlot === s.idx;
-        return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          "button",
-          {
-            type: "button",
-            className: `defuse-slot${isSelected ? " defuse-slot--selected" : ""}`,
-            onMouseEnter: () => setSelectedSlot(s.idx),
-            onMouseLeave: () => setSelectedSlot(null),
-            onClick: () => onConfirm(s.idx),
-            children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "defuse-slot__num", children: s.idx }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "defuse-slot__hint", children: s.label || s.sub }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "defuse-slot__beam", "aria-hidden": "true" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "defuse-slot__ring", "aria-hidden": "true" })
-            ]
-          },
-          s.idx
-        );
-      }) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-modal__actions", children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "game-action-btn", onClick: onSkip, children: "Đặt cuối bộ bài" }) })
-    ] })
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        ref: modalRef,
+        className: "game-modal defuse-modal",
+        role: "dialog",
+        "aria-modal": "true",
+        "aria-labelledby": titleId,
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "defuse-modal__bomb", "aria-hidden": "true", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "defuse-modal__bomb-halo" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: cardImageUrl("bomb"), alt: "", draggable: false }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "defuse-modal__bomb-pulse" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "defuse-modal__bomb-pulse defuse-modal__bomb-pulse--late" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "defuse-modal__bomb-pulse defuse-modal__bomb-pulse--late2" })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "game-modal__title defuse-modal__title", id: titleId, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "defuse-modal__title-glyph", "aria-hidden": "true", children: "💣" }),
+            "Cứu bom!"
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "game-modal__sub", children: "Chọn vị trí đặt bom trở lại vào chồng bài (0 = trên cùng, 5 = sâu hơn)." }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "defuse-slots", role: "group", "aria-label": "Vị trí đặt bom", children: SLOTS.map((s) => {
+            const isSelected = selectedSlot === s.idx;
+            return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "button",
+              {
+                type: "button",
+                className: `defuse-slot${isSelected ? " defuse-slot--selected" : ""}`,
+                onMouseEnter: () => setSelectedSlot(s.idx),
+                onMouseLeave: () => setSelectedSlot(null),
+                onClick: () => onConfirm(s.idx),
+                "aria-label": `Vị trí ${s.idx}: ${s.label || s.sub}`,
+                children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "defuse-slot__num", children: s.idx }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "defuse-slot__hint", children: s.label || s.sub }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "defuse-slot__beam", "aria-hidden": "true" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "defuse-slot__ring", "aria-hidden": "true" })
+                ]
+              },
+              s.idx
+            );
+          }) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-modal__actions", children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "game-action-btn", onClick: onSkip, "aria-label": "Đặt bom cuối bộ bài (ESC)", children: "Đặt cuối bộ bài" }) })
+        ]
+      }
+    )
   ] });
 }
 const REVEAL_INTERVAL_MS = 600;
 const TOTAL_HOLD_MS = 4500;
+const CONFIRM_THRESHOLD_SEC = 20;
 function flightTransform(origin, target, progress) {
   if (!origin || !target) {
     return `translate3d(${target.left}px, ${target.top}px, 0)`;
@@ -747,8 +890,44 @@ function flightTransform(origin, target, progress) {
   const arc = Math.sin(progress * Math.PI) * 80;
   return `translate3d(${x}px, ${y - arc}px, 0)`;
 }
-function FuturePeekModal({ peek, onClose, originRect }) {
+function FuturePeekModal({ peek, onClose, originRect, turnRemainingSec = 60 }) {
   const [revealedCount, setRevealedCount] = reactExports.useState(0);
+  const [showConfirm, setShowConfirm] = reactExports.useState(false);
+  const modalRef = reactExports.useRef(null);
+  const confirmRef = reactExports.useRef(null);
+  const titleId = "fpm-title";
+  const descId = "fpm-desc";
+  const requestClose = reactExports.useCallback(() => {
+    if (turnRemainingSec > CONFIRM_THRESHOLD_SEC) {
+      setShowConfirm(true);
+      setTimeout(() => confirmRef.current?.querySelector("button")?.focus(), 50);
+    } else {
+      onClose?.();
+    }
+  }, [turnRemainingSec, onClose]);
+  const cancelConfirm = reactExports.useCallback(() => {
+    setShowConfirm(false);
+    modalRef.current?.querySelector(".future-peek-info__close")?.focus();
+  }, []);
+  reactExports.useEffect(() => {
+    if (showConfirm) {
+      const handler2 = (e) => {
+        if (e.key === "Escape" || e.key === "Esc") cancelConfirm();
+      };
+      document.addEventListener("keydown", handler2);
+      return () => document.removeEventListener("keydown", handler2);
+    }
+    const handler = (e) => {
+      if (e.key === "Escape" || e.key === "Esc") requestClose();
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [showConfirm, requestClose, cancelConfirm]);
+  reactExports.useEffect(() => {
+    if (!showConfirm) {
+      modalRef.current?.querySelector(".future-peek-info__close")?.focus();
+    }
+  }, [showConfirm]);
   reactExports.useEffect(() => {
     if (!peek || peek.length === 0) return void 0;
     const timers = peek.map(
@@ -777,48 +956,145 @@ function FuturePeekModal({ peek, onClose, originRect }) {
     left: startX + i * (cardW + gap),
     top: baseY
   }));
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "future-peek-scene", "aria-modal": "true", role: "dialog", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "future-peek-stage", children: peek.map((key, i) => {
-      const target = targets[i];
-      const revealed = i < revealedCount;
-      const arrivalProgress = Math.min(1, revealedCount - i > 0 ? 1 : 0);
-      const transform = flightTransform(originRect, target, arrivalProgress);
-      const meta = getCardLabel(key);
-      return /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "div",
-        {
-          className: `future-peek-card${revealed ? " future-peek-card--revealed" : ""}`,
-          style: {
-            "--card-w": `${cardW}px`,
-            "--card-h": `${cardH}px`,
-            "--fly-x": `${target.left}px`,
-            "--fly-y": `${target.top}px`,
-            transform,
-            zIndex: 30 + i
-          },
-          "aria-hidden": "true",
-          children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "future-peek-card__inner", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "future-peek-card__face future-peek-card__face--back", children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: cardImageUrl("back"), alt: "", draggable: false }) }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "future-peek-card__face future-peek-card__face--front", children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: cardImageUrl(key) || cardImageUrl("back"), alt: meta.label, draggable: false }) })
-          ] })
-        },
-        i
-      );
-    }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "future-peek-info", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "future-peek-info__title", children: "Xem trước 3 lá" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "future-peek-info__sub", children: "Lá trái = bạn sẽ rút tiếp. Hai lá còn lại = người kế tiếp." }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "button",
-        {
-          type: "button",
-          className: "future-peek-info__close",
-          onClick: () => onClose?.(),
-          children: "Úp xuống & đặt lại theo thứ tự"
-        }
-      )
-    ] })
-  ] });
+  const cardDescs = peek.map((key, i) => {
+    const meta = getCardLabel(key);
+    return `Lá ${i + 1}: ${meta.label}`;
+  }).join(". ");
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: "future-peek-scene",
+      role: "dialog",
+      "aria-modal": "true",
+      "aria-labelledby": titleId,
+      "aria-describedby": descId,
+      ref: modalRef,
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "div",
+          {
+            id: descId,
+            style: {
+              position: "absolute",
+              width: 1,
+              height: 1,
+              padding: 0,
+              margin: -1,
+              overflow: "hidden",
+              clip: "rect(0,0,0,0)",
+              whiteSpace: "nowrap",
+              border: 0
+            },
+            children: `Xem trước 3 lá trên cùng bộ bài: ${cardDescs}. ${peek.length >= 2 ? `Lá trái = bạn sẽ rút tiếp. Hai lá còn lại = người kế tiếp.` : ""}`
+          }
+        ),
+        showConfirm && /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "div",
+          {
+            className: "game-modal__scrim",
+            role: "presentation",
+            onClick: cancelConfirm,
+            children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "div",
+              {
+                ref: confirmRef,
+                className: "game-modal",
+                role: "alertdialog",
+                "aria-modal": "true",
+                "aria-labelledby": "fpm-confirm-title",
+                "aria-describedby": "fpm-confirm-desc",
+                onClick: (e) => e.stopPropagation(),
+                style: { maxWidth: 360 },
+                children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "game-modal__title", id: "fpm-confirm-title", children: "Xác nhận đóng peek?" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "game-modal__sub", id: "fpm-confirm-desc", children: [
+                    "Còn ",
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("strong", { children: [
+                      turnRemainingSec,
+                      "s"
+                    ] }),
+                    " trên lượt của bạn. Đóng bây giờ có thể khiến bạn bỏ lỡ thông tin quan trọng."
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "game-modal__actions", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      "button",
+                      {
+                        type: "button",
+                        className: "game-action-btn",
+                        onClick: cancelConfirm,
+                        autoFocus: true,
+                        children: "Ở lại"
+                      }
+                    ),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      "button",
+                      {
+                        type: "button",
+                        className: "game-action-btn game-action-btn--danger",
+                        onClick: () => {
+                          setShowConfirm(false);
+                          onClose?.();
+                        },
+                        children: "Đóng peek"
+                      }
+                    )
+                  ] })
+                ]
+              }
+            )
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "future-peek-stage", children: peek.map((key, i) => {
+          const target = targets[i];
+          const revealed = i < revealedCount;
+          const arrivalProgress = Math.min(1, revealedCount - i > 0 ? 1 : 0);
+          const transform = flightTransform(originRect, target, arrivalProgress);
+          const meta = getCardLabel(key);
+          return /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "div",
+            {
+              className: `future-peek-card${revealed ? " future-peek-card--revealed" : ""}`,
+              style: {
+                "--card-w": `${cardW}px`,
+                "--card-h": `${cardH}px`,
+                "--fly-x": `${target.left}px`,
+                "--fly-y": `${target.top}px`,
+                transform,
+                zIndex: 30 + i
+              },
+              "aria-hidden": "true",
+              children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "future-peek-card__inner", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "future-peek-card__face future-peek-card__face--back", children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: cardImageUrl("back"), alt: "", draggable: false }) }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "future-peek-card__face future-peek-card__face--front", children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: cardImageUrl(key) || cardImageUrl("back"), alt: meta.label, draggable: false }) })
+              ] })
+            },
+            i
+          );
+        }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "future-peek-info", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "future-peek-info__title", id: titleId, children: "Xem trước 3 lá" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "future-peek-info__sub", children: [
+            "Lá trái = bạn sẽ rút tiếp. Hai lá còn lại = người kế tiếp.",
+            turnRemainingSec <= CONFIRM_THRESHOLD_SEC && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { marginLeft: 8, opacity: 0.7, fontSize: 11 }, children: [
+              "(còn ",
+              turnRemainingSec,
+              "s — đóng không cần xác nhận)"
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              className: "future-peek-info__close",
+              onClick: requestClose,
+              "aria-label": "Đóng peek",
+              children: "Úp xuống & đặt lại theo thứ tự"
+            }
+          )
+        ] })
+      ]
+    }
+  );
 }
 const FLIGHT_MS$1 = 780;
 const FLIP_AT_PCT = 0.55;
@@ -1004,23 +1280,25 @@ function BombReveal({ memberName, willDefuse, onComplete }) {
     onCompleteRef.current = onComplete;
   }, [onComplete]);
   reactExports.useEffect(() => {
+    const t4Ref = { current: null };
     const t1 = setTimeout(() => setPhase("flip"), FLIP_DELAY_MS);
     const t2 = setTimeout(() => setPhase("face"), FLIP_DELAY_MS + 400);
     const t3 = setTimeout(() => {
       if (willDefuse) {
         setPhase("fadeout");
-        const t4 = setTimeout(() => {
+        t4Ref.current = setTimeout(() => {
           setMounted(false);
           onCompleteRef.current?.();
         }, 400);
-        return () => clearTimeout(t4);
+      } else {
+        setPhase("explode");
       }
-      setPhase("explode");
     }, REVEAL_DURATION_MS);
     return () => {
       clearTimeout(t1);
       clearTimeout(t2);
       clearTimeout(t3);
+      if (t4Ref.current) clearTimeout(t4Ref.current);
     };
   }, [willDefuse]);
   if (!mounted) return null;
@@ -1095,7 +1373,7 @@ function BombReveal({ memberName, willDefuse, onComplete }) {
         /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "bomb-reveal__text", children: [
           phase === "back" && "Đang rút...",
           (phase === "flip" || phase === "face" || phase === "hold") && "rút trúng bom!",
-          phase === "explode" && (willDefuse ? "💣" : "💥 NỔ!"),
+          phase === "explode" && "💥 NỔ!",
           phase === "fadeout" && "An toàn — có lá Cứu"
         ] })
       ] })
@@ -1384,6 +1662,10 @@ function GamePage() {
   const [bombExplode, setBombExplode] = reactExports.useState(null);
   const lastTurnRef = reactExports.useRef(null);
   const lastDrawnRef = reactExports.useRef(null);
+  const gsRef = reactExports.useRef(gs);
+  reactExports.useEffect(() => {
+    gsRef.current = gs;
+  }, [gs]);
   const opponentDrawTimerRef = reactExports.useRef(null);
   const [lastDrawnKey, setLastDrawnKey] = reactExports.useState(null);
   const lastTurnOrderRef = reactExports.useRef(null);
@@ -1696,7 +1978,8 @@ function GamePage() {
     async (targetId) => {
       const ctx = pickModal;
       if (!ctx) return;
-      setPickModal(null);
+      if (pickInFlightRef.current) return;
+      pickInFlightRef.current = true;
       try {
         if (ctx.purpose === "TwoSame") {
           const res = await roomsApi.playCard(roomId, {
@@ -1722,6 +2005,7 @@ function GamePage() {
             return;
           }
           if (res?.Toast) toast?.info?.(res.Toast);
+          setPickModal(null);
           return;
         }
         if (ctx.purpose === "ThreeSame") {
@@ -1748,6 +2032,7 @@ function GamePage() {
             return;
           }
           if (res?.Toast) toast?.info?.(res.Toast);
+          setPickModal(null);
           return;
         }
         if (ctx.purpose === "Favor") {
@@ -1773,10 +2058,13 @@ function GamePage() {
             return;
           }
           if (res?.Toast) toast?.info?.(res.Toast);
+          setPickModal(null);
           return;
         }
       } catch (e) {
         toast?.error?.(e.message || "Thao tác thất bại.");
+      } finally {
+        pickInFlightRef.current = false;
       }
     },
     [audio, myId, pickModal, roomId, toast]
@@ -1863,6 +2151,13 @@ function GamePage() {
     },
     [myId, navigate, roomId, toast]
   );
+  reactExports.useEffect(() => {
+    if (isMyTurn) return;
+    if (!actionModal && !pickModal) return;
+    setActionModal(null);
+    setSelectedCardIdx(null);
+    setPickModal(null);
+  }, [isMyTurn]);
   const onDrawCard = reactExports.useCallback(async () => {
     if (!isMyTurn || !isAlive || gameEnded) return;
     if (drawInFlightRef.current) return;
@@ -1889,7 +2184,12 @@ function GamePage() {
       } else if (res?.RequiresMoreDraws) {
         if (res?.Toast) toast?.info?.(res.Toast);
         setTimeout(() => {
-          if (isAlive && isMyTurn) {
+          const cur = gsRef.current;
+          if (!cur) return;
+          const stillAlive = cur.alive?.[myId] !== false;
+          const stillMyTurn = cur.currentTurnMemberId === myId;
+          const stillAttacking = cur.pendingAction?.cardKey === "attack" || cur.pendingAction?.cardKey === "attack-1" || cur.pendingAction?.cardKey === "attack-2";
+          if (stillAlive && stillMyTurn && stillAttacking) {
             onDrawCard();
           }
         }, 1200);
@@ -1925,6 +2225,7 @@ function GamePage() {
     [audio, emitFx, emitShake, myId, roomId, toast]
   );
   const lastNoNopeToastRef = reactExports.useRef(0);
+  const pickInFlightRef = reactExports.useRef(false);
   const onNope = reactExports.useCallback(async () => {
     const hasNopeCard2 = (myHand || []).includes("nope");
     if (!hasNopeCard2) {
@@ -1948,7 +2249,7 @@ function GamePage() {
   const pendingAction = gs?.pendingAction || null;
   const nopeRemaining = pendingAction ? Math.max(0, NOPE_WINDOW_MS - (now - new Date(pendingAction.createdAt).getTime())) : 0;
   const hasNopeCard = (myHand || []).includes("nope");
-  const nopeWindowOpen = pendingAction && nopeRemaining > 0 && !pendingAction.nopeChain.includes(myId);
+  const nopeWindowOpen = pendingAction && pendingAction.initiatorId !== myId && nopeRemaining > 0 && !pendingAction.nopeChain.includes(myId);
   const canChainNope = nopeWindowOpen && hasNopeCard;
   const nopeWindowButNoCard = nopeWindowOpen && !hasNopeCard;
   reactExports.useEffect(() => {
@@ -1986,6 +2287,7 @@ function GamePage() {
     if (!gs?.lastDrawnAt || !gs?.lastDrawnBy || !gs?.lastDrawnCardKey) return;
     const stamp = `${gs.lastDrawnBy}::${gs.lastDrawnAt}`;
     if (lastDrawnRef.current === stamp) return;
+    if (gs.lastDrawnBy === myId && drawAnim) return;
     if (gs.bombRevealActive) return;
     if (gs.lastDrawnCardKey === "bomb") return;
     lastDrawnRef.current = stamp;
@@ -2025,7 +2327,11 @@ function GamePage() {
   const ss = String(elapsedSec % 60).padStart(2, "0");
   const turnLimitSec = gs?.turnTimeLimitSec ?? 60;
   const turnRemainingSec = (() => {
-    if (gameEnded || !gs?.turnStartedAt) return null;
+    if (gameEnded) return null;
+    if (typeof gs?.turnRemainingSec === "number" && gs.turnRemainingSec > 0) {
+      return Math.min(gs.turnRemainingSec, turnLimitSec);
+    }
+    if (!gs?.turnStartedAt) return null;
     const start = new Date(gs.turnStartedAt).getTime();
     const remaining = turnLimitSec * 1e3 - (now - start);
     if (remaining <= 0) return 0;
@@ -2170,7 +2476,10 @@ function GamePage() {
         sub: "Lấy 1 lá ngẫu nhiên từ tay đối thủ (hệ thống sẽ xáo). ",
         opponents: members.filter((m) => m.id !== myId).map((m) => ({ ...m, alive: gs?.alive?.[m.id] !== false, handCount: gs?.handCounts?.[m.id] || 0 })),
         myId,
+        pickingForFavor: true,
         onPick: async (tid) => {
+          if (pickInFlightRef.current) return;
+          pickInFlightRef.current = true;
           setActionModal(null);
           try {
             const res = await roomsApi.playCard(roomId, {
@@ -2197,6 +2506,8 @@ function GamePage() {
             }
           } catch (e) {
             toast?.error?.(e.message || "Không thể dùng lá bài.");
+          } finally {
+            pickInFlightRef.current = false;
           }
         },
         onCancel: () => {
@@ -2240,7 +2551,8 @@ function GamePage() {
       {
         peek: futurePeek,
         onClose: () => setFuturePeek(null),
-        originRect: deckRef.current?.getBoundingClientRect?.() || null
+        originRect: deckRef.current?.getBoundingClientRect?.() || null,
+        turnRemainingSec: turnRemainingSec ?? 60
       }
     ),
     concedeConfirm && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-modal__scrim concede-scrim", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "game-modal concede-modal", children: [

@@ -5,7 +5,7 @@
 //   • Hover/select glow cường đại cao
 //   • Sparkle bursts liên tục quanh modal
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { FxBurst } from "./FxBurst.jsx";
 import { cardImageUrl } from "@games/exploding-cats/cardCloudinary.js";
 
@@ -21,14 +21,43 @@ const SLOTS = [
 export function DefuseModal({ onConfirm, onSkip }) {
   const [tickKey, setTickKey] = useState(0);
   const [selectedSlot, setSelectedSlot] = useState(null);
+  const modalRef = useRef(null);
+  const titleId = "dm-title";
+  // A11Y: capture viewport dimensions once on mount.
+  const [vp, setVp] = useState(() =>
+    typeof window !== "undefined" ? { w: window.innerWidth, h: window.innerHeight } : { w: 1280, h: 720 }
+  );
+
+  useEffect(() => {
+    const measure = () => setVp({ w: window.innerWidth, h: window.innerHeight });
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
 
   useEffect(() => {
     const id = setInterval(() => setTickKey((k) => k + 1), 1400);
     return () => clearInterval(id);
   }, []);
 
+  // A11Y: ESC key closes (calls onSkip = place at bottom).
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key === "Escape" || e.key === "Esc") onSkip?.();
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [onSkip]);
+
+  // A11Y: focus trap inside modal.
+  useEffect(() => {
+    const el = modalRef.current;
+    if (!el) return;
+    const focusable = el.querySelectorAll('button:not([disabled])');
+    focusable[0]?.focus();
+  }, []);
+
   return (
-    <div className="game-modal__scrim defuse-scrim">
+    <div className="game-modal__scrim defuse-scrim" role="presentation">
       {/* Massive red flash scrim */}
       <div className="defuse-scrim__danger" aria-hidden="true" />
 
@@ -38,8 +67,8 @@ export function DefuseModal({ onConfirm, onSkip }) {
           key={`${corner}-${tickKey}`}
           anchor={
             corner === 0
-              ? { x: window.innerWidth / 2 - 240, y: window.innerHeight / 2 - 140 }
-              : { x: window.innerWidth / 2 + 240, y: window.innerHeight / 2 + 140 }
+              ? { x: vp.w / 2 - 240, y: vp.h / 2 - 140 }
+              : { x: vp.w / 2 + 240, y: vp.h / 2 + 140 }
           }
           fxKey="bomb"
           size="md"
@@ -47,7 +76,13 @@ export function DefuseModal({ onConfirm, onSkip }) {
         />
       ))}
 
-      <div className="game-modal defuse-modal">
+      <div
+        ref={modalRef}
+        className="game-modal defuse-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+      >
         {/* Bomb icon top of modal with pulsing halo */}
         <div className="defuse-modal__bomb" aria-hidden="true">
           <div className="defuse-modal__bomb-halo" />
@@ -57,7 +92,7 @@ export function DefuseModal({ onConfirm, onSkip }) {
           <span className="defuse-modal__bomb-pulse defuse-modal__bomb-pulse--late2" />
         </div>
 
-        <h3 className="game-modal__title defuse-modal__title">
+        <h3 className="game-modal__title defuse-modal__title" id={titleId}>
           <span className="defuse-modal__title-glyph" aria-hidden="true">💣</span>
           Cứu bom!
         </h3>
@@ -65,9 +100,8 @@ export function DefuseModal({ onConfirm, onSkip }) {
           Chọn vị trí đặt bom trở lại vào chồng bài (0 = trên cùng, 5 = sâu hơn).
         </p>
 
-        <div className="defuse-slots">
+        <div className="defuse-slots" role="group" aria-label="Vị trí đặt bom">
           {SLOTS.map((s) => {
-            const usable = true; // server clamps
             const isSelected = selectedSlot === s.idx;
             return (
               <button
@@ -76,7 +110,8 @@ export function DefuseModal({ onConfirm, onSkip }) {
                 className={`defuse-slot${isSelected ? " defuse-slot--selected" : ""}`}
                 onMouseEnter={() => setSelectedSlot(s.idx)}
                 onMouseLeave={() => setSelectedSlot(null)}
-                onClick={usable ? () => onConfirm(s.idx) : undefined}
+                onClick={() => onConfirm(s.idx)}
+                aria-label={`Vị trí ${s.idx}: ${s.label || s.sub}`}
               >
                 <span className="defuse-slot__num">{s.idx}</span>
                 <span className="defuse-slot__hint">{s.label || s.sub}</span>
@@ -88,7 +123,7 @@ export function DefuseModal({ onConfirm, onSkip }) {
         </div>
 
         <div className="game-modal__actions">
-          <button type="button" className="game-action-btn" onClick={onSkip}>
+          <button type="button" className="game-action-btn" onClick={onSkip} aria-label="Đặt bom cuối bộ bài (ESC)">
             Đặt cuối bộ bài
           </button>
         </div>
