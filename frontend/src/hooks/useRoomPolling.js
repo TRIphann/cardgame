@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { roomsApi } from "@shared/api/roomsApi.js";
 import { loadSession } from "@config/env.js";
 
-const POLL_INTERVAL_MS = 2500;
+const POLL_INTERVAL_MS = 3000;
 
 export function useRoomPolling(roomId, { enabled = true, memberId = null } = {}) {
   const [room, setRoom] = useState(null);

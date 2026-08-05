@@ -185,6 +185,21 @@ public class RoomService : Abstractions.IRoomService
         return await ReadWithCacheAsync(roomId, ct);
     }
 
+    public async Task<IReadOnlyList<Room>> GetAllPlayingAsync(CancellationToken ct = default)
+    {
+        // 2-second snapshot cache is per-room, so a list snapshot can't be
+        // cached directly. We pull the underlying repo and let the per-room
+        // cache fill for the individual entries — that way subsequent
+        // single-room reads (e.g. TurnTimeoutHandler) hit the cache.
+        var rooms = await _repository.GetAllPlayingAsync(ct);
+        var now = DateTime.UtcNow;
+        foreach (var room in rooms)
+        {
+            _snapshotCache[room.Id] = (room, now + SnapshotCacheTtl);
+        }
+        return rooms;
+    }
+
     private async Task<string> ClaimUniqueCodeAsync(string roomId, CancellationToken ct)
     {
         for (var attempt = 0; attempt < MaxCodeAttempts; attempt++)

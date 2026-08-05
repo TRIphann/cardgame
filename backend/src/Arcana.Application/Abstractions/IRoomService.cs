@@ -28,6 +28,14 @@ public interface IRoomService
     /// endpoint roughly every 8s from each tab.
     /// </summary>
     Task<RoomMember?> HeartbeatAsync(string roomId, string memberId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Snapshot every room currently in the "playing" status. Used by
+    /// background sweepers (e.g. <c>FuturePeekSweeperService</c>) so the
+    /// 2-second snapshot cache absorbs back-to-back ticks and they don't
+    /// hammer Firestore with raw repo calls.
+    /// </summary>
+    Task<IReadOnlyList<Room>> GetAllPlayingAsync(CancellationToken ct = default);
 }
 
 /// <summary>

@@ -1,3 +1,5 @@
+using Arcana.Application.Abstractions;
+using Arcana.Application.Services;
 using Arcana.Domain.Repositories;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -107,10 +109,13 @@ public sealed class FuturePeekSweeperService : BackgroundService
         var now = DateTime.UtcNow;
         using var scope = _scopeFactory.CreateScope();
         var repo = scope.ServiceProvider.GetRequiredService<IRoomRepository>();
+        var roomService = scope.ServiceProvider.GetRequiredService<IRoomService>();
 
-        // Scan every active room. The number of rooms in flight is small
-        // (single-digit for a casual party game) so an O(rooms) scan is fine.
-        var rooms = await repo.GetAllPlayingAsync(ct);
+        // Scan every active room via IRoomService (which uses the 2-second
+        // snapshot cache, so back-to-back ticks share the same Firestore
+        // round-trip). The number of rooms in flight is small (single-digit
+        // for a casual party game) so an O(rooms) scan is fine.
+        var rooms = await roomService.GetAllPlayingAsync(ct);
         if (rooms.Count == 0) return;
 
         foreach (var room in rooms)
@@ -123,7 +128,10 @@ public sealed class FuturePeekSweeperService : BackgroundService
             gs.FuturePeek = null;
             gs.FuturePeekAt = null;
             await repo.UpdateGameStateAsync(room.Id, gs, null, ct);
-            _logger.LogInformation(
+            RoomService.InvalidateSnapshotCache(room.Id);
+            // Debug — FuturePeek wipes happen every 13s per active peek; an
+            // Info-level log here would create one line per wipe.
+            _logger.LogDebug(
                 "Cleared stale FuturePeek for room {RoomId}", room.Id);
         }
     }

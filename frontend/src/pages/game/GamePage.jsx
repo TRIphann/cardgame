@@ -216,19 +216,29 @@ export default function GamePage() {
   // ── Realtime: SignalR hub + polling fallback ────────────────────
   // useGameChannel tries the SignalR "/hubs/game" hub first; while the hub
   // is connected the server pushes "room-updated" within ~50ms of any
-  // mutation. When the hub disconnects (cold start, network blip, etc.)
-  // the hook auto-falls-back to a 1.5s polling loop so the UI never stalls.
+  // mutation, INCLUDING the full Room snapshot in the payload (no extra
+  // /snapshot fetch needed). When the hub disconnects (cold start,
+  // network blip, etc.) the hook auto-falls-back to a 3s polling loop so
+  // the UI never stalls.
   useGameChannel({
     roomId,
     memberId: myId,
     enabled: Boolean(roomId && myId),
     onUpdate: (data) => {
-      // Functional update with deep dedupe: skip re-renders when the SignalR
-      // snapshot is functionally identical to the current state. This prevents
-      // unnecessary component refreshes after every server push and keeps the
-      // turnIntro / modal state stable.
+      // Cheap shallow-equality dedupe: compare a few top-level scalar
+      // fields that change on every mutation (stateVersion + turnStartedAt
+      // + lastDrawnAt + lastPlayedAt). If none of them changed the payload
+      // is functionally identical to what we already have — skip the
+      // setState. This avoids the JSON.stringify cost (5KB+ per payload)
+      // that the previous implementation paid on every broadcast.
       setRoom((prev) => {
-        if (prev && JSON.stringify(prev) === JSON.stringify(data)) return prev;
+        if (!prev || !data) return data || prev;
+        const sameStamp =
+          prev.stateVersion === data.stateVersion &&
+          prev.turnStartedAt === data.turnStartedAt &&
+          prev.lastDrawnAt === data.lastDrawnAt &&
+          prev.lastPlayedAt === data.lastPlayedAt;
+        if (sameStamp) return prev;
         return data;
       });
       // Only navigate to the lobby when the game is fully finished and the
@@ -280,10 +290,15 @@ export default function GamePage() {
     lastTurnRef.current = curTurn;
   }, [gs?.currentTurnMemberId, gs?.handCounts, myId]);
 
-  // Tick the "now" clock once per second so elapsed timer moves + the nope
-  // window countdown updates.
+  // Tick the "now" clock once per second so the elapsed timer + nope
+  // window countdown update. 1s is enough resolution for both — the header
+  // shows mm:ss and the nope window is in whole-second increments.
+  // 250ms would re-render GamePage 4× per second just to redraw the same
+  // second, wasting CPU during long sessions. If a future feature needs
+  // finer resolution (e.g. a sub-second animation) this can be lowered
+  // back; for now 1s is correct.
   useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 250);
+    const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
 

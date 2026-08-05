@@ -1,19 +1,19 @@
 // useGameChannel — hooks a React component up to the GameHub realtime
 // channel. When the server broadcasts "room-updated" for any room, the
-// hook re-fetches the snapshot via /api/rooms/{id}/snapshot and calls the
-// consumer's onUpdate.
+// server has ALREADY pushed the full snapshot (gameState, members, etc.)
+// in the payload — clients just use the snapshot and call onUpdate. No
+// extra Firestore read required.
 //
-// Latency: server pushes within ~50ms of mutation; client re-fetch adds
-// another ~30-80ms on top. Polling fallback fires every POLL_MS if the
-// hub disconnects so we never get stuck.
+// Latency: server pushes within ~50ms of mutation. Polling fallback fires
+// every FALLBACK_POLL_MS if the hub disconnects so we never get stuck.
 
 import { useEffect, useRef, useState } from "react";
 import * as signalR from "@microsoft/signalr";
 import { API_BASE_URL, API_HUB_URL } from "@config/env.js";
 import { roomsApi } from "@shared/api/roomsApi.js";
 
-const FALLBACK_POLL_MS = 1500;
-const HUB_RETRY_MS = 3000;
+const FALLBACK_POLL_MS = 3000;
+const HUB_RETRY_MS = 5000;
 
 function hubUrl() {
   // REST proxies through Netlify but the SignalR hub talks WebSockets, which
@@ -82,13 +82,13 @@ export function useGameChannel({ roomId, memberId, onUpdate, enabled }) {
           .configureLogging(signalR.LogLevel.Warning)
           .build();
 
-        conn.on("room-updated", async () => {
-          // Server says "something changed in this room" — re-fetch the
-          // snapshot so the client has the exact new state.
-          try {
-            const data = await roomsApi.snapshotWithViewer(roomId, memberId);
-            if (!disposed) onUpdate?.(data);
-          } catch (_) {}
+        conn.on("room-updated", (payload) => {
+          // The server pushed a full Room snapshot (members, gameState, hand
+          // counts, etc.) along with the signal. Use it directly — NO extra
+          // /snapshot fetch — so the mutation round-trip costs exactly one
+          // Firestore write and one SignalR push, never an additional read.
+          const data = payload?.snapshot ?? payload;
+          if (data && !disposed) onUpdate?.(data);
         });
 
         conn.onreconnecting(() => {

@@ -1,6 +1,5 @@
 using Arcana.Application.Abstractions;
 using Arcana.Application.Services;
-using Arcana.Domain.Repositories;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -10,6 +9,11 @@ namespace Arcana.Infrastructure;
 /// Glue between <see cref="NopeTimeoutService"/> and
 /// <see cref="GameService.ResolveExpiredNopeAsync"/>. Each tick resolves a
 /// fresh scope so we get the same scoped GameService the HTTP path uses.
+///
+/// Quota note: pre-resolve read goes through <see cref="IRoomService"/> so
+/// the 2-second snapshot cache (auto-invalidated on every write) absorbs
+/// back-to-back ticks. The post-resolve read also goes through the cache so
+/// even on a cache miss the cache fills and the next tick hits.
 /// </summary>
 public sealed class NopeTimeoutHandler : INopeTimeoutHandler
 {
@@ -31,10 +35,10 @@ public sealed class NopeTimeoutHandler : INopeTimeoutHandler
     {
         using var scope = _scopeFactory.CreateScope();
         var sp = scope.ServiceProvider;
-        var roomRepo = sp.GetRequiredService<IRoomRepository>();
+        var roomService = sp.GetRequiredService<IRoomService>();
         var gameService = sp.GetRequiredService<GameService>();
 
-        var room = await roomRepo.GetByIdAsync(roomId, ct);
+        var room = await roomService.GetRoomAsync(roomId, ct);
         if (room is null)
         {
             _registry.Unregister(roomId);
@@ -48,9 +52,9 @@ public sealed class NopeTimeoutHandler : INopeTimeoutHandler
         }
 
         await gameService.ResolveExpiredNopeAsync(roomId, ct);
-        // ResolveExpiredNopeAsync clears PendingAction. Re-fetch to make
-        // sure the next turn clock is registered for the right player.
-        var refreshed = await roomRepo.GetByIdAsync(roomId, ct);
+        // ResolveExpiredNopeAsync clears PendingAction. Re-fetch (through cache)
+        // to make sure the next turn clock is registered for the right player.
+        var refreshed = await roomService.GetRoomAsync(roomId, ct);
         if (refreshed?.GameState is { EndedAt: null, PendingAction: null, TurnStartedAt: not null })
         {
             // Hand off to TurnClockRegistry — they live in the same DI
@@ -59,7 +63,9 @@ public sealed class NopeTimeoutHandler : INopeTimeoutHandler
             turnClock.Register(roomId, refreshed.GameState.TurnStartedAt!.Value);
         }
         _registry.Unregister(roomId);
-        _logger.LogInformation(
+        // Use Debug — auto-resolves fire every 5s on stale Nope windows;
+        // logging at Info would create one noisy line per stale window.
+        _logger.LogDebug(
             "Auto-resolved expired Nope window for room {RoomId}", roomId);
     }
 }

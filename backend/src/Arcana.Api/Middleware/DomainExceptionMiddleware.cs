@@ -23,7 +23,14 @@ public class DomainExceptionMiddleware
         }
         catch (DomainException ex)
         {
-            _logger.LogWarning(ex, "Domain exception: {Code}", ex.Code);
+            // DomainException covers every business-rule rejection — join full,
+            // not-your-turn, card-not-in-hand, nope-window-closed, etc. These
+            // are 4xx outcomes driven by the client's input/state, NOT server
+            // bugs. Logging them at Warning would create dozens of lines per
+            // game (every nope-chain race, every stale-snapshot click), which
+            // buries real errors when triaging logs. Use Debug so they're
+            // available when explicitly enabled, silent by default.
+            _logger.LogDebug("Domain exception: {Code}", ex.Code);
             context.Response.StatusCode = ex.Code switch
             {
                 "room_not_found" => StatusCodes.Status404NotFound,

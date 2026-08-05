@@ -44,10 +44,14 @@ public interface IRoomRepository
     Task<int> SweepStaleMembersAsync(TimeSpan offlineAfter, int maxRooms = 50, CancellationToken ct = default);
 
     /// <summary>
-    /// Replace the room's gameState field. Returns the updated room, or null
-    /// if the room no longer exists.
+    /// Replace the room's <c>gameState</c> field (and optionally <c>status</c>)
+    /// in Firestore. WRITE-ONLY — does NOT re-read the room. Callers should
+    /// keep using their in-memory snapshot (which is authoritative for the
+    /// mutation that just ran) and broadcast it through the realtime channel.
+    /// Skipping the post-write read avoids two extra Firestore reads
+    /// (room doc + members subcollection) per gameplay mutation.
     /// </summary>
-    Task<Room?> UpdateGameStateAsync(string roomId, Domain.Entities.GameState? gameState, Domain.Enums.RoomStatus? status, CancellationToken ct = default);
+    Task UpdateGameStateAsync(string roomId, Domain.Entities.GameState? gameState, Domain.Enums.RoomStatus? status, CancellationToken ct = default);
 
     /// <summary>
     /// Snapshot every room whose status is <c>Playing</c>. Used by background
