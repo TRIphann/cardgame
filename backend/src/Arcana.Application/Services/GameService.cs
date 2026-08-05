@@ -174,8 +174,30 @@ public class GameService
         }
         state.CurrentTurnMemberId = state.TurnOrder[0];
 
-        var updated = await _repository.UpdateGameStateAsync(roomId, state, RoomStatus.Playing, ct);
-        return updated ?? throw new DomainException("room_not_found", "Phòng không tồn tại.");
+        // Route through PersistAsync (not UpdateGameStateAsync directly) so the
+        // turn-clock background service gets armed for the first player AND
+        // any pending nope window gets cleared from previous sessions. Without
+        // this the first player would see TurnRemainingSec frozen at the value
+        // baked into the snapshot because the server never registered the clock.
+        var persistResult = await _repository.UpdateGameStateAsync(
+            roomId, state, RoomStatus.Playing, ct);
+        var persistGs = persistResult?.GameState ?? state;
+        // Re-arm turn clock + broadcast push to subscribers.
+        if (persistGs.EndedAt is null && persistGs.TurnStartedAt is not null
+            && persistGs.PendingAction is null && !persistGs.BombRevealActive)
+        {
+            _turnClock.Register(roomId, persistGs.TurnStartedAt.Value);
+        }
+        try
+        {
+            await _broadcaster.BroadcastRoomUpdatedAsync(roomId,
+                new { roomId, viewerId = state.CurrentTurnMemberId }, ct);
+        }
+        catch
+        {
+            // Broadcast failures must never corrupt the persisted state.
+        }
+        return persistResult ?? throw new DomainException("room_not_found", "Phòng không tồn tại.");
     }
 
     public async Task<Room> RotateRoomAsync(string roomId, string hostId, CancellationToken ct = default)
@@ -428,7 +450,7 @@ public class GameService
                 var targetHand = gs.Hands.GetValueOrDefault(memberId);
                 if (targetHand is null)
                     throw new DomainException("target_no_hand", "Tay của bạn không còn.");
-                if (!targetHand.Contains(discardPickKey))
+                if (string.IsNullOrEmpty(discardPickKey) || !targetHand.Contains(discardPickKey))
                     throw new DomainException("favor_card_gone", "Bạn không còn lá này.");
                 targetHand.Remove(discardPickKey);
                 var actorHand = gs.Hands.GetValueOrDefault(pendingFav.InitiatorId);
@@ -455,6 +477,7 @@ public class GameService
                 gs.DiscardPile.Add(CardCatalog.Future);
                 gs.CardsPlayed[memberId] = gs.CardsPlayed.GetValueOrDefault(memberId) + 1;
                 gs.FuturePeek = gs.Deck.TakeLast(3).Reverse().ToList();
+                gs.FuturePeekAt = DateTime.UtcNow;
                 result.FuturePeek = gs.FuturePeek;
                 QueueNopeWindow(gs, memberId, CardCatalog.Future);
                 result.Toast = $"Xem trước 3 lá.";
@@ -1144,6 +1167,7 @@ public class GameService
             if (pending.CardKey == CardCatalog.Future)
             {
                 gs.FuturePeek = null;
+                gs.FuturePeekAt = null;
             }
             gs.PendingAction = null;
             // Action resolved (cancelled) — clear cinematic.
@@ -1414,8 +1438,11 @@ public class GameService
         }
         gs.TurnStartedAt = DateTime.UtcNow;
         // Clear the FuturePeek visual field so stale peek results don't linger
-        // across turn boundaries.
+        // across turn boundaries. We also reset the timestamp so the
+        // FuturePeekSweeperService treats the slot as already-cleared and
+        // doesn't fire a redundant update broadcast a few seconds later.
         gs.FuturePeek = null;
+        gs.FuturePeekAt = null;
     }
 
     private static void CheckWinCondition(GameState gs)
@@ -1438,6 +1465,7 @@ public class GameService
         if (gs.EndedAt is not null)
         {
             gs.FuturePeek = null;
+            gs.FuturePeekAt = null;
         }
     }
 }

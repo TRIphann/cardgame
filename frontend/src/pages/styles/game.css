@@ -557,16 +557,15 @@
 
 .discard-pile__count {
   position: absolute;
-  bottom: -26px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 13px;
+  bottom: -22px;
+  right: 6px;
+  font-size: 12px;
   font-weight: 600;
-  opacity: 0.85;
+  opacity: 0.9;
   font-family: "Cinzel", serif;
-  letter-spacing: 0.16em;
-  color: rgba(220, 200, 255, 0.85);
-  background: rgba(8, 5, 24, 0.65);
+  letter-spacing: 0.14em;
+  color: rgba(220, 200, 255, 0.9);
+  background: rgba(8, 5, 24, 0.7);
   padding: 3px 12px;
   border-radius: 999px;
   border: 1px solid rgba(168, 124, 245, 0.3);

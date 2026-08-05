@@ -48,4 +48,11 @@ public interface IRoomRepository
     /// if the room no longer exists.
     /// </summary>
     Task<Room?> UpdateGameStateAsync(string roomId, Domain.Entities.GameState? gameState, Domain.Enums.RoomStatus? status, CancellationToken ct = default);
+
+    /// <summary>
+    /// Snapshot every room whose status is <c>Playing</c>. Used by background
+    /// sweepers (e.g. <c>FuturePeekSweeperService</c>) that need to walk all
+    /// in-flight games without going through the lobby / snapshot path.
+    /// </summary>
+    Task<IReadOnlyList<Room>> GetAllPlayingAsync(CancellationToken ct = default);
 }

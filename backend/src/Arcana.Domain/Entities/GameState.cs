@@ -54,6 +54,11 @@ public class GameState
     // Set when a player plays the Future card; survives the SignalR snapshot
     // re-fetch so the FuturePeekModal can render correctly on reconnection.
     public List<string>? FuturePeek { get; set; }
+    // When the current FuturePeek was generated. The GameService background
+    // sweeper (or any subsequent turn advance) clears the peek once
+    // (now - FuturePeekAt) > the modal lifetime (~10s after the card lands)
+    // so the modal doesn't re-open itself every snapshot poll.
+    public DateTime? FuturePeekAt { get; set; }
 
     // ── Pending Favor-pick field ───────────────────────
     // While this is set, the Favor card is in its post-play "choose a card"

@@ -219,6 +219,27 @@ public class FirestoreRoomRepository : IRoomRepository
         return await GetByIdAsync(roomId, ct);
     }
 
+    /// <summary>
+    /// Walks every room document and returns the ones currently in the
+    /// "playing" status. Used by background sweepers (e.g. FuturePeekSweeper)
+    /// that need to find stale per-game state without going through the lobby.
+    /// </summary>
+    public async Task<IReadOnlyList<Room>> GetAllPlayingAsync(CancellationToken ct = default)
+    {
+        var query = _db.Collection(RoomsCollection)
+            .WhereEqualTo("status", "playing");
+        var snap = await query.GetSnapshotAsync(ct);
+        var rooms = new List<Room>();
+        foreach (var doc in snap.Documents)
+        {
+            // Skip rooms whose gameState is missing — they're either freshly
+            // created or already cleaned up. The sweeper is a no-op for them.
+            if (!doc.ToDictionary().ContainsKey("gameState")) continue;
+            rooms.Add(await MapRoomAsync(doc, ct));
+        }
+        return rooms;
+    }
+
     private static Dictionary<string, object?> BuildGameStateDoc(Domain.Entities.GameState gs)
     {
         var doc = new Dictionary<string, object?>
@@ -251,6 +272,9 @@ public class FirestoreRoomRepository : IRoomRepository
                 : null,
             ["turnOrder"] = gs.TurnOrder,
             ["futurePeek"] = gs.FuturePeek,
+            ["futurePeekAt"] = gs.FuturePeekAt.HasValue
+                ? (object?)Timestamp.FromDateTime(gs.FuturePeekAt.Value.ToUniversalTime())
+                : null,
         };
         return doc;
     }
@@ -377,6 +401,9 @@ public class FirestoreRoomRepository : IRoomRepository
 
         if (doc.TryGetValue("futurePeek", out var fp) && fp is IEnumerable<object> fpList)
             gs.FuturePeek = fpList.Select(x => x as string ?? string.Empty).Where(s => s.Length > 0).ToList();
+
+        if (doc.TryGetValue("futurePeekAt", out var fpa) && fpa is Timestamp fpaTs)
+            gs.FuturePeekAt = fpaTs.ToDateTime().ToUniversalTime();
 
         if (doc.TryGetValue("pendingAction", out var pa) && pa is Dictionary<string, object> paDict)
         {

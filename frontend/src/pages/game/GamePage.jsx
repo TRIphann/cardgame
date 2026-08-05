@@ -89,6 +89,11 @@ export default function GamePage() {
   //   { kind: "cardPick", card, purpose, candidates, color, accent }
   const [pickModal, setPickModal] = useState(null);
   const [futurePeek, setFuturePeek] = useState(null); // [key1, key2, key3]
+  // When the user explicitly closed the peek modal. Tracked so subsequent
+  // snapshot polls that still carry the same peek don't re-open it.
+  const [futureDismissedAt, setFutureDismissedAt] = useState(null);
+  const lastPeekStampRef = useRef(null);
+  const lastPeekContentRef = useRef(null);
   const [defuseModal, setDefuseModal] = useState(false);
   const [concedeConfirm, setConcedeConfirm] = useState(false);
   const [drawAnim, setDrawAnim] = useState(null); // { sourceRect, targetRect, cardKey, viewer, revealKey }
@@ -301,10 +306,26 @@ export default function GamePage() {
   // open yet, auto-open it. If it's already open the state update is a no-op.
   // This survives re-connection: reconnecting players get the last peek result
   // from Firestore and can view it again without re-playing the card.
+  //
+  // Dismissal tracking: when the user explicitly closes the modal we set
+  // futureDismissedAt. Subsequent snapshot polls that still carry the same
+  // peek (the server only clears it after 13s) are ignored — otherwise the
+  // modal would re-open itself on every 2.5s poll and trap the player.
   useEffect(() => {
     if (!gs?.futurePeek || gs.futurePeek.length === 0) return;
+    // Compare by content + server timestamp so a brand-new peek still re-opens.
+    const stamp = gs.futurePeekAt || null;
+    const lastStamp = lastPeekStampRef.current;
+    const samePeek =
+      lastPeekStampRef.current &&
+      lastStamp === stamp &&
+      lastPeekContentRef.current &&
+      JSON.stringify(lastPeekContentRef.current) === JSON.stringify(gs.futurePeek);
+    if (futureDismissedAt && samePeek) return;
+    lastPeekStampRef.current = stamp;
+    lastPeekContentRef.current = gs.futurePeek;
     setFuturePeek(gs.futurePeek);
-  }, [gs?.futurePeek]);
+  }, [gs?.futurePeek, gs?.futurePeekAt, futureDismissedAt]);
 
   // Favor target-pick: when a Favor card lands and we're the TARGET, the
   // server tells us via gs.pendingFavorPick (TargetMemberId === myId). We
@@ -1449,7 +1470,10 @@ export default function GamePage() {
       {futurePeek && (
         <FuturePeekModal
           peek={futurePeek}
-          onClose={() => setFuturePeek(null)}
+          onClose={() => {
+            setFuturePeek(null);
+            setFutureDismissedAt(Date.now());
+          }}
           originRect={deckRef.current?.getBoundingClientRect?.() || null}
           turnRemainingSec={turnRemainingSec ?? 60}
         />
