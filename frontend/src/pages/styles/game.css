@@ -6,6 +6,8 @@
    Bottom: YOU with hand in arc, action buttons
    ============================================ */
 
+@import "./animations.css";
+
 .game-page {
   position: relative;
   /* Use viewport-height (100dvh) so the page ALWAYS fits the browser window.

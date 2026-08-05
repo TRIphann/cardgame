@@ -117,8 +117,8 @@ export function FxBurst({ anchor, fxKey = "general", size = "md", id = "burst" }
       {/* Cross beams for sword-style attacks */}
       {fxKey === "attack" && (
         <>
-          <span className="fx-burst__beam fx-burst__beam--h" style={{ background: fx.color }} />
-          <span className="fx-burst__beam fx-burst__beam--v" style={{ background: fx.accent }} />
+          <span className="burst-beam-h" style={{ background: fx.color }} />
+          <span className="burst-beam-v" style={{ background: fx.accent }} />
         </>
       )}
 
@@ -131,8 +131,8 @@ export function FxBurst({ anchor, fxKey = "general", size = "md", id = "burst" }
             color: p.i % 2 === 0 ? fx.color : fx.accent,
             textShadow: `0 0 14px ${fx.color}, 0 0 26px ${fx.accent}`,
             fontSize: `${p.size * 4 * scale}px`,
-            "--ang": `${p.angle}rad`,
-            "--dist": `${p.dist * scale}px`,
+            "--ang-x": `${Math.cos(p.angle) * p.dist * scale}px`,
+            "--ang-y": `${Math.sin(p.angle) * p.dist * scale}px`,
             "--delay": `${p.delay}ms`,
             "--dur": `${p.dur}ms`,
           }}
@@ -141,14 +141,12 @@ export function FxBurst({ anchor, fxKey = "general", size = "md", id = "burst" }
         </span>
       ))}
 
-      {/* Streaks — small light dashes that fly out fast */}
+      {/* Streaks */}
       {Array.from({ length: 4 }).map((_, i) => (
         <span
           key={`streak-${i}`}
           className="fx-burst__streak"
           style={{
-            "--ang": `${(i / 4) * Math.PI * 2 + 0.4}rad`,
-            "--dist": `${120 * scale}px`,
             background: i % 2 === 0 ? fx.color : fx.accent,
           }}
         />

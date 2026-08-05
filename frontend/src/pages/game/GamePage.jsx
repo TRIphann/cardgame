@@ -103,7 +103,7 @@ export default function GamePage() {
   const lastDrawnRef = useRef(null); // dedupe by `(memberId, lastDrawnAt)`
   // BUG-4 fix: keep a live ref to gs so auto-draw setTimeout can re-check
   // the current snapshot when it fires, instead of using a stale closure.
-  const gsRef = useRef(gs);
+  const gsRef = useRef(null);
   useEffect(() => { gsRef.current = gs; }, [gs]);
   // Active timer for the corner opponent-draw toast. Tracked so we can
   // clear it if the game unmounts mid-animation (avoids "setState on
@@ -719,7 +719,7 @@ export default function GamePage() {
       } catch (e) {
         toast?.error?.(e.message || "Combo thất bại.");
       } finally {
-        actionInFlightRef.current = false;
+        pickInFlightRef.current = false;
       }
     },
     [audio, myId, pickModal, roomId, toast],
@@ -932,10 +932,12 @@ export default function GamePage() {
     // cinematic stays suspenseful.
     const isLocal = gs.lastDrawnBy === myId;
     const stillAlive = gs.alive?.[gs.lastDrawnBy] !== false;
+    // willDefuse: local player + still alive + has any defuse-class card
+    // (base "defuse" OR any combo defuse variant: ninja/superman/zombie/robot/hải-tặc).
     const willDefuse = !!(
       isLocal &&
       stillAlive &&
-      (myHand || []).some((c) => COMBO_KEYS.includes(c))
+      (myHand || []).some((c) => c === "defuse" || COMBO_KEYS.includes(c))
     );
     setBombReveal({
       memberId: gs.lastDrawnBy,

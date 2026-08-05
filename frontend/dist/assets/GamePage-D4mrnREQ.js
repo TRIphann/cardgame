@@ -1,5 +1,5 @@
 import { r as reactExports, j as jsxRuntimeExports } from "./react-BhVOh7S1.js";
-import { r as roomsApi, A as API_BASE_URL, c as cardImageUrl, u as useSession, a as useToast, b as useAudio, R as ROUTES, C as CARD_CLOUDINARY } from "./index-Cwtjn2SD.js";
+import { r as roomsApi, A as API_BASE_URL, c as cardImageUrl, u as useSession, a as useToast, b as useAudio, R as ROUTES, C as CARD_CLOUDINARY } from "./index-JqdA65WP.js";
 import { H as HubConnectionBuilder, L as LogLevel } from "./vendor-DcE7maHo.js";
 import { c as useParams, a as useNavigate } from "./router-DRJyKT9H.js";
 import "./react-dom-HPixZcWd.js";
@@ -744,8 +744,8 @@ function FxBurst({ anchor, fxKey = "general", size = "md", id = "burst" }) {
           )
         ] }),
         fxKey === "attack" && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "fx-burst__beam fx-burst__beam--h", style: { background: fx.color } }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "fx-burst__beam fx-burst__beam--v", style: { background: fx.accent } })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "burst-beam-h", style: { background: fx.color } }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "burst-beam-v", style: { background: fx.accent } })
         ] }),
         seeds.map((p) => /* @__PURE__ */ jsxRuntimeExports.jsx(
           "span",
@@ -755,8 +755,8 @@ function FxBurst({ anchor, fxKey = "general", size = "md", id = "burst" }) {
               color: p.i % 2 === 0 ? fx.color : fx.accent,
               textShadow: `0 0 14px ${fx.color}, 0 0 26px ${fx.accent}`,
               fontSize: `${p.size * 4 * scale}px`,
-              "--ang": `${p.angle}rad`,
-              "--dist": `${p.dist * scale}px`,
+              "--ang-x": `${Math.cos(p.angle) * p.dist * scale}px`,
+              "--ang-y": `${Math.sin(p.angle) * p.dist * scale}px`,
               "--delay": `${p.delay}ms`,
               "--dur": `${p.dur}ms`
             },
@@ -769,8 +769,6 @@ function FxBurst({ anchor, fxKey = "general", size = "md", id = "burst" }) {
           {
             className: "fx-burst__streak",
             style: {
-              "--ang": `${i / 4 * Math.PI * 2 + 0.4}rad`,
-              "--dist": `${120 * scale}px`,
               background: i % 2 === 0 ? fx.color : fx.accent
             }
           },
@@ -878,228 +876,188 @@ function DefuseModal({ onConfirm, onSkip }) {
     )
   ] });
 }
-const REVEAL_INTERVAL_MS = 600;
-const TOTAL_HOLD_MS = 4500;
+const FLIP_STAGGER_MS = 500;
+const HOLD_MS$1 = 4e3;
+const AUTO_DISMISS_MS = FLIP_STAGGER_MS * 2 + HOLD_MS$1;
 const CONFIRM_THRESHOLD_SEC = 20;
-function flightTransform(origin, target, progress) {
-  if (!origin || !target) {
-    return `translate3d(${target.left}px, ${target.top}px, 0)`;
-  }
-  const x = origin.left + (target.left - origin.left) * progress;
-  const y = origin.top + (target.top - origin.top) * progress;
-  const arc = Math.sin(progress * Math.PI) * 80;
-  return `translate3d(${x}px, ${y - arc}px, 0)`;
-}
 function FuturePeekModal({ peek, onClose, originRect, turnRemainingSec = 60 }) {
   const [revealedCount, setRevealedCount] = reactExports.useState(0);
   const [showConfirm, setShowConfirm] = reactExports.useState(false);
   const modalRef = reactExports.useRef(null);
   const confirmRef = reactExports.useRef(null);
-  const titleId = "fpm-title";
-  const descId = "fpm-desc";
-  const requestClose = reactExports.useCallback(() => {
-    if (turnRemainingSec > CONFIRM_THRESHOLD_SEC) {
-      setShowConfirm(true);
-      setTimeout(() => confirmRef.current?.querySelector("button")?.focus(), 50);
-    } else {
-      onClose?.();
-    }
-  }, [turnRemainingSec, onClose]);
-  const cancelConfirm = reactExports.useCallback(() => {
-    setShowConfirm(false);
-    modalRef.current?.querySelector(".future-peek-info__close")?.focus();
-  }, []);
-  reactExports.useEffect(() => {
-    if (showConfirm) {
-      const handler2 = (e) => {
-        if (e.key === "Escape" || e.key === "Esc") cancelConfirm();
-      };
-      document.addEventListener("keydown", handler2);
-      return () => document.removeEventListener("keydown", handler2);
-    }
-    const handler = (e) => {
-      if (e.key === "Escape" || e.key === "Esc") requestClose();
-    };
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, [showConfirm, requestClose, cancelConfirm]);
-  reactExports.useEffect(() => {
-    if (!showConfirm) {
-      modalRef.current?.querySelector(".future-peek-info__close")?.focus();
-    }
-  }, [showConfirm]);
   reactExports.useEffect(() => {
     if (!peek || peek.length === 0) return void 0;
     const timers = peek.map(
-      (_, idx) => setTimeout(
-        () => setRevealedCount((c) => Math.max(c, idx + 1)),
-        500 + idx * REVEAL_INTERVAL_MS
-      )
+      (_, idx) => setTimeout(() => setRevealedCount(idx + 1), idx * FLIP_STAGGER_MS)
     );
     return () => timers.forEach(clearTimeout);
   }, [peek]);
   reactExports.useEffect(() => {
     if (!peek || peek.length === 0) return void 0;
-    const lastReveal = 500 + (peek.length - 1) * REVEAL_INTERVAL_MS;
-    const t = setTimeout(() => onClose?.(), lastReveal + TOTAL_HOLD_MS);
+    const t = setTimeout(() => onClose?.(), AUTO_DISMISS_MS);
     return () => clearTimeout(t);
   }, [peek, onClose]);
+  reactExports.useEffect(() => {
+    const handler = (e) => {
+      if (e.key !== "Escape" && e.key !== "Esc") return;
+      if (showConfirm) {
+        setShowConfirm(false);
+        return;
+      }
+      if (turnRemainingSec > CONFIRM_THRESHOLD_SEC) {
+        setShowConfirm(true);
+        setTimeout(() => confirmRef.current?.querySelector("button")?.focus(), 50);
+      } else {
+        onClose?.();
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [showConfirm, turnRemainingSec, onClose]);
+  reactExports.useEffect(() => {
+    if (showConfirm) {
+      setTimeout(() => confirmRef.current?.querySelector("button")?.focus(), 50);
+    } else {
+      modalRef.current?.querySelector(".future-peek-info__close")?.focus();
+    }
+  }, [showConfirm]);
+  const cancelConfirm = reactExports.useCallback(() => {
+    setShowConfirm(false);
+    setTimeout(() => modalRef.current?.querySelector(".future-peek-info__close")?.focus(), 30);
+  }, []);
   if (!peek || peek.length === 0) return null;
   const cardW = 130;
   const cardH = 186;
   const vw = typeof window !== "undefined" ? window.innerWidth : 1280;
-  const gap = 24;
-  const totalWidth = peek.length * cardW + (peek.length - 1) * gap;
-  const startX = vw / 2 - totalWidth / 2;
-  const baseY = typeof window !== "undefined" ? window.innerHeight / 2 - cardH / 2 : 300;
+  const vh = typeof window !== "undefined" ? window.innerHeight : 720;
+  const gap = 28;
+  const totalW = peek.length * cardW + (peek.length - 1) * gap;
+  const startX = vw / 2 - totalW / 2;
+  const baseY = vh * 0.36;
   const targets = peek.map((_, i) => ({
-    left: startX + i * (cardW + gap),
-    top: baseY
+    x: startX + i * (cardW + gap),
+    y: baseY
   }));
-  const cardDescs = peek.map((key, i) => {
-    const meta = getCardLabel(key);
-    return `Lá ${i + 1}: ${meta.label}`;
-  }).join(". ");
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "div",
-    {
-      className: "future-peek-scene",
-      role: "dialog",
-      "aria-modal": "true",
-      "aria-labelledby": titleId,
-      "aria-describedby": descId,
-      ref: modalRef,
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "div",
-          {
-            id: descId,
-            style: {
-              position: "absolute",
-              width: 1,
-              height: 1,
-              padding: 0,
-              margin: -1,
-              overflow: "hidden",
-              clip: "rect(0,0,0,0)",
-              whiteSpace: "nowrap",
-              border: 0
-            },
-            children: `Xem trước 3 lá trên cùng bộ bài: ${cardDescs}. ${peek.length >= 2 ? `Lá trái = bạn sẽ rút tiếp. Hai lá còn lại = người kế tiếp.` : ""}`
-          }
-        ),
-        showConfirm && /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "div",
-          {
-            className: "game-modal__scrim",
-            role: "presentation",
-            onClick: cancelConfirm,
-            children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
-              "div",
+  const flyFromX = originRect ? originRect.left + originRect.width / 2 - cardW / 2 : vw / 2 - cardW / 2;
+  const flyFromY = originRect ? originRect.top + originRect.height / 2 - cardH / 2 : vh * 0.55;
+  const shimmerN = 8;
+  const shimmers = Array.from({ length: shimmerN }).map((_, i) => ({
+    i,
+    baseX: vw / 2 - 180 + i % 4 * 90,
+    baseY: vh * 0.28 + Math.floor(i / 4) * 120,
+    delay: i * 280
+  }));
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { ref: modalRef, className: "future-peek-scene", role: "dialog", "aria-modal": "true", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { id: "fpm-desc", style: { position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0,0,0,0)", whiteSpace: "nowrap" }, children: [
+      "Xem trước 3 lá: ",
+      peek.map((k, i) => getCardLabel(k).label).join(", "),
+      ". Trái = bạn rút tiếp."
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "future-peek-glow-backdrop", "aria-hidden": "true" }),
+    shimmers.map((s) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        className: "fp-particle",
+        style: {
+          left: s.baseX,
+          top: s.baseY,
+          animationDelay: `${s.delay}ms`
+        }
+      },
+      s.i
+    )),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "future-peek-stage", children: peek.map((key, i) => {
+      const revealed = i < revealedCount;
+      return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "div",
+        {
+          className: `fp-card${revealed ? " fp-card--revealed" : ""}`,
+          style: {
+            "--fp-x": `${targets[i].x}px`,
+            "--fp-y": `${targets[i].y}px`,
+            "--fp-fly-x": `${flyFromX - targets[i].x}px`,
+            "--fp-fly-y": `${flyFromY - targets[i].y}px`,
+            animationDelay: `${i * 80}ms`,
+            zIndex: 246 + i
+          },
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "fp-card__inner", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fp-card__face fp-card__face--back", children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: cardImageUrl("back"), alt: "", draggable: false }) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fp-card__face fp-card__face--front", children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: cardImageUrl(key) || cardImageUrl("back"), alt: getCardLabel(key).label, draggable: false }) })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fp-card__halo", "aria-hidden": "true" })
+          ]
+        },
+        i
+      );
+    }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "future-peek-info", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "future-peek-info__title", children: "Xem trước 3 lá" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "future-peek-info__sub", children: turnRemainingSec <= CONFIRM_THRESHOLD_SEC ? `Còn ${turnRemainingSec}s — đóng không cần xác nhận` : "Lá trái = bạn rút tiếp. Hai lá còn lại = người kế tiếp." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          className: "future-peek-info__close",
+          onClick: () => {
+            if (turnRemainingSec > CONFIRM_THRESHOLD_SEC) {
+              setShowConfirm(true);
+              setTimeout(() => confirmRef.current?.querySelector("button")?.focus(), 50);
+            } else {
+              onClose?.();
+            }
+          },
+          "aria-label": "Đóng peek",
+          "aria-describedby": "fpm-desc",
+          children: "Úp xuống & đặt lại"
+        }
+      )
+    ] }),
+    showConfirm && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "game-modal__scrim", role: "presentation", onClick: cancelConfirm, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        ref: confirmRef,
+        className: "game-modal",
+        role: "alertdialog",
+        "aria-modal": "true",
+        "aria-labelledby": "fpm-confirm-title",
+        onClick: (e) => e.stopPropagation(),
+        style: { maxWidth: 360 },
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "game-modal__title", id: "fpm-confirm-title", children: "Xác nhận đóng peek?" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "game-modal__sub", children: [
+            "Còn ",
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("strong", { children: [
+              turnRemainingSec,
+              "s"
+            ] }),
+            " trên lượt. Đóng ngay có thể khiến bạn bỏ lỡ thông tin."
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "game-modal__actions", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "game-action-btn", onClick: cancelConfirm, autoFocus: true, children: "Ở lại" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
               {
-                ref: confirmRef,
-                className: "game-modal",
-                role: "alertdialog",
-                "aria-modal": "true",
-                "aria-labelledby": "fpm-confirm-title",
-                "aria-describedby": "fpm-confirm-desc",
-                onClick: (e) => e.stopPropagation(),
-                style: { maxWidth: 360 },
-                children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "game-modal__title", id: "fpm-confirm-title", children: "Xác nhận đóng peek?" }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "game-modal__sub", id: "fpm-confirm-desc", children: [
-                    "Còn ",
-                    /* @__PURE__ */ jsxRuntimeExports.jsxs("strong", { children: [
-                      turnRemainingSec,
-                      "s"
-                    ] }),
-                    " trên lượt của bạn. Đóng bây giờ có thể khiến bạn bỏ lỡ thông tin quan trọng."
-                  ] }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "game-modal__actions", children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx(
-                      "button",
-                      {
-                        type: "button",
-                        className: "game-action-btn",
-                        onClick: cancelConfirm,
-                        autoFocus: true,
-                        children: "Ở lại"
-                      }
-                    ),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx(
-                      "button",
-                      {
-                        type: "button",
-                        className: "game-action-btn game-action-btn--danger",
-                        onClick: () => {
-                          setShowConfirm(false);
-                          onClose?.();
-                        },
-                        children: "Đóng peek"
-                      }
-                    )
-                  ] })
-                ]
+                type: "button",
+                className: "game-action-btn game-action-btn--danger",
+                onClick: () => {
+                  setShowConfirm(false);
+                  onClose?.();
+                },
+                children: "Đóng peek"
               }
             )
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "future-peek-stage", children: peek.map((key, i) => {
-          const target = targets[i];
-          const revealed = i < revealedCount;
-          const arrivalProgress = Math.min(1, revealedCount - i > 0 ? 1 : 0);
-          const transform = flightTransform(originRect, target, arrivalProgress);
-          const meta = getCardLabel(key);
-          return /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "div",
-            {
-              className: `future-peek-card${revealed ? " future-peek-card--revealed" : ""}`,
-              style: {
-                "--card-w": `${cardW}px`,
-                "--card-h": `${cardH}px`,
-                "--fly-x": `${target.left}px`,
-                "--fly-y": `${target.top}px`,
-                transform,
-                zIndex: 30 + i
-              },
-              "aria-hidden": "true",
-              children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "future-peek-card__inner", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "future-peek-card__face future-peek-card__face--back", children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: cardImageUrl("back"), alt: "", draggable: false }) }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "future-peek-card__face future-peek-card__face--front", children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: cardImageUrl(key) || cardImageUrl("back"), alt: meta.label, draggable: false }) })
-              ] })
-            },
-            i
-          );
-        }) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "future-peek-info", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "future-peek-info__title", id: titleId, children: "Xem trước 3 lá" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "future-peek-info__sub", children: [
-            "Lá trái = bạn sẽ rút tiếp. Hai lá còn lại = người kế tiếp.",
-            turnRemainingSec <= CONFIRM_THRESHOLD_SEC && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { marginLeft: 8, opacity: 0.7, fontSize: 11 }, children: [
-              "(còn ",
-              turnRemainingSec,
-              "s — đóng không cần xác nhận)"
-            ] })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "button",
-            {
-              type: "button",
-              className: "future-peek-info__close",
-              onClick: requestClose,
-              "aria-label": "Đóng peek",
-              children: "Úp xuống & đặt lại theo thứ tự"
-            }
-          )
-        ] })
-      ]
-    }
-  );
+          ] })
+        ]
+      }
+    ) })
+  ] });
 }
-const FLIGHT_MS$1 = 780;
-const FLIP_AT_PCT = 0.55;
-const VANISH_MS = 320;
-const SPARK_COUNT = 12;
+const FLIGHT_MS$1 = 520;
+const FLIP_AT = 0.45;
+const LAND_DELAY = 60;
+const VANISH_MS = 180;
+const SPARK_N = 14;
 function DrawAnimation({
   sourceRect,
   targetRect,
@@ -1120,14 +1078,14 @@ function DrawAnimation({
     }
     const tFlip = setTimeout(() => {
       if (revealKey && revealKey !== "bomb") setFlipped(true);
-    }, FLIGHT_MS$1 * FLIP_AT_PCT);
-    const tDone = setTimeout(() => {
+    }, FLIGHT_MS$1 * FLIP_AT);
+    const tVanish = setTimeout(() => {
       setMounted(false);
-      onCompleteRef.current?.();
-    }, FLIGHT_MS$1 + VANISH_MS);
+      setTimeout(() => onCompleteRef.current?.(), VANISH_MS);
+    }, FLIGHT_MS$1 + LAND_DELAY);
     return () => {
       clearTimeout(tFlip);
-      clearTimeout(tDone);
+      clearTimeout(tVanish);
     };
   }, []);
   if (!mounted || !sourceRect || !targetRect) return null;
@@ -1137,81 +1095,81 @@ function DrawAnimation({
   const endY = targetRect.top + targetRect.height / 2;
   const cardW = 110;
   const cardH = 157;
-  const cardStyle = {
-    position: "fixed",
-    left: 0,
-    top: 0,
-    width: cardW,
-    height: cardH,
-    zIndex: 200,
-    pointerEvents: "none",
-    "--start-x": `${startX - cardW / 2}px`,
-    "--start-y": `${startY - cardH / 2}px`,
-    "--end-x": `${endX - cardW / 2}px`,
-    "--end-y": `${endY - cardH / 2}px`
-  };
+  const apexX = (startX + endX) / 2;
+  const apexY = Math.min(startY, endY) - 110;
+  const endScaledX = endX - cardW / 2;
+  const endScaledY = endY - cardH / 2;
   const showFace = flipped && !!revealKey && revealKey !== "bomb";
-  const trail = Array.from({ length: SPARK_COUNT }).map((_, i) => ({
+  const sparks = Array.from({ length: SPARK_N }).map((_, i) => ({
     i,
-    delay: i / SPARK_COUNT * FLIGHT_MS$1 * 0.7,
-    size: 4 + i % 3 * 2
+    // Interpolate position along the arc at fraction t.
+    t: i / (SPARK_N - 1) * 0.85,
+    delay: i / SPARK_N * FLIGHT_MS$1 * 0.65,
+    size: 3 + i % 3 * 2
   }));
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "draw-anim-trail", style: cardStyle, children: trail.map((t) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "span",
-      {
-        className: "draw-anim-trail__spark",
-        style: {
-          "--delay": `${t.delay}ms`,
-          width: `${t.size}px`,
-          height: `${t.size}px`
-        }
-      },
-      t.i
-    )) }),
+    sparks.map((s) => {
+      const frac = s.t;
+      const x = startX + (apexX - startX) * frac + (endX - apexX) * frac;
+      const y = startY + (apexY - startY) * frac + (endY - apexY) * frac;
+      const sx = x - 3;
+      const sy = y - 3;
+      return /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "div",
+        {
+          className: "draw-trail-spark",
+          style: {
+            left: sx,
+            top: sy,
+            width: s.size,
+            height: s.size,
+            animationDelay: `${s.delay}ms`
+          }
+        },
+        s.i
+      );
+    }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       "div",
       {
-        className: "draw-anim-halo",
+        className: "draw-source-glow",
         style: {
-          position: "fixed",
-          left: startX - 80,
-          top: startY - 80,
-          width: 160,
-          height: 160,
-          pointerEvents: "none",
-          zIndex: 199
+          left: startX - 90,
+          top: startY - 90,
+          width: 180,
+          height: 180
         }
       }
     ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "draw-anim", style: cardStyle, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `draw-anim__inner${showFace ? " draw-anim__inner--flipped" : ""}`, children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "draw-anim__face draw-anim__face--back", children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: cardImageUrl("back"), alt: "", draggable: false }) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "draw-anim__face draw-anim__face--front", children: showFace && /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: cardImageUrl(revealKey), alt: revealKey, draggable: false }) })
-    ] }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       "div",
       {
-        className: "draw-anim-burst",
+        className: `draw-card${showFace ? " draw-card--flipped" : ""}`,
         style: {
-          position: "fixed",
-          left: endX,
-          top: endY,
-          width: 0,
-          height: 0,
-          pointerEvents: "none",
-          zIndex: 201
+          width: cardW,
+          height: cardH,
+          ["--dc-start-x"]: `${startX - cardW / 2}px`,
+          ["--dc-start-y"]: `${startY - cardH / 2}px`,
+          ["--dc-apex-x"]: `${apexX - cardW / 2}px`,
+          ["--dc-apex-y"]: `${apexY - cardH / 2}px`,
+          ["--dc-end-x"]: `${endScaledX}px`,
+          ["--dc-end-y"]: `${endScaledY}px`,
+          ["--dc-flip-at"]: FLIGHT_MS$1 * FLIP_AT
         },
-        "aria-hidden": "true",
-        children: Array.from({ length: 8 }).map((_, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "span",
-          {
-            className: "draw-anim-burst__spark",
-            style: {
-              "--angle": `${i / 8 * 360}deg`
-            }
-          },
-          i
-        ))
+        children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "draw-card__inner", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "draw-card__face draw-card__face--back", children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: cardImageUrl("back"), alt: "", draggable: false }) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "draw-card__face draw-card__face--front", children: showFace && /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: cardImageUrl(revealKey), alt: revealKey, draggable: false }) })
+        ] })
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        className: "draw-landing-burst",
+        style: {
+          left: endX,
+          top: endY
+        }
       }
     )
   ] });
@@ -1270,8 +1228,9 @@ function PlayCardAnimation({ sourceRect, cardKey, targetRect }) {
     )
   ] });
 }
-const REVEAL_DURATION_MS = 3e3;
-const FLIP_DELAY_MS = 280;
+const REVEAL_MS = 3e3;
+const FLIP_MS$1 = 200;
+const FLIP_DELAY = 180;
 function BombReveal({ memberName, willDefuse, onComplete }) {
   const [phase, setPhase] = reactExports.useState("back");
   const [mounted, setMounted] = reactExports.useState(true);
@@ -1281,19 +1240,15 @@ function BombReveal({ memberName, willDefuse, onComplete }) {
   }, [onComplete]);
   reactExports.useEffect(() => {
     const t4Ref = { current: null };
-    const t1 = setTimeout(() => setPhase("flip"), FLIP_DELAY_MS);
-    const t2 = setTimeout(() => setPhase("face"), FLIP_DELAY_MS + 400);
+    const t1 = setTimeout(() => setPhase("flip"), FLIP_DELAY);
+    const t2 = setTimeout(() => setPhase("face"), FLIP_DELAY + FLIP_MS$1);
     const t3 = setTimeout(() => {
-      if (willDefuse) {
-        setPhase("fadeout");
-        t4Ref.current = setTimeout(() => {
-          setMounted(false);
-          onCompleteRef.current?.();
-        }, 400);
-      } else {
-        setPhase("explode");
-      }
-    }, REVEAL_DURATION_MS);
+      setPhase(willDefuse ? "fadeout" : "explode");
+      t4Ref.current = setTimeout(() => {
+        setMounted(false);
+        onCompleteRef.current?.();
+      }, willDefuse ? 450 : 200);
+    }, REVEAL_MS);
     return () => {
       clearTimeout(t1);
       clearTimeout(t2);
@@ -1304,80 +1259,94 @@ function BombReveal({ memberName, willDefuse, onComplete }) {
   if (!mounted) return null;
   const backUrl = cardImageUrl("back");
   const faceUrl = cardImageUrl("bomb");
+  const CARD_W2 = 240;
+  const CARD_H2 = 344;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `bomb-reveal-scrim bomb-reveal-scrim--${phase}`, "aria-hidden": "true" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-reveal-sparks", "aria-hidden": "true", children: Array.from({ length: 18 }).map((_, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        className: `bomb-reveal-scrim bomb-reveal-scrim--${phase}`,
+        "aria-hidden": "true"
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-sparks-field", "aria-hidden": "true", children: Array.from({ length: 24 }).map((_, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
       "span",
       {
-        className: "bomb-reveal-sparks__spark",
+        className: "bomb-sparks__spark",
         style: {
-          "--angle": `${i / 18 * 360}deg`,
-          "--dist": `${280 + i % 4 * 80}px`,
-          "--delay": `${(phase === "face" || phase === "hold" ? 0 : 200) + i % 3 * 80}ms`
+          "--ang": `${i / 24 * 360}deg`,
+          "--dist": `${280 + i % 5 * 80}px`,
+          "--delay": `${i * 40}ms`
         }
       },
       `s-${i}`
     )) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-reveal-rings", "aria-hidden": "true", children: [0, 1, 2, 3, 4, 5].map((i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        className: `bomb-reveal bomb-reveal--${phase}`,
+        style: { width: CARD_W2, height: CARD_H2 },
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-reveal__outer-glow", "aria-hidden": "true" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bomb-reveal__inner", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-reveal__face bomb-reveal__face--back", children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: backUrl, alt: "", draggable: false }) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bomb-reveal__face bomb-reveal__face--front", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: faceUrl, alt: "💣", draggable: false }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-reveal__pulse-ring", "aria-hidden": "true" })
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-reveal__countdown", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("svg", { viewBox: "0 0 120 120", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("defs", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("linearGradient", { id: "bomb-countdown-grad", x1: "0%", y1: "0%", x2: "100%", y2: "100%", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "0%", stopColor: "#ff8a4a" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "100%", stopColor: "#ff2020" })
+            ] }) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "circle",
+              {
+                cx: "60",
+                cy: "60",
+                r: "54",
+                fill: "none",
+                stroke: "rgba(255,255,255,0.1)",
+                strokeWidth: "6"
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "circle",
+              {
+                cx: "60",
+                cy: "60",
+                r: "54",
+                fill: "none",
+                stroke: "url(#bomb-countdown-grad)",
+                strokeWidth: "6",
+                strokeLinecap: "round",
+                strokeDasharray: `${2 * Math.PI * 54} ${2 * Math.PI * 54}`,
+                className: "bomb-countdown-bar"
+              }
+            )
+          ] }) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bomb-reveal__label", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-reveal__name", children: memberName || "Bạn" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bomb-reveal__text", children: [
+              phase === "back" && "Đang rút...",
+              (phase === "flip" || phase === "face" || phase === "hold") && "💣 rút trúng bom!",
+              phase === "explode" && "💥 NỔ!",
+              phase === "fadeout" && "💚 An toàn"
+            ] })
+          ] })
+        ]
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-shockwaves", "aria-hidden": "true", children: [0, 1, 2, 3, 4].map((i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
       "span",
       {
-        className: "bomb-reveal-rings__ring",
+        className: "bomb-shockwave",
         style: { animationDelay: `${i * 0.4}s` }
       },
       i
     )) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `bomb-reveal bomb-reveal--${phase}`, children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-reveal__halo", "aria-hidden": "true" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-reveal__aura", "aria-hidden": "true" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bomb-reveal__inner", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-reveal__face bomb-reveal__face--back", children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: backUrl, alt: "", draggable: false }) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bomb-reveal__face bomb-reveal__face--front", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: faceUrl, alt: "", draggable: false }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "bomb-reveal__pulse-ring", "aria-hidden": "true" })
-        ] })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-reveal__countdown", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("svg", { viewBox: "0 0 100 100", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "circle",
-          {
-            cx: "50",
-            cy: "50",
-            r: "46",
-            fill: "none",
-            stroke: "rgba(255,255,255,0.12)",
-            strokeWidth: "6"
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "circle",
-          {
-            cx: "50",
-            cy: "50",
-            r: "46",
-            fill: "none",
-            stroke: "url(#bomb-countdown-grad)",
-            strokeWidth: "6",
-            strokeLinecap: "round",
-            transform: "rotate(-90 50 50)",
-            strokeDasharray: `${2 * Math.PI * 46} ${2 * Math.PI * 46}`,
-            className: "bomb-reveal__countdown-bar"
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("defs", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("linearGradient", { id: "bomb-countdown-grad", x1: "0%", y1: "0%", x2: "100%", y2: "100%", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "0%", stopColor: "#ff8a4a" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("stop", { offset: "100%", stopColor: "#ff3030" })
-        ] }) })
-      ] }) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bomb-reveal__label", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "bomb-reveal__name", children: memberName || "Bạn" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "bomb-reveal__text", children: [
-          phase === "back" && "Đang rút...",
-          (phase === "flip" || phase === "face" || phase === "hold") && "rút trúng bom!",
-          phase === "explode" && "💥 NỔ!",
-          phase === "fadeout" && "An toàn — có lá Cứu"
-        ] })
-      ] })
-    ] })
+    phase === "explode" && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-camera-flash", "aria-hidden": "true" })
   ] });
 }
 function BombExplode({ memberName, onComplete }) {
@@ -1396,55 +1365,58 @@ function BombExplode({ memberName, onComplete }) {
   if (!mounted) return null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-explode-flash", "aria-hidden": "true" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bomb-explode bomb-explode--fireball", "aria-hidden": "true", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-explode__core" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-explode__ring bomb-explode__ring--1" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-explode__ring bomb-explode__ring--2" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-explode__ring bomb-explode__ring--3" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-explode__flame-ring" }),
-      Array.from({ length: 16 }).map((_, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "span",
-        {
-          className: "bomb-explode__shard",
-          style: {
-            "--angle": `${i / 16 * 360}deg`,
-            "--dist": `${320 + i % 3 * 80}px`,
-            "--delay": `${80 + i % 4 * 50}ms`
-          }
-        },
-        i
-      )),
-      Array.from({ length: 28 }).map((_, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "span",
-        {
-          className: "bomb-explode__spark",
-          style: {
-            "--angle": `${i * 17.3 % 360}deg`,
-            "--dist": `${200 + i * 13 % 220}px`,
-            "--delay": `${30 + i % 5 * 30}ms`,
-            color: i % 3 === 0 ? "#ffeb6b" : i % 3 === 1 ? "#ff8a4a" : "#ff4242"
-          }
-        },
-        `s-${i}`
-      )),
-      Array.from({ length: 8 }).map((_, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "span",
-        {
-          className: "bomb-explode__puff",
-          style: {
-            "--angle": `${i / 8 * 360}deg`,
-            "--delay": `${120 + i % 4 * 80}ms`
-          }
-        },
-        `p-${i}`
-      ))
-    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-explode-vignette", "aria-hidden": "true" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-explode bomb-explode--core", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-explode__core-inner" }) }),
+    [0, 1, 2].map((i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        className: `bomb-explode bomb-explode__ring bomb-explode__ring--${i}`,
+        style: { animationDelay: `${0.05 + i * 0.15}s` },
+        "aria-hidden": "true"
+      },
+      i
+    )),
+    Array.from({ length: 20 }).map((_, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "span",
+      {
+        className: "bomb-explode__shard",
+        style: {
+          "--ang": `${i / 20 * 360}deg`,
+          "--dist": `${320 + i % 4 * 90}px`,
+          "--delay": `${60 + i % 5 * 50}ms`
+        }
+      },
+      `shard-${i}`
+    )),
+    Array.from({ length: 32 }).map((_, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "span",
+      {
+        className: "bomb-explode__spark",
+        style: {
+          "--ang": `${i * 17.3 % 360}deg`,
+          "--dist": `${200 + i * 13 % 220}px`,
+          "--delay": `${30 + i % 6 * 30}ms`,
+          color: i % 3 === 0 ? "#ffeb6b" : i % 3 === 1 ? "#ff8a4a" : "#ff4242"
+        }
+      },
+      `sp-${i}`
+    )),
+    Array.from({ length: 8 }).map((_, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "span",
+      {
+        className: "bomb-explode__puff",
+        style: {
+          "--ang": `${i / 8 * 360}deg`,
+          "--delay": `${120 + i % 4 * 80}ms`
+        }
+      },
+      `puff-${i}`
+    )),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bomb-explode-label", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "bomb-explode-label__glyph", children: "💥" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "bomb-explode-label__text", children: memberName ? `${memberName} đã nổ` : "Bạn đã nổ" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "bomb-explode-label__sub", children: "Bị loại khỏi ván" })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-explode-vignette", "aria-hidden": "true" })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-explode-label__glyph", children: "💥" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-explode-label__text", children: memberName ? `${memberName} đã nổ` : "Bạn đã nổ" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bomb-explode-label__sub", children: "Đã bị loại khỏi ván" })
+    ] })
   ] });
 }
 const FLIP_MS = 720;
@@ -1662,7 +1634,7 @@ function GamePage() {
   const [bombExplode, setBombExplode] = reactExports.useState(null);
   const lastTurnRef = reactExports.useRef(null);
   const lastDrawnRef = reactExports.useRef(null);
-  const gsRef = reactExports.useRef(gs);
+  const gsRef = reactExports.useRef(null);
   reactExports.useEffect(() => {
     gsRef.current = gs;
   }, [gs]);
@@ -2128,7 +2100,7 @@ function GamePage() {
       } catch (e) {
         toast?.error?.(e.message || "Combo thất bại.");
       } finally {
-        actionInFlightRef.current = false;
+        pickInFlightRef.current = false;
       }
     },
     [audio, myId, pickModal, roomId, toast]
@@ -2273,7 +2245,7 @@ function GamePage() {
     const memberName = member?.name || "Bạn";
     const isLocal = gs.lastDrawnBy === myId;
     const stillAlive = gs.alive?.[gs.lastDrawnBy] !== false;
-    const willDefuse = !!(isLocal && stillAlive && (myHand || []).some((c) => COMBO_KEYS.includes(c)));
+    const willDefuse = !!(isLocal && stillAlive && (myHand || []).some((c) => c === "defuse" || COMBO_KEYS.includes(c)));
     setBombReveal({
       memberId: gs.lastDrawnBy,
       memberName,

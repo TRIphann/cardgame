@@ -1,22 +1,23 @@
 // DrawAnimation — cinematic rút bài.
 //
-// Card peels off the top of the deck (back face), flies in an arc towards
-// the player's hand, then flips to its face mid-flight. Lands smoothly with
-// a soft glow that fades as the hand absorbs the card.
+// Card peels off the top of the deck (back face), flies in an arc toward
+// the player's hand, flips mid-flight, then GLOW-PUNCHES into the hand and
+// vanishes — no lingering ghost cards.
 //
-// Visual stack:
-//   1. Trail particle fountain (gold) following the card mid-flight
-//   2. Soft glow halo behind the card
-//   3. The card itself, flipping around the Y axis
-//   4. Sparkle burst at the hand on landing
+// Visual phases:
+//   1. Pop off deck (scale up + lift)
+//   2. Arc flight with trailing sparks
+//   3. Y-axis flip at apex (mid-flight)
+//   4. Landing impact: glow burst + scale punch + immediate vanish
 
 import React, { useEffect, useRef, useState } from "react";
 import { cardImageUrl } from "@games/exploding-cats/cardCloudinary.js";
 
-const FLIGHT_MS = 780;
-const FLIP_AT_PCT = 0.55;
-const VANISH_MS = 320;
-const SPARK_COUNT = 12;
+const FLIGHT_MS  = 520;   // total animation duration (ms)
+const FLIP_AT    = 0.45;  // fraction of flight when flip triggers (0–1)
+const LAND_DELAY = 60;     // ms after landing before vanish starts
+const VANISH_MS  = 180;   // vanish fade+scale duration
+const SPARK_N    = 14;    // trail spark count
 
 export function DrawAnimation({
   sourceRect,
@@ -35,14 +36,19 @@ export function DrawAnimation({
       onCompleteRef.current?.();
       return undefined;
     }
+    // Flip triggers at FLIGHT_MS * FLIP_AT of the flight.
     const tFlip = setTimeout(() => {
       if (revealKey && revealKey !== "bomb") setFlipped(true);
-    }, FLIGHT_MS * FLIP_AT_PCT);
-    const tDone = setTimeout(() => {
+    }, FLIGHT_MS * FLIP_AT);
+
+    // After landing impact delay, vanish the card.
+    const tVanish = setTimeout(() => {
       setMounted(false);
-      onCompleteRef.current?.();
-    }, FLIGHT_MS + VANISH_MS);
-    return () => { clearTimeout(tFlip); clearTimeout(tDone); };
+      // Call onComplete after the vanish transition finishes.
+      setTimeout(() => onCompleteRef.current?.(), VANISH_MS);
+    }, FLIGHT_MS + LAND_DELAY);
+
+    return () => { clearTimeout(tFlip); clearTimeout(tVanish); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -50,72 +56,85 @@ export function DrawAnimation({
 
   const startX = sourceRect.left + sourceRect.width / 2;
   const startY = sourceRect.top + sourceRect.height / 2;
-  const endX = targetRect.left + targetRect.width / 2;
-  const endY = targetRect.top + targetRect.height / 2;
-  const cardW = 110;
-  const cardH = 157;
+  const endX   = targetRect.left + targetRect.width / 2;
+  const endY   = targetRect.top + targetRect.height / 2;
+  const cardW  = 110;
+  const cardH  = 157;
 
-  const cardStyle = {
-    position: "fixed",
-    left: 0,
-    top: 0,
-    width: cardW,
-    height: cardH,
-    zIndex: 200,
-    pointerEvents: "none",
-    "--start-x": `${startX - cardW / 2}px`,
-    "--start-y": `${startY - cardH / 2}px`,
-    "--end-x":   `${endX   - cardW / 2}px`,
-    "--end-y":   `${endY   - cardH / 2}px`,
-  };
+  // Apex of the arc (higher than both start & end).
+  const apexX  = (startX + endX) / 2;
+  const apexY  = Math.min(startY, endY) - 110;
+
+  // Landing position (end of flight).
+  const endScaledX = endX - cardW / 2;
+  const endScaledY = endY - cardH / 2;
 
   const showFace = flipped && !!revealKey && revealKey !== "bomb";
 
-  // Trail particles - 12 small sparks that follow the card mid-flight
-  const trail = Array.from({ length: SPARK_COUNT }).map((_, i) => ({
+  // Trail sparks staggered along the arc.
+  const sparks = Array.from({ length: SPARK_N }).map((_, i) => ({
     i,
-    delay: (i / SPARK_COUNT) * FLIGHT_MS * 0.7,
-    size: 4 + (i % 3) * 2,
+    // Interpolate position along the arc at fraction t.
+    t:     (i / (SPARK_N - 1)) * 0.85,
+    delay: (i / SPARK_N) * FLIGHT_MS * 0.65,
+    size:  3 + (i % 3) * 2,
   }));
 
   return (
     <>
-      {/* Trail particle fountain following the card */}
-      <div className="draw-anim-trail" style={cardStyle}>
-        {trail.map((t) => (
-          <span
-            key={t.i}
-            className="draw-anim-trail__spark"
+      {/* Trail sparks — follow the card arc then dissipate */}
+      {sparks.map((s) => {
+        const frac  = s.t;
+        const x     = startX + (apexX - startX) * frac + (endX - apexX) * frac;
+        const y     = startY + (apexY - startY) * frac + (endY - apexY) * frac;
+        const sx    = x - 3;
+        const sy    = y - 3;
+        return (
+          <div
+            key={s.i}
+            className="draw-trail-spark"
             style={{
-              "--delay": `${t.delay}ms`,
-              width: `${t.size}px`,
-              height: `${t.size}px`,
+              left:       sx,
+              top:        sy,
+              width:      s.size,
+              height:     s.size,
+              animationDelay: `${s.delay}ms`,
             }}
           />
-        ))}
-      </div>
+        );
+      })}
 
-      {/* Glow halo at the source (deck) - signals something was drawn */}
+      {/* Glow halo at deck source — "something is leaving" */}
       <div
-        className="draw-anim-halo"
+        className="draw-source-glow"
         style={{
-          position: "fixed",
-          left: startX - 80,
-          top: startY - 80,
-          width: 160,
-          height: 160,
-          pointerEvents: "none",
-          zIndex: 199,
+          left:   startX - 90,
+          top:    startY - 90,
+          width:  180,
+          height: 180,
         }}
       />
 
       {/* The card itself */}
-      <div className="draw-anim" style={cardStyle}>
-        <div className={`draw-anim__inner${showFace ? " draw-anim__inner--flipped" : ""}`}>
-          <div className="draw-anim__face draw-anim__face--back">
+      <div
+        className={`draw-card${showFace ? " draw-card--flipped" : ""}`}
+        style={{
+          width:                  cardW,
+          height:                 cardH,
+          ["--dc-start-x"]:       `${startX - cardW / 2}px`,
+          ["--dc-start-y"]:       `${startY - cardH / 2}px`,
+          ["--dc-apex-x"]:        `${apexX - cardW / 2}px`,
+          ["--dc-apex-y"]:        `${apexY - cardH / 2}px`,
+          ["--dc-end-x"]:         `${endScaledX}px`,
+          ["--dc-end-y"]:         `${endScaledY}px`,
+          ["--dc-flip-at"]:       FLIGHT_MS * FLIP_AT,
+        }}
+      >
+        <div className="draw-card__inner">
+          <div className="draw-card__face draw-card__face--back">
             <img src={cardImageUrl("back")} alt="" draggable={false} />
           </div>
-          <div className="draw-anim__face draw-anim__face--front">
+          <div className="draw-card__face draw-card__face--front">
             {showFace && (
               <img src={cardImageUrl(revealKey)} alt={revealKey} draggable={false} />
             )}
@@ -123,30 +142,14 @@ export function DrawAnimation({
         </div>
       </div>
 
-      {/* Sparkle burst at landing target */}
+      {/* Landing impact burst */}
       <div
-        className="draw-anim-burst"
+        className="draw-landing-burst"
         style={{
-          position: "fixed",
-          left: endX,
-          top: endY,
-          width: 0,
-          height: 0,
-          pointerEvents: "none",
-          zIndex: 201,
+          left:   endX,
+          top:    endY,
         }}
-        aria-hidden="true"
-      >
-        {Array.from({ length: 8 }).map((_, i) => (
-          <span
-            key={i}
-            className="draw-anim-burst__spark"
-            style={{
-              "--angle": `${(i / 8) * 360}deg`,
-            }}
-          />
-        ))}
-      </div>
+      />
     </>
   );
 }
