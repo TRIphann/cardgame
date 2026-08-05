@@ -45,11 +45,18 @@ public class GameActionResult
     public bool RequiresDefuse { get; set; }
     // Set when the player needs to pick a discard card (5-any combo).
     public bool RequiresDiscardPick { get; set; }
-    // Set when the player needs to pick a target (2-same combo or Favor).
+    // Set when the player needs to pick a target (2-same combo or Favor phase 1).
     public bool RequiresTargetPick { get; set; }
-    // Set when the player needs to pick a card from Favor's revealed hand.
+    // Set when the ACTOR needs to pick a card from the Favor target's hand.
+    // (retained for combo-2 backward-compat — Favor now uses RequiresFavorTargetPick)
     public bool RequiresFavorPick { get; set; }
-    // Cards the player can pick from (server-side shuffled target hand).
+    // NEW: set when the Favor TARGET needs to pick which of their cards to give.
+    // Read by the controller to surface "FavorTargetId" + "RequiresFavorTargetPick"
+    // to the right client (only the target sees the picker).
+    public bool RequiresFavorTargetPick { get; set; }
+    public string? FavorTargetId { get; set; }
+    // Cards the player can pick from (server-side shuffled target hand,
+    // or target's hand when they're the picker for a Favor).
     public List<string>? FavorCandidates { get; set; }
     // Set when future card peeked top-3 deck cards (3 cards max).
     public List<string>? FuturePeek { get; set; }

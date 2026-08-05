@@ -70,15 +70,18 @@ public static class CardCatalog
     /// Card counts for N players (per the user-confirmed spec):
     ///   Bombs       = N - 1   (the last survivor dodges all)
     ///   Future      = N       ("Xem 1 tí")
-    ///   Defuse      = N       (combo defuse variants + 5 base types — exactly
-    ///                          1 per player, no leftover in deck to keep
-    ///                          distribution fair across players)
-    ///   Combo N-1 each (robot, zombie, ninja, superman, hải-tặc)  = 5(N-1)
-    ///   Attack      = N - 1   ("Bốc đi") — N-1 per spec
-    ///   Favor       = N - 1   ("Cho xin") — N-1 per spec
+    ///   Defuse      = N + 1   (one deal for each player on deal start, plus
+    ///                          1 leftover that can be dealt to anyone in the
+    ///                          random 4-card deals — gives the deck a defuse
+    ///                          in circulation so a player who used their cứu
+    ///                          can pick up a new one)
+    ///   Combo total = N - 1   (split evenly across the 5 types — any combo
+    ///                          card can substitute for any other when N < 5)
+    ///   Attack      = N - 1
+    ///   Favor       = N - 1
     ///   Skip        = N - 1
-    ///   Shuffle     = N - 1   ("Xào xáo")
-    ///   Nope        = N       ("Cản") — N per spec so every player can chain
+    ///   Shuffle     = N - 1
+    ///   Nope        = N
     /// </summary>
     public static List<string> BuildDeck(int playerCount)
     {
@@ -97,11 +100,9 @@ public static class CardCatalog
         AddCopies(deck, Future, playerCount);
         AddCopies(deck, Nope, playerCount);
 
-        // Exactly N defuse-class cards distributed across the base defuse
-        // + 5 combo variants. StartGame deals exactly 1 to each player and
-        // nothing enters the deck — keeps every player's starting hand
-        // symmetric (1 cứu + 4 random action cards).
-        AddCopies(deck, Defuse, playerCount);
+        // N + 1 defuse-class cards (N dealt to players first, 1 leftover lands
+        // inside the 4-card deals).
+        AddCopies(deck, Defuse, playerCount + 1);
 
         // N - 1 copies each for the "consumable" action cards.
         AddCopies(deck, Attack, playerCount - 1);
@@ -110,6 +111,12 @@ public static class CardCatalog
         AddCopies(deck, Skip, playerCount - 1);
 
         // Combo defuse variants: N - 1 total distributed across the 5 types.
+        // For small N (e.g. N=3 → 2 cards total), each combo variant gets
+        // ⌊(N-1)/5⌋ copies with the remainder distributed to the first
+        // types in the array. Players with < 5 types in the deck can still
+        // build combos by stacking DIFFERENT combo variants (rule is "any
+        // N combo cards" until a single type has enough to make a same-type
+        // combo in larger games).
         var comboCopies = playerCount - 1;
         var comboPerType = comboCopies / ComboDefuses.Count;
         var comboRemainder = comboCopies % ComboDefuses.Count;
@@ -139,18 +146,28 @@ public static class CardCatalog
     /// <summary>
     /// Detect the highest combo the actor can play from their hand.
     /// Returns null if no combo is possible.
-    /// Combo precedence: 5-of-any > 3-same > 2-same.
+    /// Combo precedence: 5-of-any > 3-of-any-mix > 2-of-any-mix.
+    ///
+    /// Per the user-confirmed spec: when playerCount is < 5 the player base
+    /// may not have 5 distinct combo types in circulation, so 2-same and
+    /// 3-same combos accept MIXED combo types (any 2 / any 3 combo cards
+    /// from the 5-variant pool, no requirement that they be identical).
+    /// This keeps combos playable in 3-4 player games where the deck only
+    /// contains ⌊(N-1)/5⌋ copies of any single variant.
     /// </summary>
-    public static ComboKind? DetectCombo(IReadOnlyList<string> hand)
+    public static ComboKind? DetectCombo(IReadOnlyList<string> hand, int playerCount = 5)
     {
         var comboCount = hand.Count(IsComboDefuse);
+        // 5-any is always "any 5 combo cards" regardless of player count.
         if (comboCount >= 5) return ComboKind.FiveAny;
-        // Check for 3 same
+        // 3-same: if N >= 5, require same-type; if N < 5, allow mixed types.
+        if (comboCount >= 3 && playerCount < 5) return ComboKind.ThreeSame;
         foreach (var v in ComboDefuses)
         {
             if (hand.Count(c => c == v) >= 3) return ComboKind.ThreeSame;
         }
-        // Check for 2 same
+        // 2-same: same rule as above.
+        if (comboCount >= 2 && playerCount < 5) return ComboKind.TwoSame;
         foreach (var v in ComboDefuses)
         {
             if (hand.Count(c => c == v) >= 2) return ComboKind.TwoSame;

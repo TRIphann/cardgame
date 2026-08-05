@@ -22,6 +22,8 @@ public record DefuseRequest(string MemberId, int SlotIndex);
 
 public record NopeRequest(string MemberId);
 
+public record CancelPendingRequest(string MemberId, string CardKey, string ComboKind);
+
 public record RoomMemberDto(string Id, string Name, bool IsHost, bool IsReady, bool IsOnline, DateTime JoinedAt, DateTime LastSeenAt);
 
 // NOTE: DeckCount intentionally excluded from the public DTO — no player should
@@ -61,7 +63,15 @@ public record GameStateDto(
     IReadOnlyList<string>? TurnOrder = null,
     // Persisted FuturePeek — survives SignalR snapshot re-fetch so the modal
     // can re-render correctly when players reconnect.
-    IReadOnlyList<string>? FuturePeek = null);
+    IReadOnlyList<string>? FuturePeek = null,
+    // Favor-pick pending state — surfaces which player must pick the card
+    // they want to give, and the shuffled candidate list.
+    PendingFavorPickDto? PendingFavorPick = null);
+
+public record PendingFavorPickDto(
+    string TargetMemberId,
+    string InitiatorId,
+    IReadOnlyList<string> ShuffledCandidates);
 
 public record PendingActionDto(string InitiatorId, string CardKey, IReadOnlyList<string> NopeChain, string CreatedAt);
 
@@ -86,7 +96,17 @@ public record GameActionResponse(
     bool RequiresDefuse,
     bool RequiresDiscardPick,
     bool RequiresTargetPick,
-    bool RequiresFavorPick,
+    /// <summary>
+    /// True after the actor played Favor and chose a target; the target now
+    /// needs to pick which of their cards to give (per the user-confirmed
+    /// spec: the target picks, not the actor).
+    /// </summary>
+    bool RequiresFavorTargetPick,
+    /// <summary>
+    /// The target player who must pick which card to give. Null when no
+    /// target-pick is pending.
+    /// </summary>
+    string? FavorTargetId,
     IReadOnlyList<string>? FavorCandidates,
     IReadOnlyList<string>? FuturePeek,
     bool RequiresMoreDraws = false,

@@ -114,7 +114,7 @@ public class RoomsController : ControllerBase
         return Ok(new GameActionResponse(
             MapToDto(result.Room, request.MemberId),
             result.Toast, null,
-            false, false, false, false, null, null));
+            false, false, false, false, null, null, null));
     }
 
     [HttpPost("{id}/start")]
@@ -156,7 +156,7 @@ public class RoomsController : ControllerBase
             MapToDto(result.Room, request.MemberId),
             result.Toast, result.DrawnCardKey,
             result.RequiresDefuse, result.RequiresDiscardPick, result.RequiresTargetPick,
-            result.RequiresFavorPick, result.FavorCandidates,
+            result.RequiresFavorTargetPick, result.FavorTargetId, result.FavorCandidates,
             result.FuturePeek,
             result.RequiresMoreDraws, result.RemainingDraws));
     }
@@ -172,7 +172,26 @@ public class RoomsController : ControllerBase
             MapToDto(result.Room, request.MemberId),
             result.Toast, result.DrawnCardKey,
             result.RequiresDefuse, result.RequiresDiscardPick, result.RequiresTargetPick,
-            result.RequiresFavorPick, result.FavorCandidates,
+            result.RequiresFavorTargetPick, result.FavorTargetId, result.FavorCandidates,
+            result.FuturePeek,
+            result.RequiresMoreDraws, result.RemainingDraws));
+    }
+
+    [HttpPost("{id}/game/cancel-pending")]
+    public async Task<ActionResult<GameActionResponse>> CancelPending(
+        [FromRoute] string id,
+        [FromBody] CancelPendingRequest request,
+        CancellationToken ct)
+    {
+        if (!Enum.TryParse<ComboKind>(request.ComboKind, true, out var ck))
+            throw new ArgumentException("combo_kind_invalid", nameof(request.ComboKind));
+        var result = await _gameService.CancelPendingActionAsync(
+            id, request.MemberId, request.CardKey, ck, ct);
+        return Ok(new GameActionResponse(
+            MapToDto(result.Room, request.MemberId),
+            result.Toast, result.DrawnCardKey,
+            result.RequiresDefuse, result.RequiresDiscardPick, result.RequiresTargetPick,
+            result.RequiresFavorTargetPick, result.FavorTargetId, result.FavorCandidates,
             result.FuturePeek,
             result.RequiresMoreDraws, result.RemainingDraws));
     }
@@ -188,7 +207,7 @@ public class RoomsController : ControllerBase
             MapToDto(result.Room, request.MemberId),
             result.Toast, result.DrawnCardKey,
             result.RequiresDefuse, result.RequiresDiscardPick, result.RequiresTargetPick,
-            false, null,
+            false, null, null,
             result.FuturePeek));
     }
 
@@ -202,7 +221,7 @@ public class RoomsController : ControllerBase
         return Ok(new GameActionResponse(
             MapToDto(result.Room, request.MemberId),
             result.Toast, result.DrawnCardKey,
-            false, false, false, false, null, null));
+            false, false, false, false, null, null, null));
     }
 
     // ── Mappers ───────────────────────────────────────────────────────
@@ -276,7 +295,19 @@ public class RoomsController : ControllerBase
                 ? Math.Max(0, (int)(60 - (DateTime.UtcNow - gs.TurnStartedAt.Value).TotalSeconds))
                 : 60,
             gs.TurnOrder?.ToList() ?? new List<string>(),
-            futurePeek?.ToList() ?? new List<string>());
+            futurePeek?.ToList() ?? new List<string>(),
+            // Favor-pick pending DTO. The TARGET is the only player who
+            // needs the candidate list — everyone else (including the
+            // initiator) sees null so they don't accidentally pick for
+            // someone else.
+            gs.PendingFavorPick is null
+                ? null
+                : new PendingFavorPickDto(
+                    gs.PendingFavorPick.TargetMemberId,
+                    gs.PendingFavorPick.InitiatorId,
+                    string.Equals(gs.PendingFavorPick.TargetMemberId, viewerMemberId, StringComparison.Ordinal)
+                        ? gs.PendingFavorPick.ShuffledCandidates
+                        : new List<string>()));
     }
 
     private static RoomMemberDto MapMemberDto(RoomMember m) => new(

@@ -149,6 +149,15 @@ export const roomsApi = {
       body: JSON.stringify(payload),
     });
   },
+  // Cancel a pending combo target pick after the user dismissed the
+  // picker. Spent combo cards + advance the turn so the player doesn't
+  // stay stuck on a "phase 1" combo action they no longer want to finish.
+  cancelPending(roomId, payload) {
+    return jsonRequest(`/api/rooms/${roomId}/game/cancel-pending`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
   drawCard(roomId, memberId) {
     return jsonRequest(`/api/rooms/${roomId}/game/draw-card`, {
       method: "POST",

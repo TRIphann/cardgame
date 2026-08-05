@@ -1,17 +1,23 @@
 // FuturePeekModal — cinematic 3-card reveal.
 //
-// Cards fly from the deck pile to centre-screen, flip cascade, hover with
-// purple halo backdrop + floating particles. Info pill below.
-// F-1 fix: confirm dialog when closing early if >20s remain.
+// Per the user-confirmed spec the player can study the 3 cards and the modal
+// MUST stay open until either:
+//   * the local player's turn timer drops to <= 10s (then we auto-close), or
+//   * the player explicitly clicks "Úp xuống & đặt lại" (with a confirm
+//     dialog if > 20s remain on the turn clock — the spec says "nếu thời gian
+//     còn 20s thì không hiện thông báo đó", meaning ≥20s requires confirm).
+//
+// When the modal closes the player continues with their normal turn — the
+// deck positions are NOT altered (the spec says "Úp xuống & đặt lại", i.e.
+// just hide the peek overlay, the cards stay where they were).
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { cardImageUrl } from "@games/exploding-cats/cardCloudinary.js";
 import { getCardLabel } from "./cardLabels.js";
 
-const FLIP_STAGGER_MS  = 500;  // ms between each card flip
-const HOLD_MS          = 4000;  // total hold after last flip
-const AUTO_DISMISS_MS  = FLIP_STAGGER_MS * 2 + HOLD_MS;
-const CONFIRM_THRESHOLD_SEC = 20;
+const FLIP_STAGGER_MS       = 400;  // ms between each card flip (still fast but readable)
+const AUTO_CLOSE_SEC       = 10;   // auto-close when turn timer ≤ this
+const CONFIRM_THRESHOLD_SEC = 20;  // confirm dialog when turn timer > this
 
 export function FuturePeekModal({ peek, onClose, originRect, turnRemainingSec = 60 }) {
   const [revealedCount, setRevealedCount] = useState(0);
@@ -28,12 +34,32 @@ export function FuturePeekModal({ peek, onClose, originRect, turnRemainingSec = 
     return () => timers.forEach(clearTimeout);
   }, [peek]);
 
-  // Auto-dismiss after hold window.
+  // Auto-close when the local player's turn drops to ≤ AUTO_CLOSE_SEC.
+  // The actor still keeps their turn clock — closing the peek just hides
+  // the overlay, doesn't draw or change anything in the deck.
   useEffect(() => {
     if (!peek || peek.length === 0) return undefined;
-    const t = setTimeout(() => onClose?.(), AUTO_DISMISS_MS);
+    if (typeof turnRemainingSec !== "number") return undefined;
+    if (turnRemainingSec > AUTO_CLOSE_SEC) return undefined;
+    const t = setTimeout(() => onClose?.(), 50);
     return () => clearTimeout(t);
-  }, [peek, onClose]);
+  }, [peek, turnRemainingSec, onClose]);
+
+  // ESC key: trigger confirm logic or direct close.
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key !== "Escape" && e.key !== "Esc") return;
+      if (showConfirm) { setShowConfirm(false); return; }
+      if (turnRemainingSec > CONFIRM_THRESHOLD_SEC) {
+        setShowConfirm(true);
+        setTimeout(() => confirmRef.current?.querySelector("button")?.focus(), 50);
+      } else {
+        onClose?.();
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [showConfirm, turnRemainingSec, onClose]);
 
   // ESC key: trigger confirm logic or direct close.
   useEffect(() => {
@@ -158,9 +184,11 @@ export function FuturePeekModal({ peek, onClose, originRect, turnRemainingSec = 
       <div className="future-peek-info">
         <div className="future-peek-info__title">Xem trước 3 lá</div>
         <div className="future-peek-info__sub">
-          {turnRemainingSec <= CONFIRM_THRESHOLD_SEC
-            ? `Còn ${turnRemainingSec}s — đóng không cần xác nhận`
-            : "Lá trái = bạn rút tiếp. Hai lá còn lại = người kế tiếp."}
+          {turnRemainingSec <= AUTO_CLOSE_SEC
+            ? `Còn ${turnRemainingSec}s — sẽ tự đóng sau khi bạn sẵn sàng`
+            : turnRemainingSec <= CONFIRM_THRESHOLD_SEC
+              ? `Còn ${turnRemainingSec}s — đóng không cần xác nhận`
+              : "Lá trái = bạn rút tiếp. Hai lá còn lại = người kế tiếp."}
         </div>
         <button
           type="button"

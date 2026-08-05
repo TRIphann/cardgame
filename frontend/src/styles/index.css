@@ -17,7 +17,18 @@
   pointer-events: none;
   /* Sits BEHIND every page (which all set position:relative z-index>=1) so
      floating cards stay visible across navigation. Pages override this with
-     `position: relative; z-index: 1;` so they stay on top. */
+     `position: relative; z-index: 1;` so they stay on top.
+     This needs its OWN background because pages are now `height: 100vh`
+     (can be shorter than the actual viewport on mobile when the browser
+     chrome hides/shows). Without this background the radial-gradient on
+     `.game-page` would only fill the 100vh box and you'd see the body color
+     peek through at the bottom-right where the viewport is taller. */
+  background:
+    radial-gradient(ellipse at 20% 10%, rgba(110, 60, 200, 0.28), transparent 60%),
+    radial-gradient(ellipse at 85% 90%, rgba(220, 70, 140, 0.22), transparent 65%),
+    radial-gradient(ellipse at 50% 50%, rgba(40, 30, 90, 0.4), transparent 80%),
+    linear-gradient(180deg, #0a0820 0%, #060314 100%);
+  background-attachment: fixed;
   z-index: -1;
 }
 .arc-ambient .ambient,

@@ -306,6 +306,35 @@ export default function GamePage() {
     setFuturePeek(gs.futurePeek);
   }, [gs?.futurePeek]);
 
+  // Favor target-pick: when a Favor card lands and we're the TARGET, the
+  // server tells us via gs.pendingFavorPick (TargetMemberId === myId). We
+  // auto-open the card-pick modal so the target can choose which card to
+  // hand over. Once they pick, the modal closes and the snapshot clears
+  // gs.pendingFavorPick on the next tick.
+  useEffect(() => {
+    const fp = gs?.pendingFavorPick;
+    if (!fp || !fp.targetMemberId || fp.targetMemberId !== myId) return;
+    // If the picker is already open for this pick (with the same shuffled
+    // candidates), skip — prevents re-opening after every snapshot.
+    setPickModal((cur) => {
+      if (cur && cur.kind === "cardPick" && cur.purpose === "FavorGive" && cur.initiatorId === fp.initiatorId) {
+        return cur;
+      }
+      return {
+        kind: "cardPick",
+        purpose: "FavorGive",
+        cardKey: "favor",
+        title: "Xin — bạn phải đưa 1 lá",
+        sub: `${members.find((m) => m.id === fp.initiatorId)?.name || "Đối thủ"} đã dùng Xin. Hãy chọn 1 lá trên tay để đưa.`,
+        candidates: fp.shuffledCandidates || [],
+        fxColor: "#ffd86b",
+        fxAccent: "#ffeaa3",
+        initiatorId: fp.initiatorId,
+        targetId: myId,
+      };
+    });
+  }, [gs?.pendingFavorPick, myId, members]);
+
   // When the game starts (or a new game is loaded), surface "Bạn sẽ đi
   // thứ X". We dedupe by deep JSON comparison so each new game shows the
   // intro once but re-renders of the same snapshot don't.
@@ -316,6 +345,8 @@ export default function GamePage() {
     const order = gs?.turnOrder;
     if (!order || order.length === 0) {
       lastTurnOrderRef.current = null;
+      // Clear stale intro if game ended (turnOrder gone)
+      if (turnIntro && gameEnded) setTurnIntro(null);
       return;
     }
     const orderKey = order.join(",");
@@ -324,7 +355,11 @@ export default function GamePage() {
     const myIdx = order.indexOf(myId);
     if (myIdx < 0) return;
     setTurnIntro({ order: myIdx + 1, total: order.length, memberId: myId });
-  }, [gs?.turnOrder, myId, futurePeek]);
+    // Auto-dismiss the intro after 2.4s so it doesn't linger when the next
+    // snapshot arrives (no full re-render needed, just hide the bubble).
+    const dismissT = setTimeout(() => setTurnIntro(null), 2400);
+    return () => clearTimeout(dismissT);
+  }, [gs?.turnOrder, myId, futurePeek, gameEnded, turnIntro]);
 
   // When game ends, navigate to summary screen state (kept inside this
   // component, not router change). We also rotate the room after the player
@@ -377,16 +412,29 @@ export default function GamePage() {
   const isComboCard = useCallback((k) => COMBO_KEYS.includes(k), []);
 
   // Helper: detect the highest combo the hand supports. Returns null / 'TwoSame' / 'ThreeSame' / 'FiveAny'.
+  // Per the user-confirmed spec, when alive player count is < 5 the deck
+  // doesn't have 5 distinct combo variants in circulation, so 2/3-same
+  // combos accept MIXED types (any 2/3 combo cards). When N>=5 the strict
+  // same-type rule applies. 5-of-any-mix is always allowed.
   const detectComboFor = useCallback(
     (hand, cardKey) => {
       const comboCount = (hand || []).filter(isComboCard).length;
       if (comboCount >= 5) return "FiveAny";
+      const aliveCount = gs?.alive
+        ? Object.values(gs.alive).filter(Boolean).length
+        : 5;
+      if (aliveCount < 5) {
+        // Mix-type accepted: any 2 or 3 combo cards.
+        if (comboCount >= 3) return "ThreeSame";
+        if (comboCount >= 2) return "TwoSame";
+        return null;
+      }
       const sameCount = (hand || []).filter((c) => c === cardKey).length;
       if (sameCount >= 3) return "ThreeSame";
       if (sameCount >= 2) return "TwoSame";
       return null;
     },
-    [isComboCard],
+    [isComboCard, gs?.alive],
   );
 
   // Dispatch a card play. Strategy:
@@ -440,6 +488,40 @@ export default function GamePage() {
     emitFx(card.key, discardRect, { size: "lg", durationMs: 1500 });
 
     try {
+      // Combo five-any has highest precedence — even if the player clicked
+      // a non-combo card (Attack/Skip/etc), if they have ≥5 combo defuses
+      // the rules say the 5-combo eats those cards. Detect this BEFORE the
+      // combo-card branch so it works regardless of which card the user
+      // clicked.
+      const comboCountInHand = (myHand || []).filter(isComboCard).length;
+      if (comboCountInHand >= 5 && !isComboCard(card.key)) {
+        // 5-of-any: pick the FIRST combo card as the cardKey (server uses it
+        // for validation only — it doesn't matter which one we send).
+        const anyComboKey = (myHand || []).find(isComboCard);
+        const res = await roomsApi.playCard(roomId, {
+          memberId: myId,
+          cardKey: anyComboKey,
+          comboKind: "FiveAny",
+        });
+        audio.playSfx?.("buttonClick");
+        setRoom(res.Room);
+        if (res?.RequiresDiscardPick) {
+          setPickModal({
+            kind: "cardPick",
+            purpose: "FiveAny",
+            cardKey: anyComboKey,
+            title: "Chọn 1 lá từ chồng bỏ",
+            sub: "Các lá đã đánh (trùng nhau chỉ hiện 1 lần).",
+            candidates: res.FavorCandidates || [],
+            fxColor: "#ffd86b",
+            fxAccent: "#a4f2dc",
+          });
+          return;
+        }
+        if (res?.Toast) toast?.info?.(res.Toast);
+        return;
+      }
+
       // Case A: combo card → detect combo + flow
       if (isComboCard(card.key)) {
         const combo = detectComboFor(myHand, card.key);
@@ -695,6 +777,23 @@ export default function GamePage() {
           if (res?.Toast) toast?.info?.(res.Toast);
           return;
         }
+        // NEW: Favor target-give flow. Caller is the TARGET member (not the
+        // actor). The Favor card itself isn't in the target's hand — we use
+        // "favor" as a cardKey with discardPickKey set, and memberId =
+        // target (which is us). The server uses the
+        // PendingFavorPick.TargetMemberId check to identify the action.
+        if (ctx.purpose === "FavorGive") {
+          const res = await roomsApi.playCard(roomId, {
+            memberId: myId,
+            cardKey: "favor",
+            targetMemberId: ctx.initiatorId,
+            discardPickKey: key,
+          });
+          audio.playSfx?.("buttonClick");
+          setRoom(res.Room);
+          if (res?.Toast) toast?.info?.(res.Toast);
+          return;
+        }
         if (ctx.purpose === "ThreeSame") {
           const res = await roomsApi.playCard(roomId, {
             memberId: myId,
@@ -798,23 +897,28 @@ export default function GamePage() {
         setDefuseModal(true);
         if (res?.Toast) toast?.warning?.(res.Toast);
       } else if (res?.RequiresMoreDraws) {
-        // Attack chain: more draws required. Auto-prompt the user but also
-        // offer a small delay so the UI doesn't feel like a firehose.
-        // BUG-4 fix: read from gsRef (live) not the stale closure to check
-        // whether the player is still alive and it's still their turn.
+        // Attack chain: server tells us how many cards remain to draw via
+        // RemainingDraws. We render the card visual we just drew (already
+        // done above) and, if more draws are still needed, fire ONE more
+        // draw animation immediately so the chain feels continuous rather
+        // than having a 1.2s blank gap between draws.
         if (res?.Toast) toast?.info?.(res.Toast);
+
+        // Schedule the next draw after the current card has finished flying.
+        // We use a shorter delay (450ms) so back-to-back attack draws feel
+        // snappy, and we always check gsRef for live state in case the
+        // player died / turn changed in the meantime.
         setTimeout(() => {
           const cur = gsRef.current;
           if (!cur) return;
           const stillAlive = cur.alive?.[myId] !== false;
           const stillMyTurn = cur.currentTurnMemberId === myId;
-          const stillAttacking = (cur.pendingAction?.cardKey === "attack" ||
-            cur.pendingAction?.cardKey === "attack-1" ||
-            cur.pendingAction?.cardKey === "attack-2");
+          const stillAttacking = cur.pendingAction?.cardKey === "attack"
+            && cur.attackCounter > 0;
           if (stillAlive && stillMyTurn && stillAttacking) {
             onDrawCard();
           }
-        }, 1200);
+        }, 450);
       } else if (res?.Toast) {
         if (res?.DrawnCardKey === "bomb") {
           // Player died by drawing a bomb. The BombReveal → BombExplode
@@ -1025,8 +1129,14 @@ export default function GamePage() {
     if (typeof gs?.turnRemainingSec === "number" && gs.turnRemainingSec > 0) {
       return Math.min(gs.turnRemainingSec, turnLimitSec);
     }
+    // Server-computed fallback: even if turnRemainingSec is 0, the server
+    // always sets it to >= 0, so treat 0 as "expired" rather than "missing".
+    if (typeof gs?.turnRemainingSec === "number") {
+      return gs.turnRemainingSec;
+    }
     if (!gs?.turnStartedAt) return null;
     const start = new Date(gs.turnStartedAt).getTime();
+    if (!Number.isFinite(start)) return null;
     const remaining = turnLimitSec * 1000 - (now - start);
     if (remaining <= 0) return 0;
     return Math.ceil(remaining / 1000);
@@ -1104,6 +1214,14 @@ export default function GamePage() {
 
           {/* Action buttons */}
           <div className="game-actions">
+            {/* Attack chain hint — surfaces "Bạn phải rút N lá" before the
+                first draw so players understand why they can't Skip / play a
+                card without burning one of their forced draws. */}
+            {isMyTurn && isAlive && !gameEnded && gs?.attackCounter > 0 && (
+              <span className="game-modal__sub game-attack-hint" aria-live="polite">
+                Bạn phải rút <strong>{gs.attackCounter}</strong> lá
+              </span>
+            )}
             {isMyTurn && isAlive && !gameEnded && (
               <button
                 type="button"
@@ -1183,11 +1301,16 @@ export default function GamePage() {
             // ctx before calling so we can reopen the correct modal on error.
             if (pickInFlightRef.current) return;
             pickInFlightRef.current = true;
+            // BUG-NEW: capture cardKey before clearing modal so the playCard
+            // payload below still has a valid value (actionModal is nulled
+            // out below, so reading actionModal.card.key inside the closure
+            // would throw "Cannot read properties of null").
+            const savedCardKey = actionModal?.card?.key;
             setActionModal(null); // close the player picker
             try {
               const res = await roomsApi.playCard(roomId, {
                 memberId: myId,
-                cardKey: actionModal.card.key,
+                cardKey: savedCardKey,
                 targetMemberId: tid,
               });
               audio.playSfx?.("buttonClick");
@@ -1196,7 +1319,7 @@ export default function GamePage() {
                 setPickModal({
                   kind: "cardPick",
                   purpose: "Favor",
-                  cardKey: actionModal.card.key,
+                  cardKey: savedCardKey,
                   title: "Xin — chọn 1 lá từ tay đối thủ",
                   sub: "Hệ thống đã xáo các lá trên tay đối thủ — chọn 1.",
                   candidates: res.FavorCandidates || [],
@@ -1213,7 +1336,28 @@ export default function GamePage() {
               pickInFlightRef.current = false;
             }
           }}
-          onCancel={() => { setActionModal(null); setSelectedCardIdx(null); }}
+          onCancel={async () => {
+            // BUG-NEW: Favor phase 1 removed the card from the actor's hand
+            // and queued a card-pick modal. If the user closes this picker
+            // instead of choosing a target, server state holds the turn. We
+            // call cancelPending to drop the pick + advance the turn so the
+            // player isn't trapped mid-action.
+            const savedCardKey = actionModal?.card?.key;
+            setActionModal(null);
+            setSelectedCardIdx(null);
+            if (savedCardKey !== "favor") return;
+            try {
+              const res = await roomsApi.cancelPending(roomId, {
+                memberId: myId,
+                cardKey: savedCardKey,
+                comboKind: "Favor",
+              });
+              if (res?.Room) setRoom(res.Room);
+              if (res?.Toast) toast?.info?.(res.Toast);
+            } catch (e) {
+              // Best-effort — toast below covers UX.
+            }
+          }}
         />
       )}
       {pickModal && pickModal.kind === "playerPick" && (
@@ -1225,7 +1369,33 @@ export default function GamePage() {
             .map((m) => ({ ...m, alive: gs?.alive?.[m.id] !== false, handCount: gs?.handCounts?.[m.id] || 0 }))}
           myId={myId}
           onPick={onPickPlayer}
-          onCancel={() => setPickModal(null)}
+          onCancel={async () => {
+            // BUG-NEW: phase-1 combo (TwoSame / ThreeSame) opens this picker
+            // but doesn't advance the turn. If the user closes the picker
+            // without picking a target, the server still holds the turn for
+            // them and the combo cards stay in their hand. Without this
+            // handler the player has to play another card to "escape" —
+            // confusing. Force-finish the combo so we always have a clean
+            // state when the modal closes.
+            const ctx = pickModal;
+            const purpose = ctx?.purpose;
+            setPickModal(null);
+            if (purpose !== "TwoSame" && purpose !== "ThreeSame") return;
+            try {
+              const comboKind = purpose === "TwoSame" ? "TwoSame" : "ThreeSame";
+              const cardKey = ctx?.cardKey;
+              if (!cardKey) return;
+              const res = await roomsApi.cancelPending(roomId, {
+                memberId: myId,
+                cardKey,
+                comboKind,
+              });
+              if (res?.Room) setRoom(res.Room);
+              if (res?.Toast) toast?.info?.(res.Toast);
+            } catch (e) {
+              toast?.error?.(e?.message || "Không thể hủy combo.");
+            }
+          }}
         />
       )}
       {pickModal && pickModal.kind === "cardPick" && (
@@ -1236,7 +1406,38 @@ export default function GamePage() {
           fxColor={pickModal.fxColor}
           fxAccent={pickModal.fxAccent}
           onPick={onPickCard}
-          onCancel={() => setPickModal(null)}
+          onCancel={async () => {
+            // BUG-NEW: card-pick modals for ThreeSame/FiveAny discard pick
+            // and combo-favor card-pick rely on this returning a chosen
+            // key. If the user closes without picking, the server has
+            // consumed combo cards (or Favor) but the turn never advances.
+            // Cancel-pending always costs the actor the spent cards but
+            // gives them their turn back. Only fire for modal purposes
+            // that really own the turn — TwoSame picks happen at the
+            // player-pick modal which already handles cancel.
+            const ctx = pickModal;
+            const purpose = ctx?.purpose;
+            setPickModal(null);
+            if (!purpose) return;
+            const comboPurpose = (
+              purpose === "ThreeSame" || purpose === "FiveAny"
+            );
+            if (!comboPurpose && purpose !== "Favor") return;
+            try {
+              const comboKind = comboPurpose ? purpose : "Favor";
+              const cardKey = ctx?.cardKey;
+              if (!cardKey) return;
+              const res = await roomsApi.cancelPending(roomId, {
+                memberId: myId,
+                cardKey,
+                comboKind,
+              });
+              if (res?.Room) setRoom(res.Room);
+              if (res?.Toast) toast?.info?.(res.Toast);
+            } catch (e) {
+              // Best-effort.
+            }
+          }}
         />
       )}
       {defuseModal && (

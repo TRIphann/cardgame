@@ -246,16 +246,21 @@ public class GameService
         var room = await LoadPlayingRoomAsync(roomId, ct);
         var gs = room.GameState!;
 
-        if (gs.CurrentTurnMemberId != memberId)
-            throw new DomainException("not_your_turn", "Chưa tới lượt của bạn.");
-        if (gs.PendingAction is not null)
-            throw new DomainException("action_pending", "Đang chờ phản ứng Nope.");
+        // Special case: Favor phase 2 — the TARGET (not the actor) is calling
+        // PlayCardAsync to pick which card to give. The target does NOT have
+        // to be the current turn player and does NOT need to actually hold
+        // a Favor card. We skip BOTH turn + hand validation up front so the
+        // favor target-pick flow doesn't trip the standard play-card guards.
+        var isFavorTargetPhase2 = cardKey == CardCatalog.Favor
+            && !string.IsNullOrEmpty(targetMemberId)
+            && !string.IsNullOrEmpty(discardPickKey)
+            && gs.PendingFavorPick is not null
+            && gs.PendingFavorPick.TargetMemberId == memberId;
 
-        var hand = gs.Hands.TryGetValue(memberId, out var h) ? h : new List<string>();
-
-        // Special case: Favor phase 2 — player already spent Favor in phase 1
-        // and is now picking which card to take. We skip the hand check.
-        var isFavorPhase2 = cardKey == CardCatalog.Favor
+        // Standard Favor phase 2 with actor still has the card (legacy path
+        // — kept for backward compat with any code that still calls this).
+        var isFavorPhase2 = !isFavorTargetPhase2
+            && cardKey == CardCatalog.Favor
             && !string.IsNullOrEmpty(targetMemberId)
             && !string.IsNullOrEmpty(discardPickKey);
 
@@ -265,13 +270,30 @@ public class GameService
         var isComboPhase2 = CardCatalog.IsComboDefuse(cardKey)
             && (!string.IsNullOrEmpty(targetMemberId) || !string.IsNullOrEmpty(discardPickKey));
 
-        if (!isFavorPhase2 && !isComboPhase2)
+        // Standard play-card guards — NOT applied to the Favor target-pick
+        // path. The Favor target isn't the current-turn player and may not
+        // have any Favor card in hand (the actor already played it).
+        if (!isFavorTargetPhase2)
+        {
+            if (gs.CurrentTurnMemberId != memberId)
+                throw new DomainException("not_your_turn", "Chưa tới lượt của bạn.");
+            if (gs.PendingAction is not null)
+                throw new DomainException("action_pending", "Đang chờ phản ứng Nope.");
+        }
+
+        // The caller's hand is needed for every code path below — for the
+        // target-pick call the caller's hand IS the target's hand (the one
+        // they're choosing the gift FROM).
+        var hand = gs.Hands.TryGetValue(memberId, out var hh) ? hh : new List<string>();
+
+        if (!isFavorPhase2 && !isComboPhase2 && !isFavorTargetPhase2)
         {
             // Combo defuse variants are only playable as part of a combo (2/3/5).
             // If the client sends a combo card directly, detect the combo.
             if (CardCatalog.IsComboDefuse(cardKey))
             {
-                var combo = CardCatalog.DetectCombo(hand);
+                var playerCount = gs.Alive.Values.Count(v => v);
+                var combo = CardCatalog.DetectCombo(hand, playerCount);
                 if (combo is null)
                 {
                     throw new DomainException("combo_impossible",
@@ -290,14 +312,40 @@ public class GameService
         switch (cardKey)
         {
             case CardCatalog.Attack:
-                gs.AttackCounter += 1;
+                // Attack: the next player must draw 2 cards. We model this
+                // as "AttackCounter = number of cards STILL TO DRAW on the
+                // current turn's chain". Each draw decrements the counter
+                // until it hits 0 and normal turn rotation resumes.
+                //
+                // Per spec:
+                //   "người tiếp theo bắt buộc phải rút 2 lá bài".
+                //   "nếu bạn đang bị người khác attack (tức bạn đang phải rút
+                //    2 lá bài) bạn có thể dùng attack tiếp để cộng dồn attack
+                //    cho người tiếp theo rút 3 lá bài".
+                //
+                // So a fresh attack sets counter = 2; chained attacks add 1
+                // more draw per attack (already +1 from this turn, then +1
+                // more carried over for the next player).
+                if (gs.AttackCounter >= 1)
+                {
+                    // Mid-chain: actor's turn was extended via existing
+                    // chain (they owed some draws to themselves or the next
+                    // player). Add 1 more carry-over draw for the next
+                    // player.
+                    gs.AttackCounter += 1;
+                }
+                else
+                {
+                    // Standard case: 1 attack → next player draws 2.
+                    gs.AttackCounter = 2;
+                }
                 RemoveFromHand(hand, CardCatalog.Attack);
                 gs.CardsPlayed[memberId] = gs.CardsPlayed.GetValueOrDefault(memberId) + 1;
                 gs.TurnsTaken[memberId] = gs.TurnsTaken.GetValueOrDefault(memberId) + 1;
                 // B-1 fix: Attack is NOT Nope-able per spec.
-                // Commit immediately — end current turn, next player draws AttackCounter cards.
+                // Commit immediately — end current turn; next player draws N.
                 AdvanceTurn(gs);
-                result.Toast = "Tấn công! Đối phương phải chơi thêm 1 lượt.";
+                result.Toast = "Tấn công! Đối phương phải rút nhiều lá.";
                 break;
 
             case CardCatalog.Skip:
@@ -305,7 +353,14 @@ public class GameService
                 gs.CardsPlayed[memberId] = gs.CardsPlayed.GetValueOrDefault(memberId) + 1;
                 gs.TurnsTaken[memberId] = gs.TurnsTaken.GetValueOrDefault(memberId) + 1;
                 // B-2 fix: Skip is NOT Nope-able per spec.
-                // Commit immediately — consume 1 draw from attack chain (if any), end turn.
+                // Commit immediately — consume 1 draw from attack chain (if
+                // any), end turn. The next player's chain (if AttackCounter
+                // is still > 0) carries over.
+                // Per spec: "nếu người tiếp theo dùng skip mà ko bị nope thì
+                // người tiếp theo nữa sẽ phải bốc 2 lá bài". This is correct
+                // behavior: skipping consumes one attack draw but doesn't
+                // reset the chain — the attacked player just doesn't have to
+                // do their full forced draw this turn.
                 if (gs.AttackCounter > 0)
                 {
                     gs.AttackCounter -= 1;
@@ -319,69 +374,80 @@ public class GameService
                 break;
 
             case CardCatalog.Favor:
-                if (string.IsNullOrEmpty(targetMemberId))
-                    throw new DomainException("requires_target", "Lá Xin cần chọn đối thủ.");
-                if (!gs.Hands.ContainsKey(targetMemberId))
-                    throw new DomainException("target_not_found", "Đối thủ không hợp lệ.");
-                if (!gs.Alive.GetValueOrDefault(targetMemberId))
-                    throw new DomainException("target_dead", "Đối thủ đã bị loại.");
-
-                var tgtHandF = gs.Hands[targetMemberId];
-                if (tgtHandF.Count == 0)
-                    throw new DomainException("target_empty", "Đối thủ không còn lá bài.");
-
-                // Spending the Favor card now (it's committed). The 5s Nope
-                // window opens so other players can chain Cản. Once the
-                // window expires, the actor picks which card to take from
-                // the target's shuffled hand.
-                RemoveFromHand(hand, CardCatalog.Favor);
-
-                if (string.IsNullOrEmpty(discardPickKey))
+                if (!isFavorTargetPhase2)
                 {
-                    // Phase 1: open Nope window AND ask the actor to pick a
-                    // card from the target's shuffled hand. The Nope window
-                    // stays open until it expires — if anyone chains a Cản
-                    // that cancels the action, the picked card is ignored
-                    // (ResolveExpiredNopeAsync handles the cleanup).
-                    var shuffled = new List<string>(tgtHandF);
+                    // Phase 1: actor picks target. Apply the usual target
+                    // validation.
+                    if (string.IsNullOrEmpty(targetMemberId))
+                        throw new DomainException("requires_target", "Lá Xin cần chọn đối thủ.");
+                    if (!gs.Hands.ContainsKey(targetMemberId))
+                        throw new DomainException("target_not_found", "Đối thủ không hợp lệ.");
+                    if (!gs.Alive.GetValueOrDefault(targetMemberId))
+                        throw new DomainException("target_dead", "Đối thủ đã bị loại.");
+
+                    var tgtHand = gs.Hands[targetMemberId];
+                    if (tgtHand.Count == 0)
+                        throw new DomainException("target_empty", "Đối thủ không còn lá bài.");
+
+                    // Spend the Favor card (it's committed). Open a 5s Nope
+                    // window so other players can chain Cản. After the window
+                    // resolves, the target picks which of their cards to give
+                    // to the actor (per user-confirmed spec).
+                    RemoveFromHand(hand, CardCatalog.Favor);
+
+                    var shuffled = new List<string>(tgtHand);
                     for (var i = shuffled.Count - 1; i > 0; i--)
                     {
                         var j = Random.Shared.Next(i + 1);
                         (shuffled[i], shuffled[j]) = (shuffled[j], shuffled[i]);
                     }
-                    // Stash the pending favor pick so ResolveExpiredNopeAsync
-                    // can clear it if the action gets Nope'd.
                     gs.PendingFavorPick = new PendingFavorPick
                     {
                         TargetMemberId = targetMemberId,
                         ShuffledCandidates = shuffled,
+                        InitiatorId = memberId,
                     };
                     QueueNopeWindow(gs, memberId, CardCatalog.Favor);
-                    result.RequiresFavorPick = true;
-                    result.FavorCandidates = shuffled;
-                    result.Toast = "Chọn 1 lá để lấy từ tay đối thủ.";
-                    // Persist immediately so the actor's hand count is updated
-                    // on every client of the room, and so the broadcast fans
-                    // out to all tabs to show the Favor reaction window.
+                    result.Toast = "Đã Xin — đợi đối thủ chọn lá để đưa.";
                     CheckWinCondition(gs);
                     await PersistAsync(room.Id, gs, ct);
                     result.Room = (await _repository.GetByIdAsync(room.Id, ct))!;
                     return result;
                 }
 
-                // Phase 2: player chose which card to take. We allow this only
-                // if the Nope window already closed (no more chained Nope).
+                // Phase 2 (target picks): the caller is the target member
+                // and discardPickKey is the card they chose to give. Validate
+                // it & hand it over to the Favor initiator.
                 if (gs.PendingAction is not null)
                     throw new DomainException("action_pending", "Đang chờ phản ứng Nope.");
-                if (!tgtHandF.Contains(discardPickKey))
-                    throw new DomainException("favor_card_gone", "Đối thủ không còn lá này.");
-                tgtHandF.Remove(discardPickKey);
-                hand.Add(discardPickKey);
+                var pendingFav = gs.PendingFavorPick;
+                if (pendingFav is null)
+                    throw new DomainException("no_pending_favor", "Không có Lá Xin nào đang chờ.");
+                if (pendingFav.TargetMemberId != memberId)
+                    throw new DomainException("not_favor_target", "Chỉ đối thủ được chọn mới có thể đưa lá.");
+                var targetHand = gs.Hands.GetValueOrDefault(memberId);
+                if (targetHand is null)
+                    throw new DomainException("target_no_hand", "Tay của bạn không còn.");
+                if (!targetHand.Contains(discardPickKey))
+                    throw new DomainException("favor_card_gone", "Bạn không còn lá này.");
+                targetHand.Remove(discardPickKey);
+                var actorHand = gs.Hands.GetValueOrDefault(pendingFav.InitiatorId);
+                // Defensive: if the actor was killed by another player in the
+                // meantime, fall back to giving the card into the discard
+                // pile so it isn't lost in limbo.
+                if (actorHand is null)
+                {
+                    gs.DiscardPile.Add(discardPickKey);
+                }
+                else
+                {
+                    actorHand.Add(discardPickKey);
+                }
                 gs.PendingFavorPick = null;
-                gs.CardsPlayed[memberId] = gs.CardsPlayed.GetValueOrDefault(memberId) + 1;
-                gs.TurnsTaken[memberId] = gs.TurnsTaken.GetValueOrDefault(memberId) + 1;
+                gs.CardsPlayed[pendingFav.InitiatorId] = gs.CardsPlayed.GetValueOrDefault(pendingFav.InitiatorId) + 1;
+                gs.TurnsTaken[pendingFav.InitiatorId] = gs.TurnsTaken.GetValueOrDefault(pendingFav.InitiatorId) + 1;
                 AdvanceTurn(gs);
-                result.Toast = $"Lấy 1 lá từ đối thủ.";
+                result.Toast = $"Đối thủ đã đưa 1 lá.";
                 break;
 
             case CardCatalog.Future:
@@ -414,7 +480,8 @@ public class GameService
             default:
                 // A combo defuse variant was played. Detect and execute the combo.
                 // We already validated (in the pre-switch block) that a valid combo exists.
-                var combo = CardCatalog.DetectCombo(hand) ?? comboKind;
+                var aliveCount = gs.Alive.Values.Count(v => v);
+                var combo = CardCatalog.DetectCombo(hand, aliveCount) ?? comboKind;
                 return await ResolveComboAsync(room, memberId, cardKey, combo ?? throw new DomainException("combo_impossible", "Cần ít nhất 2 lá giống nhau."), targetMemberId, discardPickKey, ct);
         }
 
@@ -432,6 +499,12 @@ public class GameService
         var gs = room.GameState!;
         var hand = gs.Hands[memberId];
         var result = new GameActionResult();
+        // Helper for spending combo cards. When playerCount < 5, combos are
+        // "any 2 / any 3" (mixed types OK). When playerCount >= 5, the spec
+        // wants same-type only (per the user-confirmed cascade: small games
+        // can mix, large games revert to the strict same-type combo rule).
+        var aliveCount = gs.Alive.Values.Count(v => v);
+        var comboIsMix = aliveCount < 5;
 
         switch (combo)
         {
@@ -441,13 +514,26 @@ public class GameService
                     result.RequiresTargetPick = true;
                     // B-5 fix: show combo cinematic even though there's no Nope window.
                     SetComboCinematic(gs, memberId, cardKey);
+                    // Persist so the cinematic state is visible to every
+                    // viewer while the target picker is open.
+                    CheckWinCondition(gs);
+                    await PersistAsync(room.Id, gs, ct);
+                    result.Room = (await _repository.GetByIdAsync(room.Id, ct))!;
                     return result; // client will retry
                 }
                 var t2 = gs.Hands.TryGetValue(targetMemberId, out var t2Hand) ? t2Hand : null;
                 if (t2 is null || !gs.Alive.GetValueOrDefault(targetMemberId) || t2.Count == 0)
                 {
+                    // BUG-NEW: invalid target must still end the turn or the
+                    // player gets stuck waiting on a turn that will never
+                    // advance. Spend the combo and advance.
+                    if (comboIsMix) SpendMixComboFromHand(hand, 2);
+                    else SpendComboFromHand(hand, cardKey, 2);
+                    gs.CardsPlayed[memberId] = gs.CardsPlayed.GetValueOrDefault(memberId) + 1;
+                    gs.TurnsTaken[memberId] = gs.TurnsTaken.GetValueOrDefault(memberId) + 1;
+                    AdvanceTurn(gs);
                     result.Toast = "Đối thủ không hợp lệ hoặc không còn bài.";
-                    return result;
+                    break;
                 }
                 // Phase 1: target chosen, now show the shuffled hand for the actor to pick.
                 if (string.IsNullOrEmpty(discardPickKey))
@@ -471,7 +557,8 @@ public class GameService
                 // Validate it was in the target's hand at pick time.
                 if (!t2.Contains(discardPickKey))
                     throw new DomainException("favor_card_gone", "Đối thủ không còn lá này.");
-                SpendComboFromHand(hand, cardKey, 2);
+                if (comboIsMix) SpendMixComboFromHand(hand, 2);
+                else SpendComboFromHand(hand, cardKey, 2);
                 t2.Remove(discardPickKey);
                 hand.Add(discardPickKey);
                 gs.CardsPlayed[memberId] = gs.CardsPlayed.GetValueOrDefault(memberId) + 1;
@@ -492,27 +579,42 @@ public class GameService
                 var t3 = gs.Hands.TryGetValue(targetMemberId, out var t3Hand) ? t3Hand : null;
                 if (t3 is null || !gs.Alive.GetValueOrDefault(targetMemberId))
                 {
+                    // BUG-NEW: invalid target must still end the turn.
+                    if (comboIsMix) SpendMixComboFromHand(hand, 3);
+                    else SpendComboFromHand(hand, cardKey, 3);
+                    gs.CardsPlayed[memberId] = gs.CardsPlayed.GetValueOrDefault(memberId) + 1;
+                    gs.TurnsTaken[memberId] = gs.TurnsTaken.GetValueOrDefault(memberId) + 1;
+                    AdvanceTurn(gs);
                     result.Toast = "Đối thủ không hợp lệ.";
-                    return result;
+                    break;
                 }
                 // Phase 1: show the catalogue for the actor to name a card.
-                // B-4 fix: actor names a SPECIFIC card, not random.
-                // B-4 fix: exclude defuse from the catalogue (defuse should not be nameable).
+                // Per the user-confirmed spec, combo 3 lets the actor name
+                // ANY card from the basic Exploding Kittens folder EXCEPT
+                // the face-down back card and the bomb. Defuse is on the
+                // table — including the 5 combo defuse variants — so the
+                // actor can specifically request a defuse if they want.
                 if (string.IsNullOrEmpty(discardPickKey))
                 {
-                    // Return all non-bomb/non-back/non-defuse card keys for the actor to name.
                     result.RequiresDiscardPick = true;
                     result.FavorCandidates = CardCatalog.PublicCardKeys
-                        .Where(k => k != CardCatalog.Bomb && k != "back" && k != CardCatalog.Defuse)
+                        .Where(k => k != CardCatalog.Bomb && k != "back")
                         .ToList();
                     result.Toast = "Chọn 1 lá để yêu cầu đối thủ đưa.";
                     // B-5 fix: show combo cinematic even though there's no Nope window.
                     SetComboCinematic(gs, memberId, cardKey);
+                    // Persist phase-1 state so the actor's hand count and the
+                    // target pick selection are visible to all viewers while
+                    // the picker modal is open.
+                    CheckWinCondition(gs);
+                    await PersistAsync(room.Id, gs, ct);
+                    result.Room = (await _repository.GetByIdAsync(room.Id, ct))!;
                     return result;
                 }
                 // Phase 2: actor named discardPickKey. Resolve server-side.
                 // B-4 fix: if target HAS the named card → steal it. Otherwise → combo invalid.
-                SpendComboFromHand(hand, cardKey, 3);
+                if (comboIsMix) SpendMixComboFromHand(hand, 3);
+                else SpendComboFromHand(hand, cardKey, 3);
                 if (t3.Count > 0 && t3.Contains(discardPickKey))
                 {
                     // Actor named a card that the target has → steal it.
@@ -539,21 +641,39 @@ public class GameService
                         .Distinct()
                         .Where(k => k != "bomb" && k != "back")
                         .ToList();
-                    if (discardCandidates.Count == 0)
-                    {
-                        result.Toast = "Chồng bỏ trống — chưa có lá bài nào để lấy.";
-                        return result;
-                    }
+                if (discardCandidates.Count == 0)
+                {
+                    // BUG-NEW: empty discard pile must still end the turn.
+                    SpendAnyComboFromHand(hand, 5);
+                    gs.CardsPlayed[memberId] = gs.CardsPlayed.GetValueOrDefault(memberId) + 1;
+                    gs.TurnsTaken[memberId] = gs.TurnsTaken.GetValueOrDefault(memberId) + 1;
+                    AdvanceTurn(gs);
+                    result.Toast = "Chồng bỏ trống — chưa có lá bài nào để lấy.";
+                    break;
+                }
                     result.RequiresDiscardPick = true;
                     result.FavorCandidates = discardCandidates;
                     result.Toast = "Chọn 1 lá đã được đánh để lấy lại.";
+                    // Combo 5 is NOT Nope-able but we still need to persist
+                    // the state so the actor's reduced hand count is visible
+                    // to all viewers while the picker modal is open.
+                    CheckWinCondition(gs);
+                    await PersistAsync(room.Id, gs, ct);
+                    result.Room = (await _repository.GetByIdAsync(room.Id, ct))!;
                     return result;
                 }
                 // Phase 2: player picked a card.
                 if (!gs.DiscardPile.Contains(discardPickKey))
                 {
+                    // The card disappeared from the discard pile between
+                    // phase 1 and phase 2 (e.g. someone nope'd a different
+                    // action). End the turn anyway so the player isn't stuck.
+                    SpendAnyComboFromHand(hand, 5);
+                    gs.CardsPlayed[memberId] = gs.CardsPlayed.GetValueOrDefault(memberId) + 1;
+                    gs.TurnsTaken[memberId] = gs.TurnsTaken.GetValueOrDefault(memberId) + 1;
+                    AdvanceTurn(gs);
                     result.Toast = "Lá bài không còn trong chồng bỏ.";
-                    return result;
+                    break;
                 }
                 SpendAnyComboFromHand(hand, 5);
                 gs.DiscardPile.Remove(discardPickKey);
@@ -573,6 +693,109 @@ public class GameService
     }
 
     // ──────────────────────────────────────────────────────────────────
+    // ──────────────────────────────────────────────────────────────────
+    //  Cancel pending combo target pick
+    //
+    //  BUG-NEW: The 2-same and 3-same combo flows return RequiresTargetPick
+    //  on phase 1 WITHOUT removing the combo cards from the actor's hand or
+    //  advancing the turn. If the user clicks Cancel on the target picker,
+    //  they're left holding the turn with the combo cinematic still queued.
+    //  This endpoint lets the client force-finish the action: drop the
+    //  pending cinematic, spend the combo cards anyway, and advance.
+    //  ──────────────────────────────────────────────────────────────────
+
+    public async Task<GameActionResult> CancelPendingActionAsync(
+        string roomId, string memberId, string cardKey, ComboKind comboKind,
+        CancellationToken ct = default)
+    {
+        var room = await LoadPlayingRoomAsync(roomId, ct);
+        var gs = room.GameState!;
+
+        if (gs.CurrentTurnMemberId != memberId)
+            throw new DomainException("not_your_turn", "Chưa tới lượt của bạn.");
+        if (!gs.Alive.GetValueOrDefault(memberId))
+            throw new DomainException("already_dead", "Bạn đã không còn trong trò chơi.");
+
+        var hand = gs.Hands.TryGetValue(memberId, out var h) ? h : new List<string>();
+
+        // Favor is special: it was already removed from hand on phase 1, we
+        // just need to drop the pending pick, end the turn, and treat the
+        // card as spent (no card-back to hand).
+        if (cardKey == CardCatalog.Favor)
+        {
+            gs.PendingFavorPick = null;
+            if (gs.PendingAction is not null && gs.PendingAction.CardKey == CardCatalog.Favor)
+            {
+                gs.PendingAction = null;
+            }
+            gs.LastPlayedCardKey = null;
+            gs.LastPlayedBy = null;
+            gs.LastPlayedAt = null;
+            gs.LastPlayedByNope = null;
+            gs.CardsPlayed[memberId] = gs.CardsPlayed.GetValueOrDefault(memberId) + 1;
+            gs.TurnsTaken[memberId] = gs.TurnsTaken.GetValueOrDefault(memberId) + 1;
+            AdvanceTurn(gs);
+            var favResult = new GameActionResult { Toast = "Đã hủy Xin." };
+            CheckWinCondition(gs);
+            await PersistAsync(room.Id, gs, ct);
+            favResult.Room = (await _repository.GetByIdAsync(room.Id, ct))!;
+            return favResult;
+        }
+
+        if (!CardCatalog.IsComboDefuse(cardKey))
+            throw new DomainException("not_combo", "Chỉ hủy được combo.");
+
+        var cost = comboKind switch
+        {
+            ComboKind.TwoSame => 2,
+            ComboKind.ThreeSame => 3,
+            ComboKind.FiveAny => 5,
+            _ => 0,
+        };
+        if (cost == 0)
+            throw new DomainException("invalid_combo", "Loại combo không hợp lệ.");
+
+        var have = hand.Count(c => comboKind == ComboKind.FiveAny
+            ? CardCatalog.IsComboDefuse(c)
+            : c == cardKey);
+        if (have < cost)
+            throw new DomainException("not_enough_combo_cards", "Không đủ lá combo.");
+
+        if (comboKind == ComboKind.FiveAny)
+        {
+            SpendAnyComboFromHand(hand, cost);
+        }
+        else
+        {
+            SpendComboFromHand(hand, cardKey, cost);
+        }
+
+        gs.CardsPlayed[memberId] = gs.CardsPlayed.GetValueOrDefault(memberId) + 1;
+        gs.TurnsTaken[memberId] = gs.TurnsTaken.GetValueOrDefault(memberId) + 1;
+
+        // Clear the queued cinematic so other players see the action as resolved.
+        gs.LastPlayedCardKey = null;
+        gs.LastPlayedBy = null;
+        gs.LastPlayedAt = null;
+        gs.LastPlayedByNope = null;
+
+        // Clear combo cinematic if any (Phase 1 set LastPlayedCardKey without
+        // an active PendingAction; we wipe it so other players don't see a
+        // dangling "X played Y" overlay after we cancel).
+        gs.LastPlayedByNope = null;
+
+        AdvanceTurn(gs);
+
+        var result = new GameActionResult
+        {
+            Toast = "Đã hủy combo.",
+        };
+        CheckWinCondition(gs);
+        await PersistAsync(room.Id, gs, ct);
+        result.Room = (await _repository.GetByIdAsync(room.Id, ct))!;
+        return result;
+    }
+
     //  Concede
     // ──────────────────────────────────────────────────────────────────
 
@@ -602,6 +825,15 @@ public class GameService
         gs.TurnsTaken.Remove(memberId);
         gs.CardsPlayed.Remove(memberId);
 
+        // Clean up any pending picker state that referenced this player so
+        // the modal doesn't keep showing stale candidates after they leave.
+        if (gs.PendingFavorPick is not null &&
+            (gs.PendingFavorPick.TargetMemberId == memberId ||
+             gs.PendingFavorPick.InitiatorId == memberId))
+        {
+            gs.PendingFavorPick = null;
+        }
+
         if (wasCurrentTurn) AdvanceTurn(gs);
 
         CheckWinCondition(gs);
@@ -616,6 +848,11 @@ public class GameService
         // If RemoveMemberAsync didn't touch gameState (in-memory impls may not
         // copy it back), graft the up-to-date gameState on.
         finalRoom.GameState ??= gs;
+
+        // Re-arm the turn clock for the next player (PersistAsync is the
+        // canonical place that wires up the background timer).
+        await PersistAsync(room.Id, finalRoom.GameState!, ct);
+        finalRoom = (await _repository.GetByIdAsync(room.Id, ct)) ?? finalRoom;
 
         return new GameActionResult
         {
@@ -901,6 +1138,13 @@ public class GameService
             {
                 gs.PendingFavorPick = null;
             }
+            // If the cancelled action was a Future, clear any peek state
+            // set by QueueNopeWindow / the original Future play so the
+            // local UI doesn't auto-open a stale peek modal on reconnect.
+            if (pending.CardKey == CardCatalog.Future)
+            {
+                gs.FuturePeek = null;
+            }
             gs.PendingAction = null;
             // Action resolved (cancelled) — clear cinematic.
             ClearActionCinematic(gs);
@@ -1048,6 +1292,19 @@ public class GameService
             _turnClock.Unregister(roomId);
             _nopeWindow.Register(roomId, gs.PendingAction.CreatedAt);
         }
+        else if (gs.BombRevealActive && gs.LastDrawnBy is not null && gs.Alive.GetValueOrDefault(gs.LastDrawnBy))
+        {
+            // Bomb was drawn and the player still has a chance to defuse.
+            // Per the user-confirmed spec ("riêng lá bom, vì sau khi ấn bốc
+            // là hết thời gian đếm của player rồi, nên nếu bốc trúng bom,
+            // thời gian defause sẽ là thời gian hệ thống, ko tính vào thời
+            // gian của player"), we pause the player's turn clock for the
+            // system-driven defuse modal — the 3s bomb reveal + the slot
+            // picker is its own internal timer, not the player's. Once the
+            // defuse resolves (BombRevealActive=false) PersistAsync will
+            // re-register the clock.
+            _turnClock.Unregister(roomId);
+        }
         else if (gs.TurnStartedAt is not null)
         {
             _nopeWindow.Unregister(roomId);
@@ -1104,9 +1361,26 @@ public class GameService
 
     private static void RemoveFromHand(List<string> hand, string key) => hand.Remove(key);
 
+    /// <summary>
+    /// Spend <paramref name="count"/> copies of <paramref name="key"/> from
+    /// the hand. Used for same-type combos (e.g. 3 ninja + 1 target when N>=5).
+    /// </summary>
     private static void SpendComboFromHand(List<string> hand, string key, int count)
     {
         for (var i = 0; i < count; i++) hand.Remove(key);
+    }
+
+    /// <summary>
+    /// Spend <paramref name="count"/> combo cards (any types) from the hand.
+    /// Used for mix-type combos (any 2 / any 3 combo cards when N&lt;5).
+    /// </summary>
+    private static void SpendMixComboFromHand(List<string> hand, int count)
+    {
+        var removed = 0;
+        for (var i = hand.Count - 1; i >= 0 && removed < count; i--)
+        {
+            if (CardCatalog.IsComboDefuse(hand[i])) { hand.RemoveAt(i); removed++; }
+        }
     }
 
     private static void SpendAnyComboFromHand(List<string> hand, int count)
@@ -1122,27 +1396,20 @@ public class GameService
     {
         var aliveIds = gs.Alive.Where(kv => kv.Value).Select(kv => kv.Key).ToList();
         if (aliveIds.Count <= 1) return;
-        if (gs.AttackCounter > 0)
-        {
-            gs.AttackCounter -= 1;
-            // Attack chain: each skipped turn just decrements the counter. We do
-            // NOT update TurnStartedAt so the NEXT real turn (after the chain ends)
-            // gets the correct elapsed time from when the chain started.
-            // Also: advance currentTurnMemberId so the UI shows the right player.
-            var currentIdx = aliveIds.IndexOf(gs.CurrentTurnMemberId);
-            gs.CurrentTurnMemberId = currentIdx < 0 || currentIdx >= aliveIds.Count - 1
-                ? aliveIds[0]
-                : aliveIds[currentIdx + 1];
-            return;
-        }
-        var currentIdx2 = aliveIds.IndexOf(gs.CurrentTurnMemberId);
-        if (currentIdx2 < 0)
+        // Move the current-turn pointer forward over alive players only.
+        // AttackCounter is decremented separately (at draw / skip time) —
+        // NOT here, because the attacked player still has draws to take on
+        // their turn before the regular rotation resumes.
+        var currentIdx = aliveIds.IndexOf(gs.CurrentTurnMemberId);
+        if (currentIdx < 0)
         {
             gs.CurrentTurnMemberId = aliveIds[0];
         }
         else
         {
-            var nextIdx = (currentIdx2 + 1) % aliveIds.Count;
+            // Skip dead members when rotating, but AttackCounter handles its
+            // own budget per draw instead of per turn-skip.
+            var nextIdx = (currentIdx + 1) % aliveIds.Count;
             gs.CurrentTurnMemberId = aliveIds[nextIdx];
         }
         gs.TurnStartedAt = DateTime.UtcNow;
