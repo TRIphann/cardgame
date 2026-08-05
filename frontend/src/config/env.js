@@ -15,6 +15,13 @@
 // the proxy; otherwise it falls back to the same origin (so it works in
 // local dev and when the hub is hosted on the same domain in production).
 
+// Production uses the absolute Render URL. The backend whitelists
+// https://tricardgame.netlify.app in Cors:AllowedOrigins, so cross-origin
+// requests from the Netlify-deployed SPA are allowed. A previous attempt
+// to hide the Render URL behind a Netlify /api/* proxy failed because
+// SignalR's WebSocket (/hubs/game) cannot be proxied through Netlify's
+// edge redirects — the browser would still have to talk to Render for
+// the hub, which defeats the purpose.
 const RELATIVE_REST_BASE = "";
 const FALLBACK_REST_BASE =
   (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_BASE_URL) ||
@@ -23,7 +30,7 @@ const FALLBACK_HUB_BASE =
   (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_HUB_URL) ||
   FALLBACK_REST_BASE;
 
-export const API_BASE_URL = RELATIVE_REST_BASE || FALLBACK_REST_BASE;
+export const API_BASE_URL = FALLBACK_REST_BASE;
 export const API_HUB_URL = FALLBACK_HUB_BASE;
 
 // React Router paths. Anything you want to be deep-linkable lives here.
