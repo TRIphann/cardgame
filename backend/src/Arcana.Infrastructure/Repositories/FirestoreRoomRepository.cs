@@ -220,21 +220,45 @@ public class FirestoreRoomRepository : IRoomRepository
     }
 
     /// <summary>
-    /// Walks every room document and returns the ones currently in the
-    /// "playing" status. Used by background sweepers (e.g. FuturePeekSweeper)
-    /// that need to find stale per-game state without going through the lobby.
+    /// Returns rooms currently in the "playing" status that may have an
+    /// outstanding FuturePeek state to clean up. Used by background
+    /// sweepers that need to find stale per-game state without going
+    /// through the lobby.
+    ///
+    /// Filter order matters: Firestore free tier indexes are
+    /// auto-created for single-field queries, but composite indexes need
+    /// manual setup. We therefore restrict the scan to rooms whose
+    /// <c>futurePeekAt</c> is older than the peek lifetime — a
+    /// single-field timestamp inequality that returns at most a handful of
+    /// docs each tick — and let the in-process loop discard anything that
+    /// isn't really "playing". Without this filter a full-collection scan
+    /// on every tick blows through the Firestore free-tier quota.
     /// </summary>
     public async Task<IReadOnlyList<Room>> GetAllPlayingAsync(CancellationToken ct = default)
     {
+        // Only rooms whose peek has aged past the sweeper's lifetime — a
+        // single-field timestamp inequality (auto-indexed) avoids the
+        // composite index requirement while still touching ≤ a handful
+        // of docs per tick.
+        var cutoff = Google.Cloud.Firestore.Timestamp.FromDateTime(
+            DateTime.UtcNow.AddSeconds(-13));
+
         var query = _db.Collection(RoomsCollection)
-            .WhereEqualTo("status", "playing");
+            .WhereLessThanOrEqualTo("futurePeekAt", cutoff);
+
         var snap = await query.GetSnapshotAsync(ct);
         var rooms = new List<Room>();
         foreach (var doc in snap.Documents)
         {
-            // Skip rooms whose gameState is missing — they're either freshly
-            // created or already cleaned up. The sweeper is a no-op for them.
-            if (!doc.ToDictionary().ContainsKey("gameState")) continue;
+            var data = doc.ToDictionary();
+            if (!data.ContainsKey("gameState")) continue;
+
+            // Filter in-process — at most a few stale peeks ever, so the
+            // cost is negligible.
+            var status = data.TryGetValue("status", out var s) ? s as string : null;
+            if (!string.Equals(status, "playing", StringComparison.OrdinalIgnoreCase))
+                continue;
+
             rooms.Add(await MapRoomAsync(doc, ct));
         }
         return rooms;
