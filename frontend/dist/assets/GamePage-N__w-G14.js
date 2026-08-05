@@ -1,5 +1,5 @@
 import { r as reactExports, j as jsxRuntimeExports } from "./react-BhVOh7S1.js";
-import { r as roomsApi, A as API_BASE_URL, c as cardImageUrl, u as useSession, a as useToast, b as useAudio, R as ROUTES, C as CARD_CLOUDINARY } from "./index-JqdA65WP.js";
+import { r as roomsApi, A as API_BASE_URL, c as cardImageUrl, u as useSession, a as useToast, b as useAudio, R as ROUTES, C as CARD_CLOUDINARY } from "./index-9vwMpF5s.js";
 import { H as HubConnectionBuilder, L as LogLevel } from "./vendor-DcE7maHo.js";
 import { c as useParams, a as useNavigate } from "./router-DRJyKT9H.js";
 import "./react-dom-HPixZcWd.js";
@@ -1238,8 +1238,12 @@ function BombReveal({ memberName, willDefuse, onComplete }) {
   reactExports.useEffect(() => {
     onCompleteRef.current = onComplete;
   }, [onComplete]);
+  const t4Ref = reactExports.useRef(null);
   reactExports.useEffect(() => {
-    const t4Ref = { current: null };
+    if (t4Ref.current) {
+      clearTimeout(t4Ref.current);
+      t4Ref.current = null;
+    }
     const t1 = setTimeout(() => setPhase("flip"), FLIP_DELAY);
     const t2 = setTimeout(() => setPhase("face"), FLIP_DELAY + FLIP_MS$1);
     const t3 = setTimeout(() => {
@@ -1253,7 +1257,10 @@ function BombReveal({ memberName, willDefuse, onComplete }) {
       clearTimeout(t1);
       clearTimeout(t2);
       clearTimeout(t3);
-      if (t4Ref.current) clearTimeout(t4Ref.current);
+      if (t4Ref.current) {
+        clearTimeout(t4Ref.current);
+        t4Ref.current = null;
+      }
     };
   }, [willDefuse]);
   if (!mounted) return null;

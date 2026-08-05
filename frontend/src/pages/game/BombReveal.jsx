@@ -23,9 +23,11 @@ export function BombReveal({ memberName, willDefuse, onComplete }) {
 
   const onCompleteRef = useRef(onComplete);
   useEffect(() => { onCompleteRef.current = onComplete; }, [onComplete]);
+  const t4Ref = useRef(null);
 
   useEffect(() => {
-    const t4Ref = { current: null };
+    // Always clear any pending t4 from a previous render before scheduling a new one.
+    if (t4Ref.current) { clearTimeout(t4Ref.current); t4Ref.current = null; }
 
     const t1 = setTimeout(() => setPhase("flip"), FLIP_DELAY);
     const t2 = setTimeout(() => setPhase("face"), FLIP_DELAY + FLIP_MS);
@@ -39,7 +41,7 @@ export function BombReveal({ memberName, willDefuse, onComplete }) {
 
     return () => {
       clearTimeout(t1); clearTimeout(t2); clearTimeout(t3);
-      if (t4Ref.current) clearTimeout(t4Ref.current);
+      if (t4Ref.current) { clearTimeout(t4Ref.current); t4Ref.current = null; }
     };
   }, [willDefuse]);
 
