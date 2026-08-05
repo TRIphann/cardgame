@@ -13,16 +13,22 @@ import { useOptimisticRoom } from "../../hooks/useOptimisticRoom.js";
 import "../styles/landing.css";
 
 // Wake the Render free-tier container up-front so the first user action
-// doesn't pay the full cold-start cost. We use a lazy fetch that starts
-// after a 3-second delay so it only fires if the user lingers on the page.
-let _prewarmTimer = null;
+// doesn't pay the full cold-start cost. We start the prewarm IMMEDIATELY
+// when this module loads (no delay) so it overlaps with whatever else the
+// browser is doing — typical Render free-tier cold-starts take 30-60s, but
+// the actual app-handshake is only ~100ms once the container is warm.
+//
+// We also fire a second prewarm as soon as the user hovers over either the
+// create or join button — that catches the case where someone lands on the
+// page and immediately moves their mouse toward the action.
 if (typeof window !== "undefined") {
-  _prewarmTimer = setTimeout(() => {
-    // Hit the *backend* health endpoint directly, not a relative URL.
-    // A relative URL would be caught by the Netlify SPA fallback (which
-    // serves index.html for any non-asset path) and never warm Render up.
+  // 1) Immediate fire on module load.
+  fetch(`${API_BASE_URL}/health`, { method: "GET", cache: "no-store" }).catch(() => {});
+  // 2) Re-fire every 60s while the tab is open so we never go cold during
+  //    a long lobby session. Render sleeps after ~15min idle.
+  setInterval(() => {
     fetch(`${API_BASE_URL}/health`, { method: "GET", cache: "no-store" }).catch(() => {});
-  }, 3000);
+  }, 60_000);
 }
 
 export default function LandingPage() {
@@ -124,6 +130,13 @@ export default function LandingPage() {
     submit("join");
   }, [stage, name, audio, submit, flash, triggerShake, t]);
 
+  // Prewarm on hover so by the time the user actually clicks the button,
+  // the backend is already awake. This is in addition to the module-level
+  // prewarm and 60s keepalive above.
+  const prewarmOnHover = useCallback(() => {
+    fetch(`${API_BASE_URL}/health`, { method: "GET", cache: "no-store" }).catch(() => {});
+  }, []);
+
   return (
     <main className={`landing-page ${shake > 0 ? "form-attention" : ""}`} key={`shake-${shake}`}>
       {/* Decorative backdrop — inside the page so it renders above arc-ambient */}
@@ -177,6 +190,8 @@ export default function LandingPage() {
               id="create-button"
               data-action="create"
               disabled={busy}
+              onPointerEnter={prewarmOnHover}
+              onFocus={prewarmOnHover}
             >
               {t("landing.createRoom")} <span>✦</span>
             </button>
@@ -188,6 +203,8 @@ export default function LandingPage() {
               data-stage={stage}
               disabled={busy}
               onClick={handleJoinClick}
+              onPointerEnter={prewarmOnHover}
+              onFocus={prewarmOnHover}
             >
               {t("landing.joinRoom")} <span>{stage === "enter-code" ? "→" : "↳"}</span>
             </button>

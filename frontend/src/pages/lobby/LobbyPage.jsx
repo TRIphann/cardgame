@@ -156,6 +156,9 @@ export default function LobbyPage() {
     if (!fromStorage && location.pathname.startsWith(ROUTES.lobby)) {
       navigate(ROUTES.landing, { replace: true });
     }
+    // Prewarm the backend so the polling loop's first /snapshot call is
+    // already on a warm container.
+    fetch(`${API_BASE_URL}/health`, { method: "GET", cache: "no-store" }).catch(() => {});
   }, [session.session, location.pathname, navigate]);
 
   // ---------------------------------------------------------------------

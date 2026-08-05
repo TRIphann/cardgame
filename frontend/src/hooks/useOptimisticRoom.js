@@ -1,23 +1,28 @@
-// useOptimisticRoom — encapsulates the "create or join a room in <900ms" UX.
+// useOptimisticRoom — encapsulates the "create or join a room in <1.5s" UX.
 //
 // The backend on Render free tier sleeps after ~15min idle, so the first POST
 // after a quiet period can take 30-60s. Instead of staring at a spinner, we
 // race the network against a hard UI timeout:
-//   - If the real response arrives inside FAST_NAV_TIMEOUT_MS, we use it.
+//   - If the real response arrives inside OPTIMISTIC_TIMEOUT_MS, we use it.
 //   - Otherwise we navigate to /lobby immediately with a placeholder room
 //     (random code, fake id) and continue the POST in the background; when
 //     the real response lands we patch sessionStorage so a refresh on /lobby
 //     picks up the real room id.
 //
-// The hook returns { create, join, busy, error } and the caller is responsible
-// for navigating after success.
+// The same optimistic path now applies to BOTH create and join — the host
+// benefits from the same fast-feedback UX (so they aren't staring at a
+// spinner during a cold-start), and the lobby already tolerates placeholder
+// room ids by patching them in once the real response lands.
+//
+// The hook returns { run, busy, error } and the caller is responsible for
+// navigating after success.
 
 import { useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { roomsApi } from "@shared/api/roomsApi.js";
 import { ROUTES, saveSession, loadSession } from "@config/env.js";
 
-const FAST_NAV_TIMEOUT_MS = 900;
+const OPTIMISTIC_TIMEOUT_MS = 1500;
 const PLACEHOLDER_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 function placeholderCode() {
@@ -72,14 +77,11 @@ export function useOptimisticRoom({ onNavigate } = {}) {
       return res;
     })();
 
-    // CREATE: always wait for the real response — the room code must be
-    // shown to the user immediately after the API resolves. No timeout.
-    // JOIN: use the 900ms race so the player isn't staring at a spinner
-    // on Render's cold-start.
-    const raced = await raceWithFallback(postPromise, action === "join" ? FAST_NAV_TIMEOUT_MS : 999_999);
-
-    // Only join triggers the optimistic cold-start path (CREATE never does).
-    const isJoinColdStart = action === "join" && raced.kind === "timeout";
+    // Race against OPTIMISTIC_TIMEOUT_MS for BOTH create and join.
+    // The cold-start on Render can take 30-60s, so we navigate after 1.5s
+    // with a placeholder and patch the real id in the background.
+    const raced = await raceWithFallback(postPromise, OPTIMISTIC_TIMEOUT_MS);
+    const isColdStart = raced.kind === "timeout";
 
     const finalize = (room, member) => {
       // isHost is decided by the *action*, not by inspecting the server's
@@ -117,15 +119,9 @@ export function useOptimisticRoom({ onNavigate } = {}) {
       return { kind: "err", error: raced.error };
     }
 
-    // ── Optimistic path: only for JOIN cold-start ────────────────────
-    if (!isJoinColdStart) {
-      // This should never happen for CREATE since we set timeout = 999_999ms.
-      setError(new Error("Unexpected timeout — please try again."));
-      setBusy(false);
-      return { kind: "err" };
-    }
-
-    // Cold-start: navigate immediately, patch session later.
+    // ── Optimistic path: cold-start ──────────────────────────────────
+    // Navigate immediately with a placeholder, then patch session once the
+    // real response lands.
     const fakeRoom = {
       id: "PENDING-" + Date.now(),
       code: placeholderCode(),
@@ -135,7 +131,12 @@ export function useOptimisticRoom({ onNavigate } = {}) {
       maxPlayers: 7,
       currentPlayers: 1,
       createdAt: new Date().toISOString(),
-      members: [{ id: "PENDING-me", name, isHost: true, joinedAt: new Date().toISOString() }],
+      members: [{
+        id: "PENDING-me",
+        name,
+        isHost: action === "create",
+        joinedAt: new Date().toISOString(),
+      }],
     };
     finalize(fakeRoom, fakeRoom.members[0]);
     setBusy(false);

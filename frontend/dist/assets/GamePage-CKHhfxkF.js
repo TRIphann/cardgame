@@ -1,5 +1,5 @@
 import { r as reactExports, j as jsxRuntimeExports } from "./react-BhVOh7S1.js";
-import { r as roomsApi, A as API_BASE_URL, c as cardImageUrl, u as useSession, a as useToast, b as useAudio, R as ROUTES, C as CARD_CLOUDINARY } from "./index-O6m1o26p.js";
+import { r as roomsApi, A as API_BASE_URL, c as cardImageUrl, u as useSession, a as useToast, b as useAudio, R as ROUTES, C as CARD_CLOUDINARY } from "./index-DQ5xEm0y.js";
 import { H as HubConnectionBuilder, L as LogLevel } from "./vendor-DcE7maHo.js";
 import { c as useParams, a as useNavigate } from "./router-DRJyKT9H.js";
 import "./react-dom-HPixZcWd.js";
@@ -2015,6 +2015,14 @@ function GamePage() {
   }
   gs?.deckCount ?? null;
   const discardCount = gs?.discardCount ?? 0;
+  const elapsedSec = (() => {
+    if (!gs?.startedAt) return 0;
+    const start = new Date(gs.startedAt).getTime();
+    const end = gs.endedAt ? new Date(gs.endedAt).getTime() : Date.now();
+    return Math.max(0, Math.round((end - start) / 1e3));
+  })();
+  const mm = String(Math.floor(elapsedSec / 60)).padStart(2, "0");
+  const ss = String(elapsedSec % 60).padStart(2, "0");
   const turnLimitSec = gs?.turnTimeLimitSec ?? 60;
   const turnRemainingSec = (() => {
     if (gameEnded || !gs?.turnStartedAt) return null;

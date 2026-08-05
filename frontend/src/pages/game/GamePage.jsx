@@ -963,6 +963,16 @@ export default function GamePage() {
   const deckCount = gs?.deckCount ?? null; // null = hidden from client
   const discardCount = gs?.discardCount ?? 0;
 
+  // Elapsed match time, formatted as mm:ss in the top bar.
+  const elapsedSec = (() => {
+    if (!gs?.startedAt) return 0;
+    const start = new Date(gs.startedAt).getTime();
+    const end = gs.endedAt ? new Date(gs.endedAt).getTime() : Date.now();
+    return Math.max(0, Math.round((end - start) / 1000));
+  })();
+  const mm = String(Math.floor(elapsedSec / 60)).padStart(2, "0");
+  const ss = String(elapsedSec % 60).padStart(2, "0");
+
   // Turn timer — how many seconds the current player has left until the
   // server auto-draws on their behalf. We compute it client-side from the
   // server-provided turnStartedAt; the server's own clock is the source of
