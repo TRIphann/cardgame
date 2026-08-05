@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/GamePage-CK4ZAwqk.js","assets/react-BhVOh7S1.js","assets/vendor-DcE7maHo.js","assets/router-DRJyKT9H.js","assets/react-dom-HPixZcWd.js","assets/GamePage-D3wEXZWx.css"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/GamePage-BOCdgmS-.js","assets/react-BhVOh7S1.js","assets/vendor-DcE7maHo.js","assets/router-DRJyKT9H.js","assets/react-dom-HPixZcWd.js","assets/GamePage-D3wEXZWx.css"])))=>i.map(i=>d[i]);
 var __defProp = Object.defineProperty;
 var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
 var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
@@ -1935,7 +1935,7 @@ const GAME_MODES = [
 function LobbyPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const session = useSession();
+  const sessionCtx = useSession();
   const audio = useAudio();
   const toast = useToast();
   const { t } = useI18n();
@@ -1948,6 +1948,7 @@ function LobbyPage() {
   const pickerAnchorRef = reactExports.useRef(null);
   const [optimisticReady, setOptimisticReady] = reactExports.useState(null);
   const deckAnimation = useDeckAnimation({ cardImageUrls: CARD_URLS });
+  const session = sessionCtx?.session || null;
   const roomId = session?.roomId;
   const isPending = !roomId || typeof roomId === "string" && roomId.startsWith("PENDING-");
   const pollRoomId = isPending ? null : roomId;
@@ -2060,7 +2061,7 @@ function LobbyPage() {
             m.name,
             m.isHost ? " 👑" : ""
           ] }),
-          !m.isHost && m.id !== session.playerId && /* @__PURE__ */ jsxRuntimeExports.jsx(
+          !m.isHost && m.id !== session?.playerId && /* @__PURE__ */ jsxRuntimeExports.jsx(
             "button",
             {
               type: "button",
@@ -2074,7 +2075,7 @@ function LobbyPage() {
         onAction: async (action, payload) => {
           if (action === "kick") {
             try {
-              await roomsApi.kick(roomId, session.playerId, payload.memberId);
+              await roomsApi.kick(roomId, session?.playerId, payload.memberId);
               refresh();
             } catch (e) {
               toast.error("Kick thất bại.");
@@ -2083,7 +2084,7 @@ function LobbyPage() {
         }
       }
     ]);
-  }, [members, session, settings, roomId, refresh, toast]);
+  }, [members, session, sessionCtx, settings, roomId, refresh, toast]);
   reactExports.useEffect(() => {
     if (room?.status === "playing") {
       navigate(ROUTES.game(roomId), { replace: true });
@@ -2101,8 +2102,8 @@ function LobbyPage() {
   }, [room?.members, session?.playerId, optimisticReady]);
   const offlineAtRef = reactExports.useRef(null);
   reactExports.useEffect(() => {
-    if (!room || !session?.playerId) return;
-    const me = room.members.find((m) => m.id === session.playerId);
+    if (!room || !session?.session?.playerId) return;
+    const me = room.members.find((m) => m.id === session?.session?.playerId);
     if (me) {
       offlineAtRef.current = null;
       return;
@@ -2110,10 +2111,10 @@ function LobbyPage() {
     if (!offlineAtRef.current) offlineAtRef.current = Date.now();
     const stillOfflineAfter = Date.now() - offlineAtRef.current > 3e3;
     if (stillOfflineAfter) {
-      session.clear();
+      sessionCtx.clear();
       navigate(ROUTES.landing, { replace: true });
     }
-  }, [room, session, session, navigate]);
+  }, [room, session, sessionCtx, navigate]);
   const handleCopy = reactExports.useCallback(async () => {
     const code = room?.code || session?.roomCode;
     if (!code) return;
@@ -2136,9 +2137,9 @@ function LobbyPage() {
       }
     } catch (_) {
     }
-    session.clear();
+    sessionCtx.clear();
     navigate(ROUTES.landing);
-  }, [audio, navigate, session]);
+  }, [audio, navigate, sessionCtx]);
   const handleToggleReady = reactExports.useCallback(async () => {
     const myId = session?.playerId;
     if (!myId || !roomId) return;
@@ -2167,7 +2168,7 @@ function LobbyPage() {
       return;
     }
     try {
-      await roomsApi.startGame(roomId, session.playerId);
+      await roomsApi.startGame(roomId, session?.playerId);
       refresh();
     } catch (e) {
       toast.error(e.message || "Không bắt đầu được ván.");
@@ -2186,12 +2187,12 @@ function LobbyPage() {
       const cur = loadSession();
       if (!cur) return;
       saveSession({ ...cur, avatar });
-      session.patch({ avatar });
+      sessionCtx.patch({ avatar });
       setPickerOpen(false);
       audio.playSfx("buttonClick");
       toast.success("Đã cập nhật avatar của bạn.", { duration: 1500 });
     },
-    [audio, session, toast]
+    [audio, sessionCtx, toast]
   );
   const myMember = reactExports.useMemo(
     () => members?.find((m) => m.id === session?.playerId),
@@ -2406,7 +2407,7 @@ function LobbyPage() {
     roomError && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lobby-error", role: "alert", children: String(roomError.message || roomError) })
   ] });
 }
-const GamePage = reactExports.lazy(() => __vitePreload(() => import("./GamePage-CK4ZAwqk.js"), true ? __vite__mapDeps([0,1,2,3,4,5]) : void 0));
+const GamePage = reactExports.lazy(() => __vitePreload(() => import("./GamePage-BOCdgmS-.js"), true ? __vite__mapDeps([0,1,2,3,4,5]) : void 0));
 function App() {
   const location = useLocation();
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(ErrorBoundary, { children: [

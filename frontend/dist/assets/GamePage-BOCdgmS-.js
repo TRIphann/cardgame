@@ -1,5 +1,5 @@
 import { r as reactExports, j as jsxRuntimeExports } from "./react-BhVOh7S1.js";
-import { r as roomsApi, A as API_BASE_URL, c as cardImageUrl, u as useSession, a as useToast, b as useAudio, R as ROUTES, C as CARD_CLOUDINARY } from "./index-XumO9n8R.js";
+import { r as roomsApi, A as API_BASE_URL, c as cardImageUrl, u as useSession, a as useToast, b as useAudio, R as ROUTES, C as CARD_CLOUDINARY } from "./index-BEacFBS4.js";
 import { H as HubConnectionBuilder, L as LogLevel } from "./vendor-DcE7maHo.js";
 import { c as useParams, a as useNavigate } from "./router-DRJyKT9H.js";
 import "./react-dom-HPixZcWd.js";
@@ -1618,9 +1618,10 @@ function getLocalPlayerId(session) {
 function GamePage() {
   const { roomId } = useParams();
   const navigate = useNavigate();
-  const session = useSession();
+  const sessionCtx = useSession();
   const toast = useToast();
   const audio = useAudio();
+  const session = sessionCtx?.session || null;
   const myId = getLocalPlayerId(session);
   const [room, setRoom] = reactExports.useState(null);
   const [now, setNow] = reactExports.useState(Date.now());
@@ -1788,7 +1789,7 @@ function GamePage() {
             ...session || {},
             roomId: newRoomId
           };
-          session.patch?.({ roomId: newRoomId });
+          sessionCtx.patch?.({ roomId: newRoomId });
           navigate(ROUTES.lobby + "/" + newRoomId, { replace: true });
           return;
         }

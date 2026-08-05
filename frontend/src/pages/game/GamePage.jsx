@@ -66,10 +66,14 @@ function getLocalPlayerId(session) {
 export default function GamePage() {
   const { roomId } = useParams();
   const navigate = useNavigate();
-  const session = useSession();
+  const sessionCtx = useSession();
   const toast = useToast();
   const audio = useAudio();
 
+  // The SessionContext value is `{ session, update, patch, clear }`.
+  // Unwrap the inner session object so the rest of the component reads
+  // natural property names (`session.playerId`, not `session.session.playerId`).
+  const session = sessionCtx?.session || null;
   const myId = getLocalPlayerId(session);
 
   // ── Core state ──────────────────────────────────────────────
@@ -343,7 +347,7 @@ export default function GamePage() {
             roomId: newRoomId,
           };
           // Use the existing patch helper on the SessionContext.
-          session.patch?.({ roomId: newRoomId });
+          sessionCtx.patch?.({ roomId: newRoomId });
           navigate(ROUTES.lobby + "/" + newRoomId, { replace: true });
           return;
         }

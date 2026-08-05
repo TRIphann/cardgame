@@ -70,7 +70,7 @@ const GAME_MODES = [
 export default function LobbyPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const session = useSession();
+  const sessionCtx = useSession();
   const audio = useAudio();
   const toast = useToast();
   const { t } = useI18n();
@@ -97,6 +97,11 @@ export default function LobbyPage() {
   const [optimisticReady, setOptimisticReady] = useState(null);
 
   const deckAnimation = useDeckAnimation({ cardImageUrls: CARD_URLS });
+
+  // The SessionContext value is `{ session, update, patch, clear }`. Use the
+  // inner session object directly so the rest of this component reads like
+  // the rest of the codebase (e.g. `session.roomId`).
+  const session = sessionCtx?.session || null;
 
   const roomId = session?.roomId;
   // Only poll for real room IDs, not pending placeholders
@@ -269,7 +274,7 @@ export default function LobbyPage() {
             {members.map((m) => (
               <li key={m.id} className="settings-member">
                 <span>{m.name}{m.isHost ? " 👑" : ""}</span>
-                {!m.isHost && m.id !== session.playerId && (
+                {!m.isHost && m.id !== session?.playerId && (
                   <button
                     type="button"
                     className="settings-button-danger"
@@ -289,14 +294,14 @@ export default function LobbyPage() {
               // Use the shared wrapper so the request goes to the configured
               // backend (relative URLs would hit the Netlify SPA fallback and
               // silently serve index.html instead of reaching the API).
-              await roomsApi.kick(roomId, session.playerId, payload.memberId);
+              await roomsApi.kick(roomId, session?.playerId, payload.memberId);
               refresh();
             } catch (e) { toast.error("Kick thất bại."); }
           }
         },
       },
     ]);
-  }, [members, session, settings, roomId, refresh, toast]);
+  }, [members, session, sessionCtx, settings, roomId, refresh, toast]);
 
   // Once room status flips to "playing", navigate to the game route.
   useEffect(() => {
@@ -329,8 +334,8 @@ export default function LobbyPage() {
   // ---------------------------------------------------------------------
   const offlineAtRef = useRef(null);
   useEffect(() => {
-    if (!room || !session?.playerId) return;
-    const me = room.members.find((m) => m.id === session.playerId);
+    if (!room || !session?.session?.playerId) return;
+    const me = room.members.find((m) => m.id === session?.session?.playerId);
     // Still in the room → reset the offline timer.
     if (me) {
       offlineAtRef.current = null;
@@ -339,10 +344,10 @@ export default function LobbyPage() {
     if (!offlineAtRef.current) offlineAtRef.current = Date.now();
     const stillOfflineAfter = Date.now() - offlineAtRef.current > 3000;
     if (stillOfflineAfter) {
-      session.clear();
+      sessionCtx.clear();
       navigate(ROUTES.landing, { replace: true });
     }
-  }, [room, session, session, navigate]);
+  }, [room, session, sessionCtx, navigate]);
 
   const handleCopy = useCallback(async () => {
     const code = room?.code || session?.roomCode;
@@ -370,9 +375,9 @@ export default function LobbyPage() {
     } catch (_) {
       // Best-effort: navigate away even if the leave call fails.
     }
-    session.clear();
+    sessionCtx.clear();
     navigate(ROUTES.landing);
-  }, [audio, navigate, session]);
+  }, [audio, navigate, sessionCtx]);
 
   // Toggle this player's ready state. Only non-host players see a button;
   // we still guard on the server (SetReadyAsync rejects hosts). The host's
@@ -414,7 +419,7 @@ export default function LobbyPage() {
     try {
       // Use the shared wrapper so we get the same timeout/retry/error
       // handling as the rest of the app.
-      await roomsApi.startGame(roomId, session.playerId);
+      await roomsApi.startGame(roomId, session?.playerId);
       refresh();
     } catch (e) {
       toast.error(e.message || "Không bắt đầu được ván.");
@@ -437,12 +442,12 @@ export default function LobbyPage() {
       const cur = loadSession();
       if (!cur) return;
       saveSession({ ...cur, avatar });
-      session.patch({ avatar });
+      sessionCtx.patch({ avatar });
       setPickerOpen(false);
       audio.playSfx("buttonClick");
       toast.success("Đã cập nhật avatar của bạn.", { duration: 1500 });
     },
-    [audio, session, toast],
+    [audio, sessionCtx, toast],
   );
 
   const myMember = useMemo(
