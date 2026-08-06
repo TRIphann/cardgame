@@ -15,13 +15,16 @@ public class RoomService : Abstractions.IRoomService
     private static readonly TimeSpan OfflineAfter = TimeSpan.FromSeconds(35);
 
     /// <summary>
-    /// Snapshot cache window. The frontend polls /snapshot ~once per
-    /// second; without a cache every poll reads Firestore (room doc +
-    /// members subcollection = 2 reads). With a 2s cache, even an
-    /// aggressive poll only triggers one Firestore round-trip every 2
-    /// seconds per room, slashing the read quota.
+    /// Snapshot cache window. The frontend polls /snapshot once every few
+    /// seconds per tab; without a cache every poll reads Firestore (room
+    /// doc + members subcollection = 2 reads). With a 5s cache, even an
+    /// aggressive poll across many tabs only triggers one Firestore
+    /// round-trip every 5 seconds per room, slashing the read quota.
+    /// Writes (join, leave, ready, play, heartbeat) call
+    /// <see cref="InvalidateSnapshotCache"/> so the freshness delay is
+    /// bounded by the next mutation, not by the TTL.
     /// </summary>
-    private static readonly TimeSpan SnapshotCacheTtl = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan SnapshotCacheTtl = TimeSpan.FromSeconds(5);
 
     private static readonly ConcurrentDictionary<string, (Room Room, DateTime ExpiresAt)> _snapshotCache = new();
 
@@ -115,9 +118,9 @@ public class RoomService : Abstractions.IRoomService
     /// <summary>
     /// Shared read path for both <see cref="GetRoomAsync"/> and
     /// <see cref="GetRoomWithPruneAsync"/>. The frontend polls /snapshot
-    /// ~once per second; without a cache every poll reads Firestore (room
-    /// doc + members subcollection = 2 reads). With a 2s cache, even an
-    /// aggressive poll only triggers one Firestore round-trip every 2
+    /// every few seconds; without a cache every poll reads Firestore (room
+    /// doc + members subcollection = 2 reads). With a 5s cache, even an
+    /// aggressive poll only triggers one Firestore round-trip every 5
     /// seconds per room, and the same cache absorbs the Leave endpoint's
     /// reads too. Cache is invalidated on any write through
     /// <see cref="InvalidateSnapshotCache"/>.
@@ -187,7 +190,7 @@ public class RoomService : Abstractions.IRoomService
 
     public async Task<IReadOnlyList<Room>> GetAllPlayingAsync(CancellationToken ct = default)
     {
-        // 2-second snapshot cache is per-room, so a list snapshot can't be
+        // 5-second snapshot cache is per-room, so a list snapshot can't be
         // cached directly. We pull the underlying repo and let the per-room
         // cache fill for the individual entries — that way subsequent
         // single-room reads (e.g. TurnTimeoutHandler) hit the cache.

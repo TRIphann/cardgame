@@ -32,7 +32,9 @@
     #   script-src  'self' 'unsafe-inline'       — Vite injects an inline <script>
     #                                              setting data-build-ts; 'unsafe-eval'
     #                                              is intentionally NOT allowed.
-    #   style-src   'self' 'unsafe-inline'       — CSS files + inline style attrs
+    #   style-src   'self' 'unsafe-inline' https://fonts.googleapis.com
+    #                                            — CSS files + inline style attrs
+    #                                              + Google Fonts CSS at fonts.googleapis.com
     #   img-src     'self' https://res.cloudinary.com data: — Cloudinary cards + emoji SVGs
     #   font-src    'self' https://fonts.gstatic.com        — Google Fonts (Cinzel, DM Sans)
     #   connect-src 'self' https://cardgame-lwsk.onrender.com wss://cardgame-lwsk.onrender.com
@@ -41,4 +43,4 @@
     #   frame-ancestors 'self'                   — clickjacking guard (X-Frame-Options backup)
     #   base-uri    'self'                       — block <base> injection
     #   form-action 'self'                       — keep forms inside the site
-    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' https://res.cloudinary.com data:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://cardgame-lwsk.onrender.com wss://cardgame-lwsk.onrender.com; media-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' https://res.cloudinary.com data:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://cardgame-lwsk.onrender.com wss://cardgame-lwsk.onrender.com; media-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'"
