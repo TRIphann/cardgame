@@ -1,5 +1,16 @@
 # Multi-stage build for Arcana.Api on Render (free tier, 0.5 vCPU / 512 MB).
 #
+# Build context
+# -------------
+# This Dockerfile is invoked by Render with `dockerfilePath: backend/Dockerfile`
+# in render.yaml. Render sets the Docker build context to the directory that
+# contains the Dockerfile, i.e. `backend/`. So all `COPY` paths below are
+# relative to `backend/` — NOT to the repo root.
+#
+# (Earlier revisions were written assuming `context = repo root` and used
+# paths like `COPY backend/src/...`. That broke once `dockerfilePath` was set,
+# because `backend/backend/src/...` does not exist inside the build context.)
+#
 # Why this Dockerfile exists
 # ---------------------------
 # Render's default .NET runtime on the free Linux tier hits two problems:
@@ -22,19 +33,21 @@ FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
 # Restore uses a separate layer from the source copy so package changes don't
-# invalidate the build cache for plain code edits.
+# invalidate the build cache for plain code edits. Paths are relative to the
+# `backend/` build context (set automatically by Render when using
+# `dockerfilePath: backend/Dockerfile`).
 COPY Arcana.sln ./
-COPY backend/src/Arcana.Domain/Arcana.Domain.csproj                 backend/src/Arcana.Domain/
-COPY backend/src/Arcana.Application/Arcana.Application.csproj       backend/src/Arcana.Application/
-COPY backend/src/Arcana.Infrastructure/Arcana.Infrastructure.csproj backend/src/Arcana.Infrastructure/
-COPY backend/src/Arcana.Api/Arcana.Api.csproj                       backend/src/Arcana.Api/
-COPY backend/src/Arcana.Shared/Arcana.Shared.csproj                 backend/src/Arcana.Shared/
+COPY src/Arcana.Domain/Arcana.Domain.csproj                 src/Arcana.Domain/
+COPY src/Arcana.Application/Arcana.Application.csproj       src/Arcana.Application/
+COPY src/Arcana.Infrastructure/Arcana.Infrastructure.csproj src/Arcana.Infrastructure/
+COPY src/Arcana.Api/Arcana.Api.csproj                       src/Arcana.Api/
+COPY src/Arcana.Shared/Arcana.Shared.csproj                 src/Arcana.Shared/
 
-RUN dotnet restore backend/src/Arcana.Api/Arcana.Api.csproj
+RUN dotnet restore src/Arcana.Api/Arcana.Api.csproj
 
-COPY backend/src ./backend/src
+COPY src ./src
 
-RUN dotnet publish backend/src/Arcana.Api/Arcana.Api.csproj \
+RUN dotnet publish src/Arcana.Api/Arcana.Api.csproj \
     -c Release \
     -o /app/publish \
     --no-restore \
