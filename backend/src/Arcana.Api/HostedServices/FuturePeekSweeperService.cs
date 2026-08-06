@@ -1,5 +1,3 @@
-using Arcana.Application.Abstractions;
-using Arcana.Application.Services;
 using Arcana.Domain.Repositories;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -21,21 +19,8 @@ namespace Arcana.Api.HostedServices;
 /// </summary>
 public sealed class FuturePeekSweeperService : BackgroundService
 {
-    /// <summary>
-    /// How often this loop scans for stale FuturePeek entries. Tuned to
-    /// 30s — a FuturePeek's lifetime is 13s, so a 30s sweep gives roughly
-    /// a 17s window for stale entries to be reaped. The previous 2s sweep
-    /// hammered Firestore with full-collection scans and triggered
-    /// <c>ResourceExhausted / Quota exceeded</c> on the free tier.
-    /// </summary>
-    private const int PollIntervalMs = 30_000;
-
-    /// <summary>
-    /// When a Firestore quota error fires, back off this many ms before the
-    /// next attempt. Prevents a tight retry loop from burning through the
-    /// remaining quota for the day.
-    /// </summary>
-    private const int QuotaBackoffMs = 300_000;
+    /// <summary>How often this loop scans for stale FuturePeek entries.</summary>
+    private const int PollIntervalMs = 2_000;
 
     /// <summary>
     /// Total lifetime of a Future peek before the sweeper wipes it. Tuned to
@@ -61,12 +46,8 @@ public sealed class FuturePeekSweeperService : BackgroundService
             "FuturePeekSweeperService started (poll={PollMs}ms, lifetime={Life}s)",
             PollIntervalMs, (int)PeekLifetime.TotalSeconds);
 
-        var nextDelayMs = PollIntervalMs;
-
         while (!stoppingToken.IsCancellationRequested)
         {
-            var quotaExceeded = false;
-
             try
             {
                 await TickAsync(stoppingToken);
@@ -75,17 +56,6 @@ public sealed class FuturePeekSweeperService : BackgroundService
             {
                 break;
             }
-            catch (Grpc.Core.RpcException rex) when (
-                rex.StatusCode == Grpc.Core.StatusCode.ResourceExhausted)
-            {
-                // Quota / rate limit hit — back off hard so we don't burn the
-                // remaining daily budget in a tight retry loop.
-                quotaExceeded = true;
-                nextDelayMs = QuotaBackoffMs;
-                _logger.LogWarning(
-                    "FuturePeekSweeperService: Firestore quota exceeded, backing off {Sec}s",
-                    nextDelayMs / 1000);
-            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "FuturePeekSweeperService tick failed");
@@ -93,12 +63,9 @@ public sealed class FuturePeekSweeperService : BackgroundService
 
             try
             {
-                await Task.Delay(nextDelayMs, stoppingToken);
+                await Task.Delay(PollIntervalMs, stoppingToken);
             }
             catch (OperationCanceledException) { break; }
-
-            // After a successful tick, reset to the normal poll cadence.
-            if (!quotaExceeded) nextDelayMs = PollIntervalMs;
         }
 
         _logger.LogInformation("FuturePeekSweeperService stopped");
@@ -109,13 +76,10 @@ public sealed class FuturePeekSweeperService : BackgroundService
         var now = DateTime.UtcNow;
         using var scope = _scopeFactory.CreateScope();
         var repo = scope.ServiceProvider.GetRequiredService<IRoomRepository>();
-        var roomService = scope.ServiceProvider.GetRequiredService<IRoomService>();
 
-        // Scan every active room via IRoomService (which uses the 2-second
-        // snapshot cache, so back-to-back ticks share the same Firestore
-        // round-trip). The number of rooms in flight is small (single-digit
-        // for a casual party game) so an O(rooms) scan is fine.
-        var rooms = await roomService.GetAllPlayingAsync(ct);
+        // Scan every active room. The number of rooms in flight is small
+        // (single-digit for a casual party game) so an O(rooms) scan is fine.
+        var rooms = await repo.GetAllPlayingAsync(ct);
         if (rooms.Count == 0) return;
 
         foreach (var room in rooms)
@@ -128,10 +92,7 @@ public sealed class FuturePeekSweeperService : BackgroundService
             gs.FuturePeek = null;
             gs.FuturePeekAt = null;
             await repo.UpdateGameStateAsync(room.Id, gs, null, ct);
-            RoomService.InvalidateSnapshotCache(room.Id);
-            // Debug — FuturePeek wipes happen every 13s per active peek; an
-            // Info-level log here would create one line per wipe.
-            _logger.LogDebug(
+            _logger.LogInformation(
                 "Cleared stale FuturePeek for room {RoomId}", room.Id);
         }
     }

@@ -1,5 +1,3 @@
-using System.Collections.Concurrent;
-using Arcana.Application.Services;
 using Arcana.Domain.Entities;
 using Arcana.Domain.Enums;
 using Arcana.Domain.Repositories;
@@ -72,7 +70,6 @@ public class FirestoreRoomRepository : IRoomRepository
         }
 
         await batch.CommitAsync(ct);
-        InvalidateCache(room.Id);
     }
 
     public async Task<Room?> TryJoinRoomAsync(string roomId, RoomMember candidate, CancellationToken ct = default)
@@ -168,51 +165,28 @@ public class FirestoreRoomRepository : IRoomRepository
         });
     }
 
-    /// <summary>
-    /// Sweep stale members across every active room in a single pass.
-    /// Used by OfflineMemberSweeperService so we touch Firestore once
-    /// per sweep rather than once per room read.
-    ///
-    /// Strategy: pull only member docs whose <c>lastSeenAt</c> is older
-    /// than the offline cutoff (single-field timestamp inequality,
-    /// auto-indexed). At most a handful of docs match; everything else
-    /// never leaves Firestore's index.
-    /// </summary>
-    public async Task<int> SweepStaleMembersAsync(TimeSpan offlineAfter, int maxRooms = 50, CancellationToken ct = default)
+    public async Task<int> MarkStaleMembersOfflineAsync(string roomId, TimeSpan offlineAfter, CancellationToken ct = default)
     {
+        var roomRef = _db.Collection(RoomsCollection).Document(roomId);
+        var membersRef = roomRef.Collection("members");
+
+        var snapshot = await membersRef.GetSnapshotAsync(ct);
         var cutoff = DateTime.UtcNow - offlineAfter;
-        var cutoffTs = Timestamp.FromDateTime(cutoff.ToUniversalTime());
-
-        // Find rooms that still have active members — single-field
-        // equality on status, no composite index required.
-        var roomsSnap = await _db.Collection(RoomsCollection)
-            .WhereEqualTo("status", "playing")
-            .Limit(maxRooms)
-            .GetSnapshotAsync(ct);
-
-        if (roomsSnap.Documents.Count == 0) return 0;
-
-        // Build a single collection-group query for stale members.
-        var staleQuery = _db.CollectionGroup("members")
-            .WhereLessThan("lastSeenAt", cutoffTs)
-            .WhereEqualTo("isOnline", true)
-            .Limit(200);
-
-        var staleSnap = await staleQuery.GetSnapshotAsync(ct);
-        if (staleSnap.Documents.Count == 0) return 0;
-
         var batch = _db.StartBatch();
         var touched = 0;
-        foreach (var doc in staleSnap.Documents)
+        foreach (var doc in snapshot.Documents)
         {
-            batch.Update(doc.Reference, "isOnline", false);
+            var data = doc.ToDictionary();
+            var isOnline = data.TryGetValue("isOnline", out var io) && io is bool iob && iob;
+            if (!isOnline) continue;
+            var lastSeen = data.TryGetValue("lastSeenAt", out var ls) && ls is Timestamp lts
+                ? lts.ToDateTime().ToUniversalTime()
+                : DateTime.UtcNow;
+            if (lastSeen >= cutoff) continue;
+
+            var updated = new Dictionary<string, object>(data) { ["isOnline"] = false };
+            batch.Update(doc.Reference, updated);
             touched += 1;
-            // Firestore batch caps at 500 ops — flush if we're close.
-            if (touched % 450 == 0)
-            {
-                await batch.CommitAsync(ct);
-                batch = _db.StartBatch();
-            }
         }
         if (touched > 0)
         {
@@ -221,17 +195,7 @@ public class FirestoreRoomRepository : IRoomRepository
         return touched;
     }
 
-    /// <summary>
-    /// Replace the room's <c>gameState</c> field (and optionally <c>status</c>)
-    /// in Firestore. WRITE-ONLY — does NOT re-read the room afterwards.
-    /// Callers that need the post-write snapshot should keep using their
-    /// in-memory copy (which is authoritative for the mutation that just
-    /// happened) or call <see cref="GetByIdAsync"/> explicitly. Skipping the
-    /// post-write read saves one room read + one members subcollection read
-    /// per mutation, which is the single biggest Firestore quota saver in
-    /// the codebase.
-    /// </summary>
-    public async Task UpdateGameStateAsync(
+    public async Task<Room?> UpdateGameStateAsync(
         string roomId,
         Domain.Entities.GameState? gameState,
         Domain.Enums.RoomStatus? status,
@@ -243,37 +207,34 @@ public class FirestoreRoomRepository : IRoomRepository
         {
             updates["status"] = status.Value.ToString().ToLowerInvariant();
         }
-        updates["gameState"] = gameState is null
-            ? null
-            : BuildGameStateDoc(gameState);
+        if (gameState is not null)
+        {
+            updates["gameState"] = BuildGameStateDoc(gameState);
+        }
+        else
+        {
+            updates["gameState"] = null;
+        }
         await docRef.UpdateAsync(updates, cancellationToken: ct);
-        InvalidateCache(roomId);
+        return await GetByIdAsync(roomId, ct);
     }
 
     /// <summary>
-    /// Returns rooms currently in the "playing" status so background sweepers
-    /// (e.g. <c>FuturePeekSweeperService</c>) can walk active games without
-    /// going through the lobby / snapshot path.
-    ///
-    /// Uses <c>status == playing</c> (a single-field equality — auto-indexed
-    /// on free tier, no composite index required) combined with a hard cap
-    /// (<paramref name="maxRooms"/>) so the query never drains the read quota.
-    /// In-process we then filter for the actual peek-state condition the
-    /// caller cares about. Sweep tick is 30s so the worst-case fanout is
-    /// bounded by the active room count, which is small for a party game.
+    /// Walks every room document and returns the ones currently in the
+    /// "playing" status. Used by background sweepers (e.g. FuturePeekSweeper)
+    /// that need to find stale per-game state without going through the lobby.
     /// </summary>
     public async Task<IReadOnlyList<Room>> GetAllPlayingAsync(CancellationToken ct = default)
     {
-        var snap = await _db.Collection(RoomsCollection)
-            .WhereEqualTo("status", "playing")
-            .Limit(50)
-            .GetSnapshotAsync(ct);
-
+        var query = _db.Collection(RoomsCollection)
+            .WhereEqualTo("status", "playing");
+        var snap = await query.GetSnapshotAsync(ct);
         var rooms = new List<Room>();
         foreach (var doc in snap.Documents)
         {
-            var data = doc.ToDictionary();
-            if (!data.ContainsKey("gameState")) continue;
+            // Skip rooms whose gameState is missing — they're either freshly
+            // created or already cleaned up. The sweeper is a no-op for them.
+            if (!doc.ToDictionary().ContainsKey("gameState")) continue;
             rooms.Add(await MapRoomAsync(doc, ct));
         }
         return rooms;
@@ -462,13 +423,4 @@ public class FirestoreRoomRepository : IRoomRepository
 
         return gs;
     }
-
-    /// <summary>
-    /// Invalidate the in-process snapshot cache after any write so the next
-    /// reader sees the fresh state. Centralised here so every write path
-    /// (TryJoinRoomAsync, RemoveMemberAsync, UpdateMemberFieldAsync,
-    /// UpdateGameStateAsync) forgets its cached snapshot automatically.
-    /// </summary>
-    private static void InvalidateCache(string roomId)
-        => RoomService.InvalidateSnapshotCache(roomId);
 }

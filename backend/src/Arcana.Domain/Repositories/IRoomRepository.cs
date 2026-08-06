@@ -36,22 +36,18 @@ public interface IRoomRepository
     Task<RoomMember?> UpdateMemberFieldAsync(string roomId, string memberId, bool? isReady, DateTime? lastSeenAt, CancellationToken ct = default);
 
     /// <summary>
-    /// Sweep stale members across every active room in a single Firestore
-    /// pass. Used by OfflineMemberSweeperService on a long interval so we
-    /// don't drain the read quota from per-snapshot polling. Returns the
-    /// number of members marked offline.
+    /// Mark all members whose LastSeenAt is older than the threshold as offline.
+    /// Used by the polling endpoint to clean up stale tabs without an explicit
+    /// leave call (browser closed, network dropped, …).
+    /// Returns the number of members marked offline.
     /// </summary>
-    Task<int> SweepStaleMembersAsync(TimeSpan offlineAfter, int maxRooms = 50, CancellationToken ct = default);
+    Task<int> MarkStaleMembersOfflineAsync(string roomId, TimeSpan offlineAfter, CancellationToken ct = default);
 
     /// <summary>
-    /// Replace the room's <c>gameState</c> field (and optionally <c>status</c>)
-    /// in Firestore. WRITE-ONLY — does NOT re-read the room. Callers should
-    /// keep using their in-memory snapshot (which is authoritative for the
-    /// mutation that just ran) and broadcast it through the realtime channel.
-    /// Skipping the post-write read avoids two extra Firestore reads
-    /// (room doc + members subcollection) per gameplay mutation.
+    /// Replace the room's gameState field. Returns the updated room, or null
+    /// if the room no longer exists.
     /// </summary>
-    Task UpdateGameStateAsync(string roomId, Domain.Entities.GameState? gameState, Domain.Enums.RoomStatus? status, CancellationToken ct = default);
+    Task<Room?> UpdateGameStateAsync(string roomId, Domain.Entities.GameState? gameState, Domain.Enums.RoomStatus? status, CancellationToken ct = default);
 
     /// <summary>
     /// Snapshot every room whose status is <c>Playing</c>. Used by background

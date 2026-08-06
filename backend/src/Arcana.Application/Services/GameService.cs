@@ -179,33 +179,25 @@ public class GameService
         // any pending nope window gets cleared from previous sessions. Without
         // this the first player would see TurnRemainingSec frozen at the value
         // baked into the snapshot because the server never registered the clock.
-        // UpdateGameStateAsync is write-only now — no post-write read.
-        // The authoritative post-state is the in-memory `gs` we just mutated;
-        // PersistAsync will broadcast it via SignalR so every tab stays in sync.
-        await _repository.UpdateGameStateAsync(roomId, state, RoomStatus.Playing, ct);
-        RoomService.InvalidateSnapshotCache(roomId);
+        var persistResult = await _repository.UpdateGameStateAsync(
+            roomId, state, RoomStatus.Playing, ct);
+        var persistGs = persistResult?.GameState ?? state;
         // Re-arm turn clock + broadcast push to subscribers.
-        if (state.EndedAt is null && state.TurnStartedAt is not null
-            && state.PendingAction is null && !state.BombRevealActive)
+        if (persistGs.EndedAt is null && persistGs.TurnStartedAt is not null
+            && persistGs.PendingAction is null && !persistGs.BombRevealActive)
         {
-            _turnClock.Register(roomId, state.TurnStartedAt.Value);
+            _turnClock.Register(roomId, persistGs.TurnStartedAt.Value);
         }
         try
         {
-            // Broadcast the FULL room with the freshly-mutated game state so
-            // subscribers don't need to GET /snapshot again.
-            await _broadcaster.BroadcastRoomUpdatedAsync(roomId, new
-            {
-                roomId,
-                stateVersion = DateTime.UtcNow.Ticks,
-                snapshot = WithGameState(room, state),
-            }, ct);
+            await _broadcaster.BroadcastRoomUpdatedAsync(roomId,
+                new { roomId, viewerId = state.CurrentTurnMemberId }, ct);
         }
         catch
         {
             // Broadcast failures must never corrupt the persisted state.
         }
-        return room;
+        return persistResult ?? throw new DomainException("room_not_found", "Phòng không tồn tại.");
     }
 
     public async Task<Room> RotateRoomAsync(string roomId, string hostId, CancellationToken ct = default)
@@ -440,12 +432,8 @@ public class GameService
                     QueueNopeWindow(gs, memberId, CardCatalog.Favor);
                     result.Toast = "Đã Xin — đợi đối thủ chọn lá để đưa.";
                     CheckWinCondition(gs);
-                    await PersistAsync(room.Id, gs, ct, room);
-                    // Re-use the in-memory Room instead of re-reading from
-                    // Firestore — gs is already authoritative and the broadcast
-                    // pushes the same state to every subscriber.
-                    room.GameState = gs;
-                    result.Room = room;
+                    await PersistAsync(room.Id, gs, ct);
+                    result.Room = (await _repository.GetByIdAsync(room.Id, ct))!;
                     return result;
                 }
 
@@ -521,11 +509,8 @@ public class GameService
         }
 
         CheckWinCondition(gs);
-        await PersistAsync(room.Id, gs, ct, room);
-        // Use the in-memory Room instead of re-reading Firestore after every
-// write — gs is already authoritative and PersistAsync broadcasts it.
-                    room.GameState = gs;
-                    result.Room = room;
+        await PersistAsync(room.Id, gs, ct);
+        result.Room = (await _repository.GetByIdAsync(room.Id, ct))!;
         return result;
     }
 
@@ -555,11 +540,8 @@ public class GameService
                     // Persist so the cinematic state is visible to every
                     // viewer while the target picker is open.
                     CheckWinCondition(gs);
-                    await PersistAsync(room.Id, gs, ct, room);
-                    // Use the in-memory Room instead of re-reading Firestore after every
-// write — gs is already authoritative and PersistAsync broadcasts it.
-                    room.GameState = gs;
-                    result.Room = room;
+                    await PersistAsync(room.Id, gs, ct);
+                    result.Room = (await _repository.GetByIdAsync(room.Id, ct))!;
                     return result; // client will retry
                 }
                 var t2 = gs.Hands.TryGetValue(targetMemberId, out var t2Hand) ? t2Hand : null;
@@ -590,11 +572,8 @@ public class GameService
                     result.RequiresFavorPick = true;
                     result.FavorCandidates = shuffled2;
                     result.Toast = "Chọn 1 lá từ tay đối thủ.";
-                    await PersistAsync(room.Id, gs, ct, room);
-                    // Use the in-memory Room instead of re-reading Firestore after every
-// write — gs is already authoritative and PersistAsync broadcasts it.
-                    room.GameState = gs;
-                    result.Room = room;
+                    await PersistAsync(room.Id, gs, ct);
+                    result.Room = (await _repository.GetByIdAsync(room.Id, ct))!;
                     return result;
                 }
                 // Phase 2: the actor picked discardPickKey from the shuffled list.
@@ -651,11 +630,8 @@ public class GameService
                     // target pick selection are visible to all viewers while
                     // the picker modal is open.
                     CheckWinCondition(gs);
-                    await PersistAsync(room.Id, gs, ct, room);
-                    // Use the in-memory Room instead of re-reading Firestore after every
-// write — gs is already authoritative and PersistAsync broadcasts it.
-                    room.GameState = gs;
-                    result.Room = room;
+                    await PersistAsync(room.Id, gs, ct);
+                    result.Room = (await _repository.GetByIdAsync(room.Id, ct))!;
                     return result;
                 }
                 // Phase 2: actor named discardPickKey. Resolve server-side.
@@ -705,11 +681,8 @@ public class GameService
                     // the state so the actor's reduced hand count is visible
                     // to all viewers while the picker modal is open.
                     CheckWinCondition(gs);
-                    await PersistAsync(room.Id, gs, ct, room);
-                    // Use the in-memory Room instead of re-reading Firestore after every
-// write — gs is already authoritative and PersistAsync broadcasts it.
-                    room.GameState = gs;
-                    result.Room = room;
+                    await PersistAsync(room.Id, gs, ct);
+                    result.Room = (await _repository.GetByIdAsync(room.Id, ct))!;
                     return result;
                 }
                 // Phase 2: player picked a card.
@@ -737,11 +710,8 @@ public class GameService
         }
 
         CheckWinCondition(gs);
-        await PersistAsync(room.Id, gs, ct, room);
-        // Use the in-memory Room instead of re-reading Firestore after every
-// write — gs is already authoritative and PersistAsync broadcasts it.
-                    room.GameState = gs;
-                    result.Room = room;
+        await PersistAsync(room.Id, gs, ct);
+        result.Room = (await _repository.GetByIdAsync(room.Id, ct))!;
         return result;
     }
 
@@ -790,8 +760,8 @@ public class GameService
             AdvanceTurn(gs);
             var favResult = new GameActionResult { Toast = "Đã hủy Xin." };
             CheckWinCondition(gs);
-            await PersistAsync(room.Id, gs, ct, room);
-            favResult.Room = WithGameState(room, gs);
+            await PersistAsync(room.Id, gs, ct);
+            favResult.Room = (await _repository.GetByIdAsync(room.Id, ct))!;
             return favResult;
         }
 
@@ -844,11 +814,8 @@ public class GameService
             Toast = "Đã hủy combo.",
         };
         CheckWinCondition(gs);
-        await PersistAsync(room.Id, gs, ct, room);
-        // Use the in-memory Room instead of re-reading Firestore after every
-// write — gs is already authoritative and PersistAsync broadcasts it.
-                    room.GameState = gs;
-                    result.Room = room;
+        await PersistAsync(room.Id, gs, ct);
+        result.Room = (await _repository.GetByIdAsync(room.Id, ct))!;
         return result;
     }
 
@@ -898,23 +865,17 @@ public class GameService
         // so the lobby stops showing a dead player.
         await _repository.UpdateGameStateAsync(room.Id, gs,
             gs.EndedAt is null ? null : Domain.Enums.RoomStatus.Finished, ct);
-        RoomService.InvalidateSnapshotCache(room.Id);
 
         var updated = await _repository.RemoveMemberAsync(room.Id, memberId, ct);
-        // updated comes from RemoveMemberAsync (1 read in a transaction). If it
-        // returns null (race / room deleted), fall back to the in-memory room
-        // — gs is already authoritative and will be re-broadcast by PersistAsync.
-        var finalRoom = updated ?? room;
+        var finalRoom = updated ?? (await _repository.GetByIdAsync(room.Id, ct)) ?? room;
         // If RemoveMemberAsync didn't touch gameState (in-memory impls may not
         // copy it back), graft the up-to-date gameState on.
-        finalRoom.GameState = gs;
+        finalRoom.GameState ??= gs;
 
         // Re-arm the turn clock for the next player (PersistAsync is the
         // canonical place that wires up the background timer).
-        await PersistAsync(room.Id, finalRoom.GameState!, ct, finalRoom);
-        // finalRoom is already authoritative — RemoveMemberAsync returned the
-        // updated doc and we grafted the fresh gameState on above. No need to
-        // re-read Firestore (would waste 2 reads per concede).
+        await PersistAsync(room.Id, finalRoom.GameState!, ct);
+        finalRoom = (await _repository.GetByIdAsync(room.Id, ct)) ?? finalRoom;
 
         return new GameActionResult
         {
@@ -946,7 +907,7 @@ public class GameService
         // (consume one draw) instead of drawing cards.
         if (gs.AttackCounter > 0)
         {
-            return await DrawMultipleAsync(room, gs, memberId, gs.AttackCounter, ct);
+            return await DrawMultipleAsync(roomId, gs, memberId, gs.AttackCounter, ct);
         }
 
         var drawn = gs.Deck[^1];
@@ -980,11 +941,8 @@ public class GameService
             {
                 result.RequiresDefuse = true;
                 result.Toast = "Bạn rút trúng bom! Hãy chọn vị trí đặt lại.";
-                await PersistAsync(room.Id, gs, ct, room);
-                // Use the in-memory Room instead of re-reading Firestore after every
-                // write — gs is already authoritative and PersistAsync broadcasts it.
-                room.GameState = gs;
-                result.Room = room;
+                await PersistAsync(roomId, gs, ct);
+                result.Room = (await _repository.GetByIdAsync(roomId, ct))!;
                 return result;
             }
             // No defuse → die. Clear the reveal flag here so the explosion
@@ -1015,11 +973,8 @@ public class GameService
         }
 
         CheckWinCondition(gs);
-        await PersistAsync(room.Id, gs, ct, room);
-        // Use the in-memory Room instead of re-reading Firestore after every
-                // write — gs is already authoritative and PersistAsync broadcasts it.
-                room.GameState = gs;
-                result.Room = room;
+        await PersistAsync(roomId, gs, ct);
+        result.Room = (await _repository.GetByIdAsync(roomId, ct))!;
         return result;
     }
 
@@ -1030,7 +985,7 @@ public class GameService
     /// defuse, we stop and return to the defuse flow. If the deck runs out
     /// mid-chain, we stop and advance the turn.
     /// </summary>
-    private async Task<GameActionResult> DrawMultipleAsync(Room room, GameState gs, string memberId, int remaining, CancellationToken ct)
+    private async Task<GameActionResult> DrawMultipleAsync(string roomId, GameState gs, string memberId, int remaining, CancellationToken ct)
     {
         if (remaining <= 0 || gs.Deck.Count == 0)
         {
@@ -1039,10 +994,10 @@ public class GameService
             gs.TurnsTaken[memberId] = gs.TurnsTaken.GetValueOrDefault(memberId) + 1;
             AdvanceTurn(gs);
             CheckWinCondition(gs);
-            await PersistAsync(room.Id, gs, ct, room);
+            await PersistAsync(roomId, gs, ct);
             return new GameActionResult
             {
-                Room = WithGameState(room, gs),
+                Room = (await _repository.GetByIdAsync(roomId, ct))!,
                 Toast = "Hết bài — lượt kết thúc.",
             };
         }
@@ -1075,11 +1030,8 @@ public class GameService
                 gs.AttackCounter = 0;
                 result.RequiresDefuse = true;
                 result.Toast = $"Rút trúng bom trong lượt tấn công — hãy chọn vị trí đặt lại.";
-                await PersistAsync(room.Id, gs, ct, room);
-                // Use the in-memory Room instead of re-reading Firestore after every
-                // write — gs is already authoritative and PersistAsync broadcasts it.
-                room.GameState = gs;
-                result.Room = room;
+                await PersistAsync(roomId, gs, ct);
+                result.Room = (await _repository.GetByIdAsync(roomId, ct))!;
                 return result;
             }
             // No defuse → die. Bomb goes to discard pile, attack chain ends.
@@ -1109,11 +1061,8 @@ public class GameService
                 result.Toast = $"Rút được: {CardCatalog.Names.GetValueOrDefault(drawn, drawn)}. Còn {gs.AttackCounter} lá phải rút.";
                 result.RequiresMoreDraws = true;
                 result.RemainingDraws = gs.AttackCounter;
-                await PersistAsync(room.Id, gs, ct, room);
-                // Use the in-memory Room instead of re-reading Firestore after every
-                // write — gs is already authoritative and PersistAsync broadcasts it.
-                room.GameState = gs;
-                result.Room = room;
+                await PersistAsync(roomId, gs, ct);
+                result.Room = (await _repository.GetByIdAsync(roomId, ct))!;
                 return result;
             }
             // Chain finished — advance turn normally.
@@ -1123,11 +1072,8 @@ public class GameService
         }
 
         CheckWinCondition(gs);
-        await PersistAsync(room.Id, gs, ct, room);
-        // Use the in-memory Room instead of re-reading Firestore after every
-                // write — gs is already authoritative and PersistAsync broadcasts it.
-                room.GameState = gs;
-                result.Room = room;
+        await PersistAsync(roomId, gs, ct);
+        result.Room = (await _repository.GetByIdAsync(roomId, ct))!;
         return result;
     }
 
@@ -1162,10 +1108,10 @@ public class GameService
         AdvanceTurn(gs);
 
         CheckWinCondition(gs);
-        await PersistAsync(room.Id, gs, ct, room);
+        await PersistAsync(roomId, gs, ct);
         return new GameActionResult
         {
-            Room = WithGameState(room, gs),
+            Room = (await _repository.GetByIdAsync(roomId, ct))!,
             Toast = "Bom đã được cứu và đặt lại vào chồng bài.",
         };
     }
@@ -1185,7 +1131,7 @@ public class GameService
             // Auto-clear stale pending — but the original action already executed.
             gs.PendingAction = null;
             ClearActionCinematic(gs);
-            await PersistAsync(room.Id, gs, ct, room);
+            await PersistAsync(roomId, gs, ct);
             throw new DomainException("nope_window_closed", "Đã hết thời gian Nope.");
         }
 
@@ -1235,10 +1181,10 @@ public class GameService
         }
 
         CheckWinCondition(gs);
-        await PersistAsync(room.Id, gs, ct, room);
+        await PersistAsync(roomId, gs, ct);
         return new GameActionResult
         {
-            Room = WithGameState(room, gs),
+            Room = (await _repository.GetByIdAsync(roomId, ct))!,
             Toast = pending.NopeChain.Count % 2 == 1 ? "Hành động đã bị cản." : "Bạn đã cản, chờ phản ứng.",
         };
     }
@@ -1283,8 +1229,8 @@ public class GameService
         {
             gs.PendingAction = null;
             ClearActionCinematic(gs);
-            await PersistAsync(room.Id, gs, ct, room);
-            return new GameActionResult { Room = WithGameState(room, gs) };
+            await PersistAsync(roomId, gs, ct);
+            return new GameActionResult { Room = (await _repository.GetByIdAsync(roomId, ct))! };
         }
 
         // Commit the original action's effect — for the cards that take
@@ -1304,10 +1250,10 @@ public class GameService
         if (pending.CardKey == CardCatalog.Favor && gs.PendingFavorPick is not null)
         {
             CheckWinCondition(gs);
-            await PersistAsync(room.Id, gs, ct, room);
+            await PersistAsync(roomId, gs, ct);
             return new GameActionResult
             {
-                Room = WithGameState(room, gs),
+                Room = (await _repository.GetByIdAsync(roomId, ct))!,
                 Toast = $"Hết thời gian cản — chọn 1 lá để lấy từ đối thủ.",
             };
         }
@@ -1327,10 +1273,10 @@ public class GameService
             gs.TurnStartedAt = DateTime.UtcNow;
         }
         CheckWinCondition(gs);
-        await PersistAsync(room.Id, gs, ct, room);
+        await PersistAsync(roomId, gs, ct);
         return new GameActionResult
         {
-            Room = WithGameState(room, gs),
+            Room = (await _repository.GetByIdAsync(roomId, ct))!,
             Toast = $"Hết thời gian cản — {CardCatalog.Names.GetValueOrDefault(pending.CardKey, pending.CardKey)} đã có hiệu lực.",
         };
     }
@@ -1348,15 +1294,10 @@ public class GameService
         return room;
     }
 
-    private async Task PersistAsync(string roomId, GameState gs, CancellationToken ct, Room? broadcastRoom = null)
+    private async Task PersistAsync(string roomId, GameState gs, CancellationToken ct)
     {
         var status = gs.EndedAt is null ? (RoomStatus?)null : RoomStatus.Finished;
         await _repository.UpdateGameStateAsync(roomId, gs, status, ct);
-        // Invalidate the snapshot cache so the next GetRoomAsync call doesn't
-        // return stale state. Without this invalidation the cache could keep
-        // serving a snapshot from before the write, which would cause races
-        // (e.g. TurnTimeoutHandler seeing the old turn pointer).
-        RoomService.InvalidateSnapshotCache(roomId);
         // Turn clock: while the game is live and the nope window is closed,
         // the current player is on the clock. While PendingAction is set we
         // leave the entry untouched so a chain-Nope timeout doesn't draw on
@@ -1393,38 +1334,18 @@ public class GameService
             _nopeWindow.Unregister(roomId);
             _turnClock.Register(roomId, gs.TurnStartedAt.Value);
         }
-
-        // Broadcast the FULL mutated room state to every subscriber so they
-        // don't need to GET /snapshot again. Only runs when the caller
-        // passed an in-memory Room reference (most call paths do, except
-        // background handlers that don't have a recent snapshot handy).
-        // Building the payload here costs no Firestore reads — we use the
-        // in-memory `gs` and the `room` we loaded at the top of the call.
-        // Clients run their own per-tab DTO mapping (their viewer id differs
-        // from the actor's), but the heavy data (hand counts, alive flags,
-        // deck+discard, pending actions) is identical for every viewer, so
-        // one broadcast per room serves them all. stateVersion is a single
-        // tick value so the client can dedupe without JSON.stringify'ing
-        // the whole payload.
-        if (broadcastRoom is not null)
+        // Server-push: every mutation fans out to every tab subscribed to
+        // this room. Clients now get sub-100ms updates instead of waiting
+        // for the next polling tick.
+        try
         {
-            try
-            {
-                var version = gs.LastDrawnAt?.Ticks
-                    ?? gs.LastPlayedAt?.Ticks
-                    ?? DateTime.UtcNow.Ticks;
-                await _broadcaster.BroadcastRoomUpdatedAsync(roomId, new
-                {
-                    roomId,
-                    stateVersion = version,
-                    snapshot = broadcastRoom,
-                }, ct);
-            }
-            catch (Exception)
-            {
-                // Broadcast failures must never corrupt the persisted state —
-                // clients will re-sync via the next snapshot poll fallback.
-            }
+            var viewerId = gs.PendingAction?.InitiatorId ?? string.Empty;
+            await _broadcaster.BroadcastRoomUpdatedAsync(roomId, new { roomId, viewerId }, ct);
+        }
+        catch (Exception)
+        {
+            // Broadcast failures must never corrupt the persisted state —
+            // clients will re-sync via the next snapshot poll fallback.
         }
     }
 
@@ -1546,19 +1467,5 @@ public class GameService
             gs.FuturePeek = null;
             gs.FuturePeekAt = null;
         }
-    }
-
-    /// <summary>
-    /// Return the in-memory <see cref="Room"/> with the freshly-mutated
-    /// <paramref name="gs"/> grafted on. Used by every action path that used
-    /// to call <c>GetByIdAsync</c> after a write just to rebuild the
-    /// response. The Room object is the same reference we already loaded,
-    /// so we avoid a fresh Firestore read (room doc + members subcollection)
-    /// per mutation.
-    /// </summary>
-    private static Room WithGameState(Room room, GameState gs)
-    {
-        room.GameState = gs;
-        return room;
     }
 }

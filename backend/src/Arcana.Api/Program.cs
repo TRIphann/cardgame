@@ -32,7 +32,6 @@ builder.Services.AddSingleton<IGameBroadcaster, SignalRGameBroadcaster>();
 builder.Services.AddHostedService<TurnClockService>();
 builder.Services.AddHostedService<NopeTimeoutService>();
 builder.Services.AddHostedService<FuturePeekSweeperService>();
-builder.Services.AddHostedService<OfflineMemberSweeperService>();
 
 builder.Services.AddArcanaInfrastructure(builder.Configuration);
 
@@ -53,9 +52,17 @@ builder.Services.AddCors(options =>
     }
     else
     {
+        // No origins configured (e.g. env vars missing after a fresh Render
+        // deploy). Fall back to "reflect the Origin header" so the browser
+        // gets a valid Access-Control-Allow-Origin response and stops retrying.
+        // Note: AllowCredentials() is intentionally omitted — the browser
+        // requires a literal "Access-Control-Allow-Origin: <origin>" and
+        // forbids the wildcard-credential combo, so the old AllowAnyOrigin
+        // branch would 500 on every preflight and the front-end would retry
+        // forever, burning through the Firestore quota.
         options.AddDefaultPolicy(policy =>
         {
-            policy.AllowAnyOrigin()
+            policy.SetIsOriginAllowed(_ => true)
                   .AllowAnyHeader()
                   .AllowAnyMethod();
         });

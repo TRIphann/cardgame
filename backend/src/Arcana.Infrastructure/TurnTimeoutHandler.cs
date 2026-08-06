@@ -1,6 +1,7 @@
 using Arcana.Application.Abstractions;
 using Arcana.Application.Services;
 using Arcana.Domain.Common;
+using Arcana.Domain.Repositories;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -16,11 +17,6 @@ namespace Arcana.Infrastructure;
 /// We grab the current turn member at the moment of the timeout and pass
 /// that to DrawCardAsync so we never draw for the wrong person — race-free
 /// because the read happens inside the same scope that performs the write.
-///
-/// Quota note: we deliberately go through <see cref="IRoomService"/> for the
-/// pre-draw read so the 2-second snapshot cache absorbs back-to-back ticks.
-/// A direct repository call would bypass the cache and cost one extra Firestore
-/// read every 2s per active room.
 /// </summary>
 public sealed class TurnTimeoutHandler : ITurnTimeoutHandler
 {
@@ -42,12 +38,12 @@ public sealed class TurnTimeoutHandler : ITurnTimeoutHandler
     {
         using var scope = _scopeFactory.CreateScope();
         var sp = scope.ServiceProvider;
-        var roomService = sp.GetRequiredService<IRoomService>();
+        var roomRepo = sp.GetRequiredService<IRoomRepository>();
         var gameService = sp.GetRequiredService<GameService>();
 
         // Read fresh state — the turn may have changed since the registry
         // snapshot was taken. If the game ended, unregister and bail out.
-        var room = await roomService.GetRoomAsync(roomId, ct);
+        var room = await roomRepo.GetByIdAsync(roomId, ct);
         if (room is null)
         {
             _registry.Unregister(roomId);
@@ -86,10 +82,7 @@ public sealed class TurnTimeoutHandler : ITurnTimeoutHandler
             // DrawCardAsync advances the turn and resets TurnStartedAt, but
             // GameService doesn't know about the registry. We re-register
             // here using the fresh state so the next player is on the clock.
-            // DrawCardAsync broadcasts the updated state via SignalR but
-            // doesn't return the Room; we re-read through the cache so the
-            // cost is zero on back-to-back ticks.
-            var refreshed = await roomService.GetRoomAsync(roomId, ct);
+            var refreshed = await roomRepo.GetByIdAsync(roomId, ct);
             if (refreshed?.GameState is { EndedAt: null, TurnStartedAt: not null })
             {
                 _registry.Register(roomId, refreshed.GameState.TurnStartedAt!.Value);
@@ -98,9 +91,7 @@ public sealed class TurnTimeoutHandler : ITurnTimeoutHandler
             {
                 _registry.Unregister(roomId);
             }
-            // Use Debug — auto-draws happen every 60s on the turn clock and
-            // logging at Info would create one noisy line per auto-draw.
-            _logger.LogDebug(
+            _logger.LogInformation(
                 "Auto-drew for player {MemberId} in room {RoomId} (turn timer expired)",
                 memberId, roomId);
         }
@@ -120,7 +111,7 @@ public sealed class TurnTimeoutHandler : ITurnTimeoutHandler
             // registry snapshot and this call. AdvanceTurn should already
             // have moved the turn forward; just refresh the registry to the
             // current player so the next tick fires for the right person.
-            var refreshed = await roomService.GetRoomAsync(roomId, ct);
+            var refreshed = await roomRepo.GetByIdAsync(roomId, ct);
             if (refreshed?.GameState is { EndedAt: null, TurnStartedAt: not null })
             {
                 _registry.Register(roomId, refreshed.GameState.TurnStartedAt!.Value);
