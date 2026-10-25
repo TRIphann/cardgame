@@ -376,8 +376,8 @@ export default function LobbyPage() {
   // ---------------------------------------------------------------------
   const offlineAtRef = useRef(null);
   useEffect(() => {
-    if (!room || !session?.session?.playerId) return;
-    const me = room?.members?.find((m) => m.id === session?.session?.playerId);
+    if (!room || !session?.playerId) return;
+    const me = room?.members?.find((m) => m.id === session?.playerId);
     // Still in the room → reset the offline timer.
     if (me) {
       offlineAtRef.current = null;
@@ -392,7 +392,10 @@ export default function LobbyPage() {
   }, [room, session, sessionCtx, navigate]);
 
   const handleCopy = useCallback(async () => {
-    const code = room?.code || session?.roomCode;
+    // Prefer the authoritative server code; the session copy may still hold
+    // the optimistic empty string while the cold-start POST is in flight.
+    const code = (!isPlaceholderCode && room?.code)
+      || (/^[A-Z0-9]{6}$/.test(session?.roomCode || "") ? session.roomCode : "");
     if (!code) return;
     try {
       await navigator.clipboard.writeText(code);

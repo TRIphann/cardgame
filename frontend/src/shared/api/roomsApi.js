@@ -11,14 +11,12 @@ function normalizeGameActionResponse(res) {
   // Handle both PascalCase Room and camelCase room
   const roomData = res.Room ?? res.room;
   if (!roomData) return res;
-  console.log("[normalizeGameActionResponse] Room keys:", Object.keys(roomData), "MyHand:", roomData.MyHand, "myHand:", roomData.myHand);
   const normalizedRoom = normalizeRestRoom(roomData, null);
   const result = {
     ...res,
     Room: res.Room ? normalizedRoom : undefined,
     room: res.room ? normalizedRoom : undefined,
   };
-  console.log("[normalizeGameActionResponse] AFTER Room.myHand:", result.Room?.myHand, "room.myHand:", result.room?.myHand);
   return result;
 }
 
@@ -58,9 +56,10 @@ export async function request(path, options = {}) {
       const res = await fetch(`${API_BASE_URL}${path}`, {
         ...options,
         signal: ctrl.signal,
+        // Only send Content-Type when there is a body — attaching it to
+        // bodyless GETs forces a CORS preflight on every poll/snapshot.
         headers: {
-          "Content-Type": "application/json",
-          "X-Requested-With": "XMLHttpRequest",
+          ...(options.body ? { "Content-Type": "application/json" } : {}),
           ...(options.headers || {}),
         },
       });
@@ -190,16 +189,10 @@ export const roomsApi = {
     });
   },
   playCard(roomId, payload) {
-    console.log("[roomsApi.playCard] BEFORE fetch, payload:", payload);
     return jsonRequest(`/api/rooms/${roomId}/game/play-card`, {
       method: "POST",
       body: JSON.stringify(payload),
-    }).then((rawRes) => {
-      console.log("[roomsApi.playCard] rawRes keys:", rawRes ? Object.keys(rawRes) : "null");
-      console.log("[roomsApi.playCard] rawRes.room:", rawRes?.room);
-      console.log("[roomsApi.playCard] rawRes.Room:", rawRes?.Room);
-      return normalizeGameActionResponse(rawRes);
-    });
+    }).then(normalizeGameActionResponse);
   },
   // Cancel a pending combo target pick after the user dismissed the
   // picker. Spent combo cards + advance the turn so the player doesn't
@@ -211,16 +204,10 @@ export const roomsApi = {
     }).then(normalizeGameActionResponse);
   },
   drawCard(roomId, memberId) {
-    console.log("[roomsApi.drawCard] BEFORE fetch");
     return jsonRequest(`/api/rooms/${roomId}/game/draw-card`, {
       method: "POST",
       body: JSON.stringify({ memberId }),
-    }).then((rawRes) => {
-      console.log("[roomsApi.drawCard] rawRes keys:", rawRes ? Object.keys(rawRes) : "null");
-      console.log("[roomsApi.drawCard] rawRes.room:", rawRes?.room);
-      console.log("[roomsApi.drawCard] rawRes.Room:", rawRes?.Room);
-      return normalizeGameActionResponse(rawRes);
-    });
+    }).then(normalizeGameActionResponse);
   },
   useDefuse(roomId, memberId, slotIndex) {
     return jsonRequest(`/api/rooms/${roomId}/game/defuse`, {

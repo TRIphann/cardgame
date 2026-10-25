@@ -203,8 +203,9 @@ export default function TestLobbyPage() {
           });
         }
       }
-    } catch (err) {
-      console.error("Failed to refresh room:", err);
+    } catch (_) {
+      // Silent: refresh failures during cold-start are expected; the lobby
+      // shows its own inline error state instead of spamming the console.
     }
   };
 
@@ -432,14 +433,6 @@ export default function TestLobbyPage() {
             oneCardBotCardMap[m.id] = settings.card;
           }
         }
-      });
-
-      console.log('[TestLobby] Starting game with:', {
-        dealCards,
-        customHands,
-        memberHands,
-        playerId: session?.playerId,
-        playerInMemberHands: memberHands[session?.playerId]
       });
 
       const res = await fetch(`${API_BASE_URL}/api/test/start`, {

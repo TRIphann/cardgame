@@ -23,15 +23,6 @@ import { roomsApi } from "@shared/api/roomsApi.js";
 import { ROUTES, saveSession, loadSession } from "@config/env.js";
 
 const OPTIMISTIC_TIMEOUT_MS = 1500;
-const PLACEHOLDER_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-
-function placeholderCode() {
-  let s = "";
-  for (let i = 0; i < 6; i += 1) {
-    s += PLACEHOLDER_CHARS[Math.floor(Math.random() * PLACEHOLDER_CHARS.length)];
-  }
-  return s;
-}
 
 function pickMember(room, isHostAction, name) {
   if (isHostAction) return room.members.find((m) => m.isHost) ?? room.members[0];
@@ -119,11 +110,14 @@ export function useOptimisticRoom({ onNavigate } = {}) {
     }
 
     // ── Optimistic path: cold-start ──────────────────────────────────
-    // Navigate immediately with a placeholder, then patch session once the
-    // real response lands.
+    // Navigate immediately WITHOUT a fake code (a previous build showed a
+    // random placeholder code in the toast/copy button, then the real code
+    // arrived seconds later — players copied the wrong code on first open).
+    // The lobby shows a "Đang khởi tạo phòng..." state until the real
+    // response lands and patches the session.
     const fakeRoom = {
       id: "PENDING-" + Date.now(),
-      code: placeholderCode(),
+      code: "",
       hostId: "PENDING",
       hostName: name,
       status: "waiting",
@@ -136,6 +130,7 @@ export function useOptimisticRoom({ onNavigate } = {}) {
         isHost: action === "create",
         joinedAt: new Date().toISOString(),
       }],
+      optimistic: true,
     };
     finalize(fakeRoom, fakeRoom.members[0]);
     setBusy(false);
@@ -157,8 +152,10 @@ export function useOptimisticRoom({ onNavigate } = {}) {
           });
         }
       })
-      .catch((err) => {
-        console.warn("[arcana] optimistic cold-start POST failed", err);
+      .catch(() => {
+        // Silent rollback: the landing page already surfaced the error via
+        // `error` state + shake. Logging here spammed the console every
+        // cold-start and buried the real CORS/snapshot errors.
         const cur = loadSession();
         if (cur && cur.roomId?.startsWith("PENDING-")) {
           // SPA rollback — no full page reload.

@@ -78,18 +78,30 @@ export default function LandingPage() {
   }, [audio, navigate]);
 
   // Two separate navigate handlers so create/join get their own toast copy.
+  // Cold-start guard: the optimistic path navigates with an EMPTY code and
+  // patches the real one in seconds later — never toast/copy a blank code.
   const onCreateNavigate = useCallback(
     (room) => {
-      audio.playSfx(room.code && !String(room.code).startsWith("PENDING") ? "roomCodeReveal" : "buttonClick");
-      toast.success(`Đã tạo phòng ${room.code}`, { title: "Tạo phòng thành công", duration: 2000 });
+      const code = room?.code && !String(room.code).startsWith("PENDING") ? room.code : "";
+      if (!code) {
+        toast.info("Đang khởi tạo phòng… mã phòng sẽ hiện sau vài giây.", { title: "Tạo phòng", duration: 2500 });
+      } else {
+        audio.playSfx("roomCodeReveal");
+        toast.success(`Đã tạo phòng ${code}`, { title: "Tạo phòng thành công", duration: 2000 });
+      }
       navigate(ROUTES.lobby, { replace: true });
     },
     [audio, toast, navigate],
   );
   const onJoinNavigate = useCallback(
     (room) => {
-      audio.playSfx(room.code && !String(room.code).startsWith("PENDING") ? "roomCodeReveal" : "buttonClick");
-      toast.success(`Đã vào phòng ${room.code}`, { title: "Vào phòng thành công", duration: 2000 });
+      const code = room?.code && !String(room.code).startsWith("PENDING") ? room.code : "";
+      if (!code) {
+        toast.info("Đang vào phòng…", { title: "Vào phòng", duration: 2500 });
+      } else {
+        audio.playSfx("roomCodeReveal");
+        toast.success(`Đã vào phòng ${code}`, { title: "Vào phòng thành công", duration: 2000 });
+      }
       navigate(ROUTES.lobby, { replace: true });
     },
     [audio, toast, navigate],

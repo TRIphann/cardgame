@@ -101,20 +101,6 @@ export default function GamePage() {
   // root cause of the "loading after draw / play" symptom. Wrapping keeps
   // the prior snapshot on screen until we get a real one back.
   const safeSetRoom = useCallback((next) => {
-    // DEBUG
-    console.log("[safeSetRoom] called:", {
-      hasRoom: !!next,
-      status: next?.status,
-      myHand: next?.myHand,
-      myHandLen: next?.myHand?.length,
-      _viewerId: next?._viewerId,
-      memberCount: next?.members?.length,
-      memberHands: next?.members?.map(m => ({ id: m.id, handLen: m.hand?.length })),
-      handCounts: next?.gameState?.handCounts,
-      attackCounter: next?.gameState?.attackCounter,
-      currentTurnMemberId: next?.gameState?.currentTurnMemberId,
-      myId,
-    });
     setRoom((prev) => {
       if (next === null || next === undefined) return prev;
       // Resolve the viewer's memberId: prefer myId from session, fall back to
@@ -920,12 +906,6 @@ export default function GamePage() {
       });
       audio.playSfx?.("buttonClick");
 
-      // DEBUG: trace raw response
-      console.log("[playCard] cardKey:", card.key, "response FULL:", JSON.stringify(res, null, 2));
-      console.log("[playCard] res?.room:", res?.room);
-      console.log("[playCard] res?.room?.myHand:", res?.room?.myHand);
-      console.log("[playCard] keys in res:", res ? Object.keys(res) : "null");
-
       if (res?.requiresTargetPick) {
         // Phase 1 for Favor → PlayerPickerModal. Must call safeSetRoom first
         // so room.myHand is populated before the modal reads it. Also update
@@ -1257,9 +1237,6 @@ export default function GamePage() {
 
     try {
       const res = await roomsApi.drawCard(roomId, myId);
-      console.log("[drawCard] response FULL:", JSON.stringify(res, null, 2));
-      console.log("[drawCard] res?.room?.myHand:", res?.room?.myHand);
-      console.log("[drawCard] keys in res:", res ? Object.keys(res) : "null");
       safeSetRoom(res.room);
       // Reveal the drawn card by feeding revealKey to the animation, and
       // tag the card so HandArc knows which slot to animate-in.
@@ -1884,7 +1861,6 @@ export default function GamePage() {
             // out below, so reading actionModal.card.key inside the closure
             // would throw "Cannot read properties of null").
             const savedCardKey = actionModal?.card?.key;
-            console.debug("[PlayerPickerModal onPick] tid:", tid, "opts:", opts, "savedCardKey:", savedCardKey);
             // Favor target pre-flight: if the chosen opponent has 0 cards in
             // hand, surface a friendly toast in-place instead of posting to
             // the server (which would 400 with "target_empty"). Keeps the
