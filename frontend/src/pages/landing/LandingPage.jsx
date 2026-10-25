@@ -269,6 +269,11 @@ export default function LandingPage() {
             </div>
           )}
 
+          {/* Test Lobby is a dev-only sandbox (card mechanics / UI testing).
+              It must never appear on production — previous prod builds
+              exposed the button and confused players. Gated on Vite DEV
+              so `npm run build` output has no trace of it. */}
+          {import.meta.env.DEV && (
           <div className="test-lobby-link">
             <button
               type="button"
@@ -278,6 +283,7 @@ export default function LandingPage() {
               🧪 Test Lobby
             </button>
           </div>
+          )}
 
           {message && (
             <p key={message.key} className={`form-message tone-${message.tone}`} role="alert">

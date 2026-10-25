@@ -1,6 +1,7 @@
 // Rooms API — fetch wrappers. Used by useOptimisticRoom + LobbyPage.
 
 import { API_BASE_URL } from "@config/env.js";
+import { parseApiError } from "./parseApiError.js";
 import { normalizeRestRoom } from "../realtime/useGameChannel.js";
 
 // Normalize a GameActionResponse which contains a RoomDto with MyHand (PascalCase).
@@ -87,8 +88,10 @@ async function jsonRequest(path, options = {}) {
     let msg = `HTTP ${res.status}`;
     try {
       const body = await res.json();
-      code = body.code || code;
-      msg = body.message || msg;
+      // Backend may send PascalCase (ErrorResponse), camelCase, or the
+      // { error } shape from the /api/test endpoints — normalize all of
+      // them so players see the real reason instead of "HTTP 400".
+      ({ code, message: msg } = parseApiError(body, res.status));
     } catch (_) { /* ignore */ }
     const err = new Error(msg);
     err.code = code;

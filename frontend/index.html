@@ -32,14 +32,12 @@
       </p>
     </noscript>
     <div id="root"></div>
-    <!-- Force-no-cache: this meta tag prevents any CDN caching of this HTML.
-         Netlify respects these HTTP-level headers. -->
-    <script>
-      // Inline no-cache: add a unique timestamp as a data attribute so
-      // this exact <script> tag is always fresh and forces a full reload
-      // when the build changes.
-      document.documentElement.setAttribute('data-build-ts', Date.now());
-    </script>
+    <!-- NOTE: no inline script tag here on purpose. Netlify serves a strict
+         Content-Security-Policy (script-src 'self') which blocks inline
+         scripts — a previous build set document.documentElement timestamp
+         via an inline tag and the console filled with CSP violations.
+         The build timestamp now lives in boot.js (a bundled module) instead.
+         See useDeckAnimation / boot.js for the data-build-ts equivalent. -->
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
