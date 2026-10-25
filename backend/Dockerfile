@@ -6,7 +6,10 @@
 # Api project directly (it pulls src/* via ProjectReference).
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
-COPY backend/src/ ./src/
+# NOTE: Render builds with dockerContext = backend/ (Root Directory = backend),
+# so paths here are relative to backend/ — NOT repo root. Do NOT prefix with
+# backend/ and do NOT depend on backend/tests/ for publishing the API.
+COPY src/ ./src/
 RUN dotnet restore src/Arcana.Api/Arcana.Api.csproj
 RUN dotnet publish src/Arcana.Api/Arcana.Api.csproj -c Release -o /app/publish --no-restore
 
