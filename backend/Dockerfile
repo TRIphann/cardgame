@@ -1,11 +1,13 @@
 # syntax=docker/dockerfile:1
 # ─── Build stage ───
+# NOTE: deploy build must NOT depend on backend/tests/ — unit tests are not
+# needed to publish the API, and requiring them breaks the Render build when
+# the tests folder is absent from the deployed branch. Restore/publish the
+# Api project directly (it pulls src/* via ProjectReference).
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
-COPY backend/Arcana.sln ./
 COPY backend/src/ ./src/
-COPY backend/tests/unit/ ./tests/unit/
-RUN dotnet restore Arcana.sln
+RUN dotnet restore src/Arcana.Api/Arcana.Api.csproj
 RUN dotnet publish src/Arcana.Api/Arcana.Api.csproj -c Release -o /app/publish --no-restore
 
 # ─── Runtime stage ───

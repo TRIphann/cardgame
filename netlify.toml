@@ -36,7 +36,10 @@
   VITE_API_BASE_URL = "https://cardgame-lwsk.onrender.com"
   VITE_API_HUB_URL  = "https://cardgame-lwsk.onrender.com"
   NODE_VERSION      = "20"
-  NPM_FLAGS         = "--no-audit --no-fund"
+  # IMPORTANT: keep devDependencies installed (vite, @vitejs/plugin-react)
+  # — the build needs them. Without --include=dev, Netlify's production
+  # install prunes devDeps and the build fails with "vite: not found".
+  NPM_FLAGS         = "--no-audit --no-fund --include=dev"
 
 # ── Redirects / rewrites ──────────────────────────────────────────────────
 # SPA fallback: any unknown path returns index.html so React Router can
