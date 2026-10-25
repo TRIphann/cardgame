@@ -10,6 +10,7 @@ import { useAudio } from "@shared/audio/AudioManager.jsx";
 import { useToast } from "@shared/ui/toast.jsx";
 import { useI18n } from "@shared/i18n/i18n.jsx";
 import { useOptimisticRoom } from "../../hooks/useOptimisticRoom.js";
+import { useEntryFx } from "@shared/animation/PageEntryFx.js";
 import "../styles/landing.css";
 
 // Wake the Render free-tier container up-front so the first user action
@@ -45,6 +46,36 @@ export default function LandingPage() {
   const [message, setMessage] = useState(null);
   const [shake, setShake] = useState(0);
   const formRef = useRef(null);
+  const panelRef = useRef(null);
+
+  // Animate the welcome panel + form fields in with anime.js for a smoother
+  // entrance than the CSS `panel-in` keyframes. CSS keeps running until the
+  // JS lib attaches, then we cancel the keyframe via `.anime-driven`.
+  useEntryFx(panelRef, ".welcome-panel", {
+    opacity: [0, 1],
+    translateY: [22, 0],
+    scale: [0.97, 1],
+    duration: 800,
+    ease: "outExpo",
+  }, 60);
+  useEntryFx(panelRef, ".player-form > *", {
+    opacity: [0, 1],
+    translateY: [12, 0],
+    duration: 540,
+    delay: (el, i) => 200 + i * 70,
+    ease: "outQuart",
+  });
+  // Floating cards already have CSS animation. We'll keep it since `float-one`
+  // looks fine; if user wants it smoother later we can convert.
+  useEffect(() => {
+    if (!panelRef.current) return undefined;
+    panelRef.current.classList.add("anime-driven");
+  }, []);
+
+  const navigateToTestLobby = useCallback(() => {
+    audio.playSfx("buttonClick");
+    navigate("/test", { replace: true });
+  }, [audio, navigate]);
 
   // Two separate navigate handlers so create/join get their own toast copy.
   const onCreateNavigate = useCallback(
@@ -141,7 +172,11 @@ export default function LandingPage() {
   }, []);
 
   return (
-    <main className={`landing-page ${shake > 0 ? "form-attention" : ""}`} key={`shake-${shake}`}>
+    <main
+      ref={panelRef}
+      className={`landing-page ${shake > 0 ? "form-attention" : ""}`}
+      key={`shake-${shake}`}
+    >
       {/* Decorative backdrop — inside the page so it renders above arc-ambient */}
       <div className="landing-backdrop" aria-hidden="true">
         <div className="ambient ambient-one" />
@@ -233,6 +268,16 @@ export default function LandingPage() {
               <p className="hint">Nhập mã phòng rồi bấm «Vào phòng» lần nữa.</p>
             </div>
           )}
+
+          <div className="test-lobby-link">
+            <button
+              type="button"
+              className="test-lobby-button"
+              onClick={navigateToTestLobby}
+            >
+              🧪 Test Lobby
+            </button>
+          </div>
 
           {message && (
             <p key={message.key} className={`form-message tone-${message.tone}`} role="alert">

@@ -79,37 +79,35 @@
   100% { transform: translate(-50%,-50%) scale(1.8); opacity: 0; }
 }
 
+/* ── Anime.js driven ─────────────────────────────────────
+   When the JS animation library has taken over the timing/transform of
+   these overlays, cancel the CSS @keyframes so the two don't fight.
+   The JS side adds `.draw-card--anime` / `--anime` etc. once it attaches. */
+.draw-card.draw-card--anime,
+.draw-source-glow.draw-source-glow--anime,
+.draw-trail-spark.draw-trail-spark--anime,
+.draw-landing-burst.draw-landing-burst--anime {
+  animation: none !important;
+}
+.draw-card.draw-card--anime::before,
+.draw-source-glow.draw-source-glow--anime::before,
+.draw-trail-spark.draw-trail-spark--anime::before,
+.draw-landing-burst.draw-landing-burst--anime::before {
+  animation: none !important;
+  /* Default state — anime.js sets inline transforms from the first keyframe. */
+  transform: translate(-50%, -50%) scale(1);
+  opacity: 1;
+}
+.draw-card.draw-card--anime {
+  transform: translate3d(0, 0, 0);
+  opacity: 1;
+}
+.draw-source-glow.draw-source-glow--anime { opacity: 1; }
+.draw-trail-spark.draw-trail-spark--anime { opacity: 1; }
+
 /* ── FUTURE PEEK MODAL ─────────────────────────────────── */
 .future-peek-scene {
   position: fixed; inset: 0; z-index: 245; pointer-events: none;
-}
-.future-peek-glow-backdrop {
-  position: fixed; inset: 0; z-index: 244;
-  background: radial-gradient(ellipse 80% 60% at 50% 38%,
-    rgba(154,120,255,0.22) 0%,
-    rgba(80,40,160,0.08) 40%,
-    transparent 75%);
-  animation: future-glow-in 300ms ease forwards;
-  pointer-events: none;
-}
-@keyframes future-glow-in {
-  from { opacity: 0; } to { opacity: 1; }
-}
-.fp-particle {
-  position: fixed; width: 6px; height: 6px; border-radius: 50%;
-  background: radial-gradient(circle, #cdb9ff, #9a78ff);
-  box-shadow: 0 0 8px rgba(154,120,255,0.8);
-  pointer-events: none; z-index: 247;
-  animation: fp-float-particle 2.5s ease-in-out infinite;
-}
-@keyframes fp-float-particle {
-  0%,100% { opacity: 0.4; transform: translateY(0) scale(0.8); }
-  50%      { opacity: 1; transform: translateY(-18px) scale(1.2); }
-}
-.fp-card {
-  position: fixed; width: 130px; height: 186px;
-  transform-origin: 50% 50%; z-index: 246; pointer-events: none;
-  animation: fp-fly-in 600ms cubic-bezier(0.34,1.2,0.64,1) forwards;
 }
 .fp-card__inner {
   position: relative; width: 100%; height: 100%;
@@ -470,7 +468,7 @@
   background: radial-gradient(ellipse, var(--halo-color, rgba(255,215,160,0.55)) 0%, transparent 60%);
   filter: blur(32px); opacity: 0.9;
   pointer-events: none; z-index: 239;
-  animation: card-flip-halo-pulse 1.8s ease-in-out infinite;
+  animation: card-flip-halo-pulse 1.8s ease-in-out forwards;
 }
 @keyframes card-flip-halo-pulse {
   0%,100% { opacity: 0.65; transform: scale(1); }
@@ -553,6 +551,23 @@
   100% { opacity: 1; transform: translate(-50%, 0); }
 }
 
+/* ActionCardReveal — anime.js driven states */
+.card-flip.card-flip--anime,
+.card-flip-halo.card-flip-halo--anime,
+.card-flip__inner,
+.card-flip-label {
+  /* The flip-inner animation is overridden via JS even when class isn't set,
+     so we cancel it unconditionally for any card-flip--anime card. */
+}
+.card-flip-scene > .card-flip.card-flip--anime,
+.card-flip.card-flip--anime .card-flip__inner,
+.card-flip-halo.card-flip-halo--anime {
+  animation: none !important;
+  transition: none !important;
+}
+.card-flip.card-flip--anime { opacity: 1; }
+.card-flip-halo.card-flip-halo--anime { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+
 /* ── PLAY CARD ANIMATION ──────────────────────────────── */
 .play-card-anim {
   position: fixed; z-index: 195; width: 86px; height: 124px;
@@ -560,6 +575,14 @@
   transform: translate(var(--start-x), var(--start-y)) scale(0.85) rotate(-10deg);
   animation: play-card-fly 500ms cubic-bezier(0.5,0,0.4,1) forwards;
   filter: drop-shadow(0 12px 28px rgba(0,0,0,0.6));
+}
+.play-card-anim.play-card-anim--anime {
+  animation: none !important;
+  transform: none;
+  opacity: 1;
+}
+.play-card-anim.play-card-anim--anime img {
+  border-radius: 9px;
 }
 @keyframes play-card-fly {
   0%   { opacity: 0; transform: translate(var(--start-x), var(--start-y)) scale(0.6) rotate(-15deg); }
@@ -572,6 +595,11 @@
   position: absolute; inset: -20px; border-radius: 20px;
   background: radial-gradient(circle, rgba(255,215,130,0.5), transparent 65%);
   animation: play-card-halo 500ms ease forwards; pointer-events: none;
+}
+.play-card-anim__halo.play-card-anim__halo--anime {
+  animation: none !important;
+  transform: translate(-50%, -50%);
+  opacity: 1;
 }
 @keyframes play-card-halo {
   0%   { opacity: 0; transform: scale(0.5); }
@@ -673,6 +701,7 @@
 .fx-shake--sm { animation: fx-shake-sm var(--shake-dur, 400ms) ease; }
 .fx-shake--md { animation: fx-shake-md var(--shake-dur, 600ms) ease; }
 .fx-shake--lg { animation: fx-shake-lg var(--shake-dur, 900ms) ease; }
+.fx-shake--anime { animation: none !important; }
 @keyframes fx-shake-sm {
   0%,100% { transform: translate(0,0); }
   20%      { transform: translate(calc(var(--shake-amp, 6px) * -1), 1px); }
@@ -697,3 +726,46 @@
   70%      { transform: translate(-4px, 2px); }
   85%      { transform: translate(3px, -1px); }
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   ANIME.JS DRIVEN STATES — cancel CSS keyframes when JS lib takes over.
+   Components add `.bomb-reveal--anime` / `.bomb-explode-root--anime` once
+   they attach, so the JS animation can drive transform / opacity freely.
+   ═══════════════════════════════════════════════════════════════════ */
+.bomb-reveal.bomb-reveal--anime,
+.bomb-reveal--anime .bomb-reveal__outer-glow,
+.bomb-reveal--anime .bomb-reveal__pulse-ring,
+.bomb-reveal--anime .bomb-reveal__label,
+.bomb-reveal--anime .bomb-shockwave,
+.bomb-reveal--anime .bomb-sparks__spark,
+.bomb-reveal--anime .bomb-reveal__inner,
+.bomb-reveal--anime .bomb-reveal-scrim,
+.bomb-reveal--anime .bomb-camera-flash {
+  animation: none !important;
+  transition: none !important;
+}
+.bomb-reveal.bomb-reveal--anime { opacity: 1; transform: translate(-50%, -50%); }
+.bomb-reveal--anime .bomb-reveal__inner { transform: rotateY(0deg); }
+.bomb-reveal--anime .bomb-reveal__outer-glow,
+.bomb-reveal--anime .bomb-reveal__pulse-ring,
+.bomb-reveal--anime .bomb-shockwave,
+.bomb-reveal--anime .bomb-sparks__spark { opacity: 1; transform: none; }
+.bomb-reveal--anime .bomb-reveal__label { transform: translateX(-50%); opacity: 1; }
+
+.bomb-reveal--anime .bomb-countdown-bar { animation: none !important; }
+
+/* BombExplode root */
+.bomb-explode-root--anime .bomb-explode-flash,
+.bomb-explode-root--anime .bomb-explode-vignette,
+.bomb-explode-root--anime .bomb-explode--core,
+.bomb-explode-root--anime .bomb-explode__ring,
+.bomb-explode-root--anime .bomb-explode__flame-ring,
+.bomb-explode-root--anime .bomb-explode__shard,
+.bomb-explode-root--anime .bomb-explode__spark,
+.bomb-explode-root--anime .bomb-explode__puff,
+.bomb-explode-root--anime .bomb-explode-label {
+  animation: none !important;
+  transform: translate(-50%, -50%) scale(1);
+  opacity: 1;
+}
+

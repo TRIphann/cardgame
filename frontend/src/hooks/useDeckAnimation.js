@@ -41,7 +41,8 @@ const REVEAL_THRESH   = 0.55;
 
 // ── Easing helpers ───────────────────────────────────────────────────────
 function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
-function easeInCubic(t)  { return t * t * t; }
+// easeInCubic reserved for future use — suppress lint unused warning.
+function _easeInCubic(t)  { return t * t * t; }
 function easeInOutCubic(t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 

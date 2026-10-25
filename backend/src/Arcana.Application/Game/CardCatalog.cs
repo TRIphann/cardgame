@@ -53,6 +53,18 @@ public static class CardCatalog
 
     public static bool IsComboDefuse(string key) => ComboDefuses.Contains(key);
 
+    /// <summary>Returns true if the card is an action card (not bomb/defuse).</summary>
+    public static bool IsActionCard(string key) =>
+        key != Bomb && key != Defuse;
+
+    /// <summary>Returns the action cards from a hand (non-bomb, non-defuse).</summary>
+    public static IEnumerable<string> GetActionCards(IEnumerable<string> hand) =>
+        hand.Where(IsActionCard);
+
+    /// <summary>Returns the combo defuse cards from a hand.</summary>
+    public static IEnumerable<string> GetComboDefuseCards(IEnumerable<string> hand) =>
+        hand.Where(IsComboDefuse);
+
     /// <summary>
     /// Cards exposed to the player for "name any card" combos (3-same).
     /// Excludes bomb + back (back is not a real card; bomb is hidden from
@@ -159,6 +171,7 @@ public static class CardCatalog
     {
         var comboCount = hand.Count(IsComboDefuse);
         // 5-any is always "any 5 combo cards" regardless of player count.
+        // Check FIRST so it takes priority over 3-same / 2-same.
         if (comboCount >= 5) return ComboKind.FiveAny;
         // 3-same: if N >= 5, require same-type; if N < 5, allow mixed types.
         if (comboCount >= 3 && playerCount < 5) return ComboKind.ThreeSame;

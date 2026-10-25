@@ -1,0 +1,929 @@
+/* TestLobby styles - comprehensive test lobby UI */
+
+/* ─── Base layout ─────────────────────────────────────────── */
+.game-page.test-lobby {
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 2rem 1rem;
+  background: rgba(7, 8, 26, 0.88);
+  backdrop-filter: blur(6px);
+  box-shadow: inset 0 0 80px rgba(77, 62, 161, 0.15);
+}
+
+/* Loading state */
+.game-page.test-lobby .arc-loading {
+  position: relative;
+  z-index: 2;
+  min-height: auto;
+}
+
+/* ─── Backdrop ─────────────────────────────────────────────── */
+.lobby-backdrop {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.lobby-backdrop .ambient {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(2px);
+}
+.lobby-backdrop .ambient-one {
+  width: 390px; height: 390px;
+  left: -170px; bottom: -130px;
+  background: rgba(116, 47, 221, 0.18);
+}
+.lobby-backdrop .ambient-two {
+  width: 430px; height: 430px;
+  right: -190px; top: -210px;
+  background: rgba(159, 113, 241, 0.16);
+}
+.lobby-backdrop .stars,
+.lobby-backdrop .stars::before,
+.lobby-backdrop .stars::after {
+  position: absolute;
+  content: "";
+  inset: 0;
+  background-image: radial-gradient(circle, rgba(221, 206, 255, 0.7) 0 1px, transparent 1.5px);
+  background-size: 173px 149px;
+  opacity: 0.3;
+}
+.lobby-backdrop .stars::before { background-size: 239px 211px; background-position: 90px 32px; opacity: 0.45; }
+.lobby-backdrop .stars::after { background-size: 307px 273px; background-position: 30px 117px; opacity: 0.3; }
+.lobby-backdrop .cards-scene {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  perspective: 1000px;
+}
+.lobby-backdrop .floating-card {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 110px;
+  height: 160px;
+  border: 1px solid rgba(190, 161, 255, 0.28);
+  border-radius: 9px;
+  color: rgba(204, 176, 255, 0.3);
+  background: linear-gradient(145deg, rgba(92, 67, 159, 0.12), rgba(19, 19, 52, 0.06));
+  box-shadow: inset 0 0 24px rgba(184, 133, 255, 0.04), 0 15px 50px rgba(0, 0, 0, 0.15);
+  opacity: 0.4;
+  backdrop-filter: blur(3px);
+}
+.lobby-backdrop .floating-card::before {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border: 1px solid rgba(196, 164, 255, 0.1);
+  border-radius: 5px;
+}
+.lobby-backdrop .card-glyph { font-family: serif; font-size: 38px; opacity: 0.7; }
+.lobby-backdrop .card-title { margin-top: 10px; font-size: 8px; letter-spacing: 0.2em; }
+.lobby-backdrop .card-sun { left: 4%; top: 18%; transform: rotate(-19deg); animation: float-one 11s ease-in-out infinite; }
+.lobby-backdrop .card-moon { right: 5%; top: 14%; transform: rotate(17deg); animation: float-two 13s ease-in-out infinite; }
+.lobby-backdrop .card-eye { left: 3%; bottom: 18%; transform: rotate(13deg); animation: float-three 12s ease-in-out infinite; }
+.lobby-backdrop .card-star { right: 4%; bottom: 14%; transform: rotate(-14deg); animation: float-one 14s ease-in-out -3s infinite; }
+
+@keyframes float-one { 0%, 100% { translate: 0 0; } 50% { translate: 12px -24px; } }
+@keyframes float-two { 0%, 100% { translate: 0 0; } 50% { translate: -18px 22px; } }
+@keyframes float-three { 0%, 100% { translate: 0 0; } 50% { translate: 18px 12px; } }
+
+/* ─── Container ────────────────────────────────────────────── */
+.test-lobby__container {
+  position: relative;
+  z-index: 2;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 1.5rem;
+  max-width: 900px;
+  width: 100%;
+  backdrop-filter: blur(10px);
+}
+
+/* ─── Header ───────────────────────────────────────────────── */
+.test-lobby__header {
+  text-align: center;
+  margin-bottom: 1rem;
+}
+
+.test-lobby__header h1 {
+  font-size: 1.8rem;
+  color: #ffd700;
+  margin: 0 0 0.25rem 0;
+  text-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+}
+
+.test-lobby__header p {
+  color: #a0a0a0;
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+/* ─── Room info ────────────────────────────────────────────── */
+.test-lobby__room-info {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+
+.room-code-display {
+  background: rgba(255, 215, 0, 0.1);
+  border: 2px solid #ffd700;
+  border-radius: 8px;
+  padding: 0.5rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.room-code-display .label { color: #a0a0a0; font-size: 0.85rem; }
+.room-code-display .code {
+  font-family: monospace;
+  font-size: 1.3rem;
+  font-weight: bold;
+  color: #ffd700;
+  letter-spacing: 0.2em;
+}
+
+/* ─── Members ──────────────────────────────────────────────── */
+.test-lobby__members {
+  margin-bottom: 1rem;
+}
+
+.test-lobby__members h2 {
+  font-size: 1rem;
+  color: #fff;
+  margin-bottom: 0.5rem;
+}
+
+.member-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.5rem;
+}
+
+.member-item {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  transition: border-color 0.2s;
+}
+
+.member-item.host {
+  border-color: #ffd700;
+  background: rgba(255, 215, 0, 0.08);
+}
+
+.member-item.first {
+  border-color: #4CAF50;
+  background: rgba(76, 175, 80, 0.1);
+}
+
+.member-item.bot {
+  border-color: rgba(100, 181, 246, 0.3);
+}
+
+.member-info {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.member-name {
+  color: #fff;
+  font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bot-badge, .host-badge {
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+
+.btn-first {
+  flex-shrink: 0;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.05);
+  color: #a0a0a0;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.btn-first:hover {
+  background: rgba(76, 175, 80, 0.2);
+  border-color: #4CAF50;
+  color: #4CAF50;
+}
+
+.btn-first.active {
+  background: rgba(76, 175, 80, 0.3);
+  border-color: #4CAF50;
+  color: #4CAF50;
+  font-weight: bold;
+}
+
+/* ─── Game Settings ────────────────────────────────────────── */
+.test-lobby__game-settings {
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  color: #d0d0d0;
+  font-size: 0.9rem;
+}
+
+.toggle-btn {
+  padding: 0.35rem 0.75rem;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.05);
+  color: #a0a0a0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.toggle-btn.on {
+  background: rgba(76, 175, 80, 0.2);
+  border-color: #4CAF50;
+  color: #4CAF50;
+}
+
+.toggle-btn.off {
+  background: rgba(244, 67, 54, 0.15);
+  border-color: #F44336;
+  color: #F44336;
+}
+
+.setting-hint {
+  margin: 0.4rem 0 0 0;
+  color: #888;
+  font-size: 0.78rem;
+}
+
+/* ─── Tabs ─────────────────────────────────────────────────── */
+.test-lobby__tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 0;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 0.6rem 0.5rem;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: #a0a0a0;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  border-radius: 6px 6px 0 0;
+}
+
+.tab-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.tab-btn.active {
+  color: #ffd700;
+  border-bottom-color: #ffd700;
+  background: rgba(255, 215, 0, 0.05);
+}
+
+/* ─── Tab Content ──────────────────────────────────────────── */
+.tab-content {
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── Cards Tab ────────────────────────────────────────────── */
+.cards-quick-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.member-card-section {
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.member-card-section.host-section {
+  border-color: rgba(255, 215, 0, 0.3);
+  background: rgba(255, 215, 0, 0.04);
+}
+
+.member-card-section.bot-section {
+  border-color: rgba(100, 181, 246, 0.2);
+}
+
+/* User section - more prominent styling */
+.member-card-section.user-section {
+  border-color: rgba(255, 215, 0, 0.5);
+  background: rgba(255, 215, 0, 0.06);
+  box-shadow: 0 0 20px rgba(255, 215, 0, 0.1);
+}
+
+.user-section .section-name {
+  color: #ffd700;
+  font-size: 1rem;
+}
+
+/* Bots cards section */
+.bots-cards-section {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px dashed rgba(100, 181, 246, 0.2);
+}
+
+.bots-cards-title {
+  color: #64b5f6;
+  font-size: 0.95rem;
+  margin-bottom: 0.75rem;
+  font-weight: 600;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.6rem;
+}
+
+.section-name {
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.section-count {
+  color: #888;
+  font-size: 0.8rem;
+}
+
+.section-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  gap: 0.4rem;
+}
+
+.mini-card-selector {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  padding: 0.5rem 0.3rem;
+  text-align: center;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.mini-card-selector:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.mini-icon {
+  font-size: 1.5rem;
+  display: block;
+  margin-bottom: 0.15rem;
+}
+
+.mini-name {
+  color: #fff;
+  font-size: 0.7rem;
+  display: block;
+  margin-bottom: 0.3rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mini-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+}
+
+.btn-count-sm {
+  width: 44px;
+  height: 44px;
+  /* 44px is the Apple/Google minimum touch-target size. We previously used
+     22x22 which failed the Playwright touch-target audit on mobile. The
+     visual circle is still small (border-radius + flex centering) so it
+     doesn't dominate the card, but the hit area meets accessibility
+     standards on every viewport. */
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+  line-height: 1;
+  padding: 0;
+}
+
+.btn-count-sm:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.btn-count-sm:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.mini-count {
+  min-width: 18px;
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+/* ─── Deck Builder Tab ──────────────────────────────────────── */
+.deck-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.deck-hint {
+  color: #888;
+  font-size: 0.78rem;
+  margin-bottom: 0.75rem;
+  line-height: 1.4;
+}
+
+.deck-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(58px, 1fr));
+  gap: 6px;
+  max-height: 500px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.deck-slot {
+  aspect-ratio: 3 / 4;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  background: transparent;
+  transition: transform 0.15s;
+}
+
+.deck-slot:hover {
+  transform: scale(1.08);
+  z-index: 2;
+}
+
+.deck-card-back {
+  width: 100%;
+  height: 100%;
+  border-radius: 6px;
+  border: 2px dashed rgba(255, 255, 255, 0.2);
+  background: rgba(30, 30, 60, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.deck-card-back::before {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: 4px;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(77, 62, 161, 0.15),
+    rgba(77, 62, 161, 0.15) 4px,
+    transparent 4px,
+    transparent 8px
+  );
+}
+
+.slot-number {
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.35);
+  font-weight: 600;
+  position: relative;
+  z-index: 1;
+}
+
+.deck-card-front {
+  width: 100%;
+  height: 100%;
+  border-radius: 6px;
+  border: 2px solid;
+  background: rgba(20, 20, 45, 0.95);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 2px;
+}
+
+.deck-card-icon {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.deck-card-name {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.5rem;
+  text-align: center;
+  line-height: 1.1;
+  overflow: hidden;
+}
+
+/* ─── Bots Tab ─────────────────────────────────────────────── */
+.bot-global-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.bots-hint {
+  color: #888;
+  font-size: 0.78rem;
+  margin-bottom: 1rem;
+  line-height: 1.5;
+  padding: 0.6rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.bots-hint strong {
+  color: #d0d0d0;
+}
+
+.bot-setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  margin-bottom: 0.5rem;
+}
+
+.bot-setting-name {
+  color: #fff;
+  font-size: 0.9rem;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bot-mode-btns {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.mode-btn {
+  padding: 0.35rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.05);
+  color: #a0a0a0;
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.mode-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.mode-btn.active {
+  background: rgba(255, 215, 0, 0.2);
+  border-color: #ffd700;
+  color: #ffd700;
+}
+
+/* ─── Buttons ──────────────────────────────────────────────── */
+.btn-secondary {
+  padding: 0.5rem 0.9rem;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.06);
+  color: #c0c0c0;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.btn-secondary.active {
+  background: rgba(255, 215, 0, 0.15);
+  border-color: rgba(255, 215, 0, 0.4);
+  color: #ffd700;
+}
+
+/* ─── Actions ─────────────────────────────────────────────── */
+.test-lobby__actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.btn-leave, .btn-start {
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+}
+
+.btn-leave {
+  background: rgba(255, 255, 255, 0.08);
+  color: #c0c0c0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.btn-leave:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
+.btn-start {
+  flex: 1;
+  background: linear-gradient(135deg, #ffd700, #ff8c00);
+  color: #1a1a2e;
+}
+
+.btn-start:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 20px rgba(255, 215, 0, 0.4);
+}
+
+.btn-start:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ─── Card Picker Modal ────────────────────────────────────── */
+.card-picker-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  animation: overlayIn 0.15s ease;
+}
+
+@keyframes overlayIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.card-picker-modal {
+  background: rgba(15, 15, 40, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 14px;
+  padding: 1.25rem;
+  max-width: 600px;
+  width: 100%;
+  max-height: 85vh;
+  overflow-y: auto;
+  animation: modalIn 0.2s ease;
+}
+
+@keyframes modalIn {
+  from { opacity: 0; transform: scale(0.95) translateY(-10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.card-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.card-picker-header h3 {
+  color: #fff;
+  margin: 0;
+  font-size: 1rem;
+}
+
+.btn-close {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.05);
+  color: #a0a0a0;
+  font-size: 0.9rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.btn-close:hover {
+  background: rgba(244, 67, 54, 0.2);
+  border-color: #F44336;
+  color: #F44336;
+}
+
+.card-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  gap: 0.5rem;
+}
+
+.picker-card {
+  background: rgba(0, 0, 0, 0.4);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  padding: 0.75rem 0.5rem;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.picker-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.picker-icon {
+  font-size: 2rem;
+}
+
+.picker-name {
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.picker-type {
+  font-size: 0.65rem;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ─── Scrollbar ────────────────────────────────────────────── */
+.tab-deck ::-webkit-scrollbar {
+  width: 6px;
+}
+
+.tab-deck ::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
+}
+
+.tab-deck ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+}
+
+.tab-deck ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* ─── Mobile responsiveness ────────────────────────────────── */
+@media (max-width: 600px) {
+  .game-page.test-lobby {
+    padding: 1rem 0.5rem;
+  }
+
+  .test-lobby__container {
+    padding: 1rem;
+  }
+
+  .member-list {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  }
+
+  .section-cards {
+    grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+  }
+
+  .deck-grid {
+    grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+    gap: 4px;
+  }
+
+  .card-picker-grid {
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  }
+
+  .test-lobby__tabs {
+    gap: 0;
+  }
+
+  .tab-btn {
+    font-size: 0.8rem;
+    padding: 0.5rem 0.25rem;
+  }
+
+  .bot-setting-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .bot-mode-btns {
+    width: 100%;
+  }
+
+  .mode-btn {
+    flex: 1;
+    text-align: center;
+  }
+
+  .test-lobby__actions {
+    flex-direction: column;
+  }
+
+  .btn-leave, .btn-start {
+    width: 100%;
+  }
+}

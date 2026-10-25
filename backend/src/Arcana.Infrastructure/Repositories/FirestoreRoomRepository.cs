@@ -1,6 +1,7 @@
 using Arcana.Domain.Entities;
 using Arcana.Domain.Enums;
 using Arcana.Domain.Repositories;
+using Arcana.Domain.Services;
 using Google.Cloud.Firestore;
 
 namespace Arcana.Infrastructure.Repositories;
@@ -8,16 +9,13 @@ namespace Arcana.Infrastructure.Repositories;
 public class FirestoreRoomRepository : IRoomRepository
 {
     private const string RoomsCollection = "rooms";
-    // Reservation collection: doc ID = invitation code, value = roomId it points to.
-    // Atomic Create() on this document is the synchronization primitive — Firestore guarantees
-    // that exactly one concurrent create succeeds; we use that to claim a code without a race.
-    private const string CodesCollection = "room_codes";
-
     private readonly FirestoreDb _db;
+    private readonly ICodeReservationService _codeReservation;
 
-    public FirestoreRoomRepository(FirestoreDb db)
+    public FirestoreRoomRepository(FirestoreDb db, ICodeReservationService codeReservation)
     {
         _db = db;
+        _codeReservation = codeReservation;
     }
 
     public async Task<Room?> GetByIdAsync(string id, CancellationToken ct = default)
@@ -28,32 +26,16 @@ public class FirestoreRoomRepository : IRoomRepository
 
     public async Task<Room?> GetByCodeAsync(string code, CancellationToken ct = default)
     {
-        var reserved = await _db.Collection(CodesCollection).Document(code).GetSnapshotAsync(ct);
-        if (!reserved.Exists) return null;
-        var roomId = reserved.GetValue<string>("roomId");
+        // Resolve code → roomId via Redis (fast, no Firestore reads)
+        var roomId = await _codeReservation.ResolveCodeAsync(code, ct);
+        if (roomId is null) return null;
         return await GetByIdAsync(roomId, ct);
     }
 
     public async Task<bool> TryReserveCodeAsync(string code, string roomId, CancellationToken ct = default)
     {
-        var docRef = _db.Collection(CodesCollection).Document(code);
-        // Create() on a DocumentReference adds a precondition that the doc must not exist.
-        // When another writer has already claimed the same code, Firestore raises
-        // RpcException(AlreadyExists). We treat that as a taken-slot and return false;
-        // the caller retries with a fresh code.
-        try
-        {
-            await docRef.CreateAsync(new Dictionary<string, object>
-            {
-                ["roomId"] = roomId,
-                ["createdAt"] = Timestamp.GetCurrentTimestamp(),
-            }, cancellationToken: ct);
-            return true;
-        }
-        catch (Grpc.Core.RpcException ex) when (ex.Status.StatusCode == Grpc.Core.StatusCode.AlreadyExists)
-        {
-            return false;
-        }
+        // Use Redis SETNX for atomic reservation with auto-expiry
+        return await _codeReservation.TryReserveCodeAsync(code, roomId, ct);
     }
 
     public async Task CreateAsync(Room room, CancellationToken ct = default)
@@ -95,7 +77,15 @@ public class FirestoreRoomRepository : IRoomRepository
             tx.Set(memberRef, BuildMemberDoc(candidate));
             // Reuse the already-fetched members snapshot; do NOT call GetSnapshotAsync
             // again here because that would be a read after a write and throw.
-            return await MapRoomAsync(snapshot, ct, membersSnapshot: membersSnap);
+            var room = await MapRoomAsync(snapshot, ct, membersSnapshot: membersSnap);
+            // The membersSnap was read BEFORE we wrote the new member, so it
+            // doesn't include them yet. Add the candidate to the in-memory Room
+            // so the returned DTO matches the post-write state (callers rely on
+            // this for the join endpoint's response body and for snapshot reads
+            // served from cache).
+            if (!room.Members.Any(m => m.Id == candidate.Id))
+                room.Members.Add(candidate);
+            return room;
         });
     }
 
@@ -119,7 +109,15 @@ public class FirestoreRoomRepository : IRoomRepository
             var membersSnapshot = await tx.GetSnapshotAsync(roomRef.Collection("members"));
 
             tx.Delete(memberRef);
-            return await MapRoomAsync(roomSnap, ct, membersSnapshot: membersSnapshot);
+            var room = await MapRoomAsync(roomSnap, ct, membersSnapshot: membersSnapshot);
+            // Firestore transactions disallow reads after writes, so we couldn't
+            // re-fetch the members sub-collection to confirm the delete. Instead,
+            // drop the kicked member from the in-memory Room object so the
+            // returned DTO matches the post-delete state (callers — kick endpoint,
+            // snapshot reads, etc. — rely on this).
+            var dropped = room.Members.FirstOrDefault(m => m.Id == memberId);
+            if (dropped != null) room.Members.Remove(dropped);
+            return room;
         });
     }
 
@@ -161,6 +159,7 @@ public class FirestoreRoomRepository : IRoomRepository
                 JoinedAt = updated.TryGetValue("joinedAt", out var ja) && ja is Timestamp jts ? jts.ToDateTime().ToUniversalTime() : DateTime.UtcNow,
                 LastSeenAt = updated.TryGetValue("lastSeenAt", out var ls) && ls is Timestamp lts ? lts.ToDateTime().ToUniversalTime() : DateTime.UtcNow,
                 IsOnline = true,
+                IsBot = updated.TryGetValue("isBot", out var ib) && ib is bool ibb && ibb,
             };
         });
     }
@@ -195,6 +194,20 @@ public class FirestoreRoomRepository : IRoomRepository
         return touched;
     }
 
+    public async Task<bool> UpdateRoomCodeAsync(string roomId, string code, CancellationToken ct = default)
+    {
+        var docRef = _db.Collection(RoomsCollection).Document(roomId);
+        try
+        {
+            await docRef.UpdateAsync("code", code, cancellationToken: ct);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     public async Task<Room?> UpdateGameStateAsync(
         string roomId,
         Domain.Entities.GameState? gameState,
@@ -216,7 +229,8 @@ public class FirestoreRoomRepository : IRoomRepository
             updates["gameState"] = null;
         }
         await docRef.UpdateAsync(updates, cancellationToken: ct);
-        return await GetByIdAsync(roomId, ct);
+        // Caller (CachedRoomRepository) handles cache lookup — no extra read here.
+        return null;
     }
 
     /// <summary>
@@ -270,11 +284,16 @@ public class FirestoreRoomRepository : IRoomRepository
             ["turnStartedAt"] = gs.TurnStartedAt.HasValue
                 ? (object?)Timestamp.FromDateTime(gs.TurnStartedAt.Value.ToUniversalTime())
                 : null,
+            ["clientReady"] = gs.ClientReady,
             ["turnOrder"] = gs.TurnOrder,
             ["futurePeek"] = gs.FuturePeek,
             ["futurePeekAt"] = gs.FuturePeekAt.HasValue
                 ? (object?)Timestamp.FromDateTime(gs.FuturePeekAt.Value.ToUniversalTime())
                 : null,
+            ["drawOnlyBotIds"] = gs.DrawOnlyBotIds.ToList(),
+            ["playCardsBotIds"] = gs.PlayCardsBotIds.ToList(),
+            ["disableBotService"] = gs.DisableBotService,
+            ["afkMemberIds"] = gs.AfkMemberIds.ToList(),
         };
         return doc;
     }
@@ -309,6 +328,7 @@ public class FirestoreRoomRepository : IRoomRepository
         ["joinedAt"] = Timestamp.FromDateTime(member.JoinedAt.ToUniversalTime()),
         ["lastSeenAt"] = Timestamp.FromDateTime(member.LastSeenAt.ToUniversalTime()),
         ["isOnline"] = member.IsOnline,
+        ["isBot"] = member.IsBot,
     };
 
     private static async Task<Room> MapRoomAsync(DocumentSnapshot snapshot, CancellationToken ct, QuerySnapshot? membersSnapshot = null)
@@ -344,6 +364,7 @@ public class FirestoreRoomRepository : IRoomRepository
                 JoinedAt = md.TryGetValue("joinedAt", out var ja) && ja is Timestamp jts ? jts.ToDateTime().ToUniversalTime() : DateTime.UtcNow,
                 LastSeenAt = md.TryGetValue("lastSeenAt", out var ls) && ls is Timestamp lts ? lts.ToDateTime().ToUniversalTime() : DateTime.UtcNow,
                 IsOnline = md.TryGetValue("isOnline", out var io) && io is bool iob && iob,
+                IsBot = md.TryGetValue("isBot", out var ib) && ib is bool ibb && ibb,
             });
         }
         return room;
@@ -396,6 +417,11 @@ public class FirestoreRoomRepository : IRoomRepository
             ? tsats.ToDateTime().ToUniversalTime()
             : (DateTime?)null;
 
+        // Default false if absent — older Firestore documents written
+        // before this field existed will fall through to "wait for /ready"
+        // which is the safer behavior (no AFK modal pops up immediately).
+        gs.ClientReady = doc.TryGetValue("clientReady", out var cr) && cr is bool crb && crb;
+
         if (doc.TryGetValue("turnOrder", out var tor) && tor is IEnumerable<object> torList)
             gs.TurnOrder = torList.Select(t => t as string ?? string.Empty).Where(s => s.Length > 0).ToList();
 
@@ -404,6 +430,18 @@ public class FirestoreRoomRepository : IRoomRepository
 
         if (doc.TryGetValue("futurePeekAt", out var fpa) && fpa is Timestamp fpaTs)
             gs.FuturePeekAt = fpaTs.ToDateTime().ToUniversalTime();
+
+        if (doc.TryGetValue("drawOnlyBotIds", out var adb) && adb is IEnumerable<object> adbList)
+            gs.DrawOnlyBotIds = adbList.Select(x => x as string ?? string.Empty).Where(s => s.Length > 0).ToHashSet();
+
+        if (doc.TryGetValue("playCardsBotIds", out var pcb) && pcb is IEnumerable<object> pcbList)
+            gs.PlayCardsBotIds = pcbList.Select(x => x as string ?? string.Empty).Where(s => s.Length > 0).ToHashSet();
+
+        if (doc.TryGetValue("disableBotService", out var dbs))
+            gs.DisableBotService = dbs is bool b && b;
+
+        if (doc.TryGetValue("afkMemberIds", out var afk) && afk is IEnumerable<object> afkList)
+            gs.AfkMemberIds = afkList.Select(x => x as string ?? string.Empty).Where(s => s.Length > 0).ToHashSet();
 
         if (doc.TryGetValue("pendingAction", out var pa) && pa is Dictionary<string, object> paDict)
         {

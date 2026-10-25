@@ -1,37 +1,51 @@
 // Application config — kept tiny so the bundler can tree-shake unused branches.
 //
-// REST endpoints are reached via the Netlify reverse-proxy at `/api/*` and
-// `/health` (see `netlify.toml`). Using relative URLs guarantees the browser
-// only talks to `tricardgame.netlify.app`, which:
+// Production endpoints are baked in at build time via these Vite env vars
+// (set in the deploy workflow, never at runtime):
 //
-//   - Skips the CORS preflight (same-origin).
-//   - Sidesteps ad blockers / privacy filters that block `*.onrender.com`
-//     with `ERR_BLOCKED_BY_CLIENT`.
-//   - Removes the 30-60s Render cold-start spike from the first request.
+//   VITE_API_BASE_URL  → REST + SignalR negotiate (e.g. https://cardgame-lwsk.onrender.com)
+//   VITE_API_HUB_URL   → SignalR hub URL. Often the same as the REST base, but
+//                        some setups (Netlify edge redirects + Render hub) keep
+//                        them separate. Currently identical.
 //
-// SignalR (the GameHub at `/hubs/game`) does NOT go through the redirect —
-// Netlify proxies are pure HTTP, WebSockets need a different plumbing. Set
-// `VITE_API_HUB_URL` to the direct Render URL when SignalR should bypass
-// the proxy; otherwise it falls back to the same origin (so it works in
-// local dev and when the hub is hosted on the same domain in production).
+// If unset (npm run dev), the code falls back to:
+//   - empty string ("")  → relative URL → Vite proxy (or same-origin when served
+//                          behind the Netlify redirects).
+//   - "https://cardgame-lwsk.onrender.com" for production.
+//
+// Why direct to Render instead of proxying through Netlify?
+//   - SignalR's WebSocket endpoint (/hubs/game) cannot traverse Netlify's
+//     HTTP-only edge redirects (the browser would still need to talk to Render
+//     for the hub, which defeats the purpose).
+//   - The backend's Cors:AllowedOrigins already whitelists the Netlify origin
+//     (see backend/src/Arcana.Api/appsettings.json), so cross-origin requests
+//     are permitted.
+//
+// Local development with a real backend (e.g. for the Test Lobby):
+//   PowerShell: $env:VITE_API_BASE_URL = "http://localhost:5000"; npm run build
+//   Helper script: frontend/build-with-local.ps1
+//
+// CI / production deploys set VITE_API_BASE_URL automatically — see
+// .github/workflows/deploy-frontend.yml and netlify.toml.
 
-// Production uses the absolute Render URL. The backend whitelists
-// https://tricardgame.netlify.app in Cors:AllowedOrigins, so cross-origin
-// requests from the Netlify-deployed SPA are allowed. A previous attempt
-// to hide the Render URL behind a Netlify /api/* proxy failed because
-// SignalR's WebSocket (/hubs/game) cannot be proxied through Netlify's
-// edge redirects — the browser would still have to talk to Render for
-// the hub, which defeats the purpose.
 const RELATIVE_REST_BASE = "";
-const FALLBACK_REST_BASE =
-  (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_BASE_URL) ||
-  "https://cardgame-lwsk.onrender.com";
-const FALLBACK_HUB_BASE =
-  (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_HUB_URL) ||
-  FALLBACK_REST_BASE;
+const IS_DEV = typeof import.meta !== "undefined" &&
+  import.meta.env &&
+  (import.meta.env.DEV === true || import.meta.env.MODE === "development");
 
-export const API_BASE_URL = FALLBACK_REST_BASE;
-export const API_HUB_URL = FALLBACK_HUB_BASE;
+const FALLBACK_REST_BASE = IS_DEV
+  ? "" // let the Vite proxy handle it
+  : "https://cardgame-lwsk.onrender.com";
+const FALLBACK_HUB_BASE = IS_DEV
+  ? ""
+  : FALLBACK_REST_BASE;
+
+export const API_BASE_URL =
+  (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_BASE_URL) ||
+  FALLBACK_REST_BASE;
+export const API_HUB_URL =
+  (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_HUB_URL) ||
+  FALLBACK_HUB_BASE;
 
 // React Router paths. Anything you want to be deep-linkable lives here.
 export const ROUTES = {

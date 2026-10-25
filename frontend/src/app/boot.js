@@ -3,7 +3,9 @@
 export function bootDiagnostics() {
   if (typeof window === "undefined") return;
   // Only run in development so production users don't see raw error overlays.
-  if (process.env.NODE_ENV !== "development") return;
+  // import.meta.env.DEV is replaced with `true` in dev builds and `false`
+  // in production builds by Vite — no runtime check, zero cost.
+  if (!import.meta.env.DEV) return;
 
   const surface = (kind, payload) => {
     try {

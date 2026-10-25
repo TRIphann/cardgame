@@ -1,46 +1,108 @@
+# netlify.toml — Netlify build & deploy config for Arcana frontend.
+#
+# Two environments:
+#   - Production: https://tricardgame.netlify.app
+#   - Branch deploys: every push to dev/main gets a preview URL
+#
+# Netlify auto-detects Vite + React SPAs, but we declare the build
+# explicitly so deploys are deterministic. The `base` field tells Netlify
+# that the React project lives in `frontend/` (not at the repo root).
+#
+# IMPORTANT — Render URL strategy:
+#   Netlify is the static-frontend host. The backend lives on Render at
+#   https://cardgame-lwsk.onrender.com. We CANNOT proxy /api/* through
+#   Netlify's edge redirects because:
+#     - SignalR's WebSocket endpoint (/hubs/game) does not work through
+#       Netlify's HTTP-only proxy (it would 426 Upgrade Required).
+#     - The browser would still need to talk to Render for the hub.
+#   Instead, the bundle is built with VITE_API_BASE_URL pointing
+#   directly at Render, and CORS on the backend whitelists the Netlify
+#   origin (see appsettings.json).
+#
+# Cache strategy:
+#   - /assets/* are content-hashed → cache 1 year (force revalidation).
+#   - index.html is NEVER cached (cache-bust on every deploy via the
+#     build-timestamp data attribute injected by boot.js).
+#   - Everything else: stale-while-revalidate.
+
 [build]
-  publish = "frontend/dist"
-  command = "cd frontend && npm ci && npm run build"
+  base    = "frontend"
+  command = "npm run build -- --mode production"
+  publish = "dist"
 
-# SPA fallback — React Router handles client-side routes. Anything not under
-# /assets or with a file extension falls back to /index.html.
+[build.environment]
+  # Production API endpoint — overridden per-deploy via the workflow's
+  # NETLIFY_AUTH_TOKEN deploy hook if we ever need a custom value.
+  VITE_API_BASE_URL = "https://cardgame-lwsk.onrender.com"
+  VITE_API_HUB_URL  = "https://cardgame-lwsk.onrender.com"
+  NODE_VERSION      = "20"
+  NPM_FLAGS         = "--no-audit --no-fund"
+
+# ── Redirects / rewrites ──────────────────────────────────────────────────
+# SPA fallback: any unknown path returns index.html so React Router can
+# handle it (e.g. /lobby/abc, /game/xyz, /test).
 [[redirects]]
-  from = "/*"
-  to = "/index.html"
+  from   = "/*"
+  to     = "/index.html"
   status = 200
+  force  = false
 
-# Cache busting — short TTL on the index, long on hashed asset bundles.
-[[headers]]
-  for = "/index.html"
-  [headers.values]
-    Cache-Control = "public, max-age=0, must-revalidate"
-    X-Content-Type-Options = "nosniff"
+# /health → Render backend health check (used by the smoke-test workflow
+# to confirm Render is awake before running E2E).
+[[redirects]]
+  from   = "/health"
+  to     = "https://cardgame-lwsk.onrender.com/health"
+  status = 200
+  force  = false
+
+# ── Headers ────────────────────────────────────────────────────────────────
+# Security + caching headers. The production build sets these in
+# boot.js via Cache-Control meta tags for index.html — the headers here
+# are the real HTTP-level overrides Netlify will serve.
 
 [[headers]]
   for = "/assets/*"
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
+    X-Content-Type-Options = "nosniff"
+
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+    Pragma        = "no-cache"
+    Expires       = "0"
 
 [[headers]]
   for = "/*"
   [headers.values]
-    X-Frame-Options = "SAMEORIGIN"
-    Referrer-Policy = "strict-origin-when-cross-origin"
+    X-Frame-Options       = "DENY"
     X-Content-Type-Options = "nosniff"
-    # Content Security Policy — strict but functional for this app:
-    #   default-src 'self'                       — only own resources by default
-    #   script-src  'self' 'unsafe-inline'       — Vite injects an inline <script>
-    #                                              setting data-build-ts; 'unsafe-eval'
-    #                                              is intentionally NOT allowed.
-    #   style-src   'self' 'unsafe-inline' https://fonts.googleapis.com
-    #                                            — CSS files + inline style attrs
-    #                                              + Google Fonts CSS at fonts.googleapis.com
-    #   img-src     'self' https://res.cloudinary.com data: — Cloudinary cards + emoji SVGs
-    #   font-src    'self' https://fonts.gstatic.com        — Google Fonts (Cinzel, DM Sans)
-    #   connect-src 'self' https://cardgame-lwsk.onrender.com wss://cardgame-lwsk.onrender.com
-    #                                              — Render REST + SignalR WebSocket
-    #   media-src   'self'                       — local audio assets
-    #   frame-ancestors 'self'                   — clickjacking guard (X-Frame-Options backup)
-    #   base-uri    'self'                       — block <base> injection
-    #   form-action 'self'                       — keep forms inside the site
-    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' https://res.cloudinary.com data:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://cardgame-lwsk.onrender.com wss://cardgame-lwsk.onrender.com; media-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'"
+    Referrer-Policy        = "strict-origin-when-cross-origin"
+    Permissions-Policy      = "microphone=(), camera=(), geolocation=()"
+    Content-Security-Policy = "default-src 'self' https://cardgame-lwsk.onrender.com https://res.cloudinary.com https://fonts.googleapis.com https://fonts.gstatic.com; img-src 'self' data: blob: https://res.cloudinary.com https://cardgame-lwsk.onrender.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://cardgame-lwsk.onrender.com wss://cardgame-lwsk.onrender.com https://res.cloudinary.com; script-src 'self'; frame-ancestors 'none';"
+
+# ── Branch deploys / previews ─────────────────────────────────────────────
+# - main: production (already configured by default in Netlify UI).
+# - dev:  branch preview (auto).
+# - everything else: PR preview (auto).
+
+[context.production.environment]
+  NODE_ENV = "production"
+
+[context.dev.environment]
+  # dev branch uses the production API by default. Override with the
+  # Netlify UI if you want a staging backend.
+  VITE_API_BASE_URL = "https://cardgame-lwsk.onrender.com"
+  NODE_ENV          = "staging"
+
+[context.branch-deploy.environment]
+  VITE_API_BASE_URL = "https://cardgame-lwsk.onrender.com"
+
+# ── Functions (serverless, optional) ──────────────────────────────────────
+# Currently empty — Render hosts the API. Netlify Functions would be an
+# alternative if we wanted to move away from Render.
+#
+# [functions]
+#   directory = "netlify/functions"
+#   node_bundler = "esbuild"

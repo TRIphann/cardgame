@@ -4,16 +4,28 @@
 //   • Combo3: chọn 1 lá bất kỳ từ cloudinary public catalogue
 //   • Combo5: chọn 1 lá unique trong chồng bỏ
 //
+// Unified 10-second rule: the picker auto-cancels (or auto-picks) after
+// 10s so the parent turn budget (GameService.PickerTimeoutSeconds) is
+// never exceeded. The countdown ring in the corner mirrors the remaining
+// budget; if the player can't decide the system picks on their behalf.
+//
 // Props:
 //   title       — tiêu đề modal
 //   sub         — phụ đề (giải thích)
 //   candidates  — danh sách card key để chọn
 //   onPick      — (key) => void
 //   onCancel    — () => void
+//   autoPick    — random fallback when timer expires; if omitted we just
+//                 cancel the picker and end the turn.
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { cardImageUrl } from "@games/exploding-cats/cardCloudinary.js";
 import { getCardLabel } from "./cardLabels.js";
+
+// Mirrors GameService.PickerTimeoutSeconds (10). Picker = Favor target,
+// Favor card, Combo 2/3 target/card, Bomb placement. Every picker the
+// game opens runs on this same 10s budget.
+const PICKER_TIMEOUT_SEC = 10;
 
 export function CardPickModal({
   title,
@@ -21,13 +33,49 @@ export function CardPickModal({
   candidates,
   onPick,
   onCancel,
+  autoPick,
   fxColor = "#ffd86b",
   fxAccent = "#a4f2dc",
 }) {
-  if (!candidates) return null;
-  const list = Array.from(new Set(candidates));
+  // Hooks must be called unconditionally — Rules of Hooks. Move the early
+  // return to AFTER the hook calls below.
   const modalRef = useRef(null);
   const titleId = "cpm-title";
+  const [timeLeft, setTimeLeft] = useState(PICKER_TIMEOUT_SEC);
+
+  // A11Y: ESC key + focus trap + role="dialog".
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key === "Escape" || e.key === "Esc") onCancel?.();
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [onCancel]);
+
+  // Reset countdown whenever the modal opens (candidates become non-null).
+  useEffect(() => {
+    if (!candidates) return undefined;
+    setTimeLeft(PICKER_TIMEOUT_SEC);
+    const id = setInterval(() => {
+      setTimeLeft((t) => Math.max(0, t - 1));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [candidates]);
+
+  // Auto-resolve on timeout: prefer autoPick (random) over cancel so the
+  // game never stalls waiting for a player who wandered away.
+  useEffect(() => {
+    if (!candidates) return undefined;
+    if (timeLeft > 0) return undefined;
+    if (typeof autoPick === "function") {
+      const pool = Array.from(new Set(candidates));
+      if (pool.length > 0) autoPick(pool[Math.floor(Math.random() * pool.length)]);
+      else onCancel?.();
+      return undefined;
+    }
+    onCancel?.();
+    return undefined;
+  }, [timeLeft, candidates, autoPick, onCancel]);
 
   // A11Y: ESC key + focus trap + role="dialog".
   useEffect(() => {
@@ -56,6 +104,11 @@ export function CardPickModal({
     return () => el.removeEventListener("keydown", trap);
   }, []);
 
+  // Early return AFTER all hooks — if there's nothing to pick, the parent
+  // will simply not render this modal in the next frame.
+  if (!candidates) return null;
+  const list = Array.from(new Set(candidates));
+
   return (
     <div className="game-modal__scrim card-pick-scrim" onClick={onCancel}>
       <div
@@ -75,6 +128,13 @@ export function CardPickModal({
         >
           ×
         </button>
+        <span
+          className="game-modal__timer"
+          aria-label={`Còn ${timeLeft}s`}
+          title={`Tự đóng sau ${timeLeft}s`}
+        >
+          ⏱ {timeLeft}s
+        </span>
         <h3 className="game-modal__title" id={titleId}>{title || "Chọn 1 lá"}</h3>
         {sub && <p className="game-modal__sub">{sub}</p>}
 

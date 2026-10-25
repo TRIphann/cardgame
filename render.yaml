@@ -1,36 +1,82 @@
+# render.yaml — Render infrastructure-as-service config.
+#
+# This file is read by Render when the user clicks "New from Blueprint"
+# in the Render dashboard. After the initial bootstrap, Render stores
+# service state separately — you don't re-run this file on every
+# deploy, you trigger deploys via the deploy-hook URL instead.
+#
+# Two services:
+#   1. arcana-api (Web Service)  — the .NET 8 API + SignalR hub.
+#   2. arcana-redis (Redis)     — optional backing store for the
+#      CachedRoomRepository (in production we hit Firestore directly).
+#
+# Auto-deploy: enabled from the main branch. The deploy-frontend.yml
+# workflow's deploy-backend job is a fallback for manual releases.
+
 services:
+  # ─── Backend API ─────────────────────────────────────────────────────────
+  # Docker runtime is REQUIRED — Render has no native `dotnet` runtime.
+  # The image is built from backend/Dockerfile (multi-stage .NET 8 build).
   - type: web
-    name: cardgame-api
+    name: arcana-api
     runtime: docker
-    plan: free
-    region: singapore
+    dockerfilePath: ./backend/Dockerfile
+    plan: starter           # $7/mo — Render will scale to standard if traffic spikes
+    region: singapore       # MUST match the live services (cardgame + redis are in Singapore)
+    branch: main
+    autoDeploy: true        # Render's built-in git deploy on push to main
     healthCheckPath: /health
-    autoDeploy: true
-    dockerfilePath: backend/Dockerfile
+    # Render auto-assigns a *.onrender.com URL. We use a custom one but
+    # leave the default stable: https://cardgame-lwsk.onrender.com
+    # NOTE: no buildCommand/startCommand — the Dockerfile's ENTRYPOINT starts
+    # the API. PORT is read in Program.cs at startup.
+
     envVars:
+      # ASP.NET Core binds to Render's $PORT (defaults to 10000 on free,
+      # but we always set it via Render's PORT env var).
       - key: ASPNETCORE_ENVIRONMENT
         value: Production
       - key: ASPNETCORE_URLS
-        value: http://0.0.0.0:10000
-      # Render free-tier containers run with a low inotify-instance cap
-      # (128). Each appsettings*.json provider opens its own FileSystemWatcher
-      # by default — when the host has multiple processes or noisy disk I/O,
-      # the watcher exhausts the cap and the app crashes with:
-      #   System.IO.IOException: The configured user limit (128) on the
-      #   number of inotify instances has been reached, ...
-      # Production doesn't need config hot-reload (env vars + redeploy),
-      # so disable both file watching and reload-on-change.
-      - key: DOTNET_hostBuilder__reloadConfigOnChange
-        value: "false"
-      - key: DOTNET_fileWatcher__enabled
-        value: "false"
-      - key: DOTNET_EnableDiagnostics
-        value: "0"
-      - key: Firebase__ProjectId
-        sync: false
-      - key: Firebase__CredentialsBase64
-        sync: false
+        sync: false       # Render injects its own $PORT
+      - key: DOTNET_NOLOGO
+        value: "true"
+      - key: DOTNET_CLI_TELEMETRY_OPTOUT
+        value: "true"
       - key: Cors__AllowedOrigins__0
-        sync: false
+        value: "https://tricardgame.netlify.app"
       - key: Cors__AllowedOrigins__1
-        sync: false
+        value: "https://cardgame-tau.vercel.app"
+      - key: Cors__AllowedOrigins__2
+        value: "http://localhost:4173"
+      - key: Cors__AllowedOrigins__3
+        value: "http://localhost:5173"
+      # Firestore — prefer base64 credentials in production (Render dashboard
+      # secret). File path is the local-dev fallback only.
+      - key: Firebase__ProjectId
+        value: "cardgame-594f0"
+      - key: Firebase__CredentialsBase64
+        sync: false         # set the real value in Render Dashboard > Environment
+      - key: Redis__ConnectionString
+        fromService:
+          type: keyvalue
+          name: arcana-redis
+          property: connectionString
+
+    # NOTE: no `disk:` mount — the Firestore service-account JSON is injected
+    # via Firebase__CredentialsBase64, so no secret file is needed on disk.
+
+    scaling:
+      minInstances: 1      # Avoid cold-start on the first user
+      maxInstances: 4
+      # Render Standard plan supports autoscaling; Starter keeps 1.
+
+  # ─── Redis (optional, for code reservation) ─────────────────────────────
+  # `keyvalue` is the current Blueprint type; `redis` is a deprecated alias.
+  # Free tier: 25 MB / 50 connections — enough for room-code reservation.
+  # Persistence off: reservation data is ephemeral (24h expiry), rebuilt on restart.
+  - type: keyvalue
+    name: arcana-redis
+    plan: free
+    region: singapore       # MUST be same region as arcana-api for Internal URL
+    ipAllowList: []        # Only the API can connect; no public IP.
+    maxmemoryPolicy: allkeys-lru

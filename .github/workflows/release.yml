@@ -1,0 +1,161 @@
+name: Release
+
+# Cuts a release:
+#   1. Validates the version bump is consistent with docs/CHANGELOG.md
+#   2. Triggers the deployment chain (backend → frontend)
+#   3. Creates a GitHub Release with auto-generated notes
+#   4. Updates docs/CHANGELOG.md with the released version
+#
+# Triggered by:
+#   - Pushing a tag matching v*.*.*
+#   - workflow_dispatch with a manual version
+#
+# The release tag MUST start with `v` and follow semver (X.Y.Z,
+# optional -prerelease suffix, e.g. v1.2.3-rc.1).
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Semver version (e.g. 1.2.3) — tag is created automatically.'
+        required: true
+        type: string
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: read
+  deployments: write
+
+jobs:
+  validate:
+    name: Validate release tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.parse.outputs.version }}
+      tag: ${{ steps.parse.outputs.tag }}
+      is-prerelease: ${{ steps.parse.outputs.is-prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve tag + is-prerelease flag
+        id: parse
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          # Semver-ish validation.
+          if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$'; then
+            echo "::error::'$VERSION' is not a valid semver tag (X.Y.Z or X.Y.Z-prerelease)."
+            exit 1
+          fi
+          IS_PRERELEASE="false"
+          if echo "$VERSION" | grep -qE '\-'; then
+            IS_PRERELEASE="true"
+          fi
+          echo "version=$VERSION"          >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION"             >> "$GITHUB_OUTPUT"
+          echo "is-prerelease=$IS_PRERELEASE" >> "$GITHUB_OUTPUT"
+          echo "Resolved tag: v$VERSION (prerelease=$IS_PRERELEASE)"
+
+      - name: Confirm docs/CHANGELOG.md has an entry for this version
+        run: |
+          VERSION="${{ steps.parse.outputs.version }}"
+          if ! grep -qE "^## \[?v?$VERSION\]?" docs/CHANGELOG.md; then
+            echo "::error::docs/CHANGELOG.md is missing an entry for v$VERSION. Add it before releasing."
+            exit 1
+          fi
+          echo "✅ docs/CHANGELOG.md has an entry for v$VERSION"
+
+  deploy-backend:
+    name: Deploy backend
+    needs: [validate]
+    uses: ./.github/workflows/deploy-backend.yml
+    with:
+      # The deploy-backend workflow doesn't take any `with` inputs today;
+      # this `uses:` is enough to trigger it. The deploy hook fires on
+      # every push to main, but for releases we want the explicit
+      # re-deploy to lock the version.
+      ref: refs/tags/${{ needs.validate.outputs.tag }}
+    secrets: inherit
+
+  deploy-front-end:
+    name: Deploy frontend
+    needs: [validate]
+    uses: ./.github/workflows/deploy-frontend.yml
+    with:
+      ref: refs/tags/${{ needs.validate.outputs.tag }}
+    secrets: inherit
+
+  publish-release:
+    name: Publish GitHub release
+    needs: [validate, deploy-backend, deploy-front-end]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract CHANGELOG entry for this version
+        id: extract
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          # Pull everything from "## [vX.Y.Z]" up to the next "## " heading.
+          NOTES=$(awk -v v="$VERSION" '
+            $0 ~ "^## \\[?v?" v "\\]?" { capture = 1; next }
+            capture && /^## / { exit }
+            capture { print }
+          ' docs/CHANGELOG.md)
+          if [ -z "$NOTES" ]; then
+            NOTES="See commits since the previous tag."
+          fi
+          {
+            echo "notes<<EOF"
+            echo "$NOTES"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.validate.outputs.version }}
+          TAG: ${{ needs.validate.outputs.tag }}
+          IS_PRERELEASE: ${{ needs.validate.outputs.is-prerelease }}
+          NOTES: ${{ steps.extract.outputs.notes }}
+        run: |
+          # If a release with this tag already exists (e.g. created via
+          # the GitHub UI manually), delete it first so gh release create
+          # doesn't fail with "already_exists".
+          gh release delete "$TAG" --cleanup-tags --yes 2>/dev/null || true
+          gh release create "$TAG" \
+            --title "v$VERSION" \
+            --notes "$NOTES" \
+            $([ "$IS_PRERELEASE" = "true" ] && echo --prerelease) \
+            --target "${{ github.sha }}" \
+            --verify-tag
+
+      - name: Announce in Discussions (optional)
+        if: github.event_name == 'push'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Open a Discussions post only if the repo has Discussions
+          # enabled. Falls through silently otherwise.
+          gh api -X POST "repos/${{ github.repository }}/discussions" \
+            -f title="Release v${{ needs.validate.outputs.version }}" \
+            -f body="${{ steps.extract.outputs.notes }}" \
+            -F category_id="$(gh api "repos/${{ github.repository }}" | jq -r '.discussions_category_id // ""')" \
+            2>/dev/null || echo "Discussions not configured; skipping announcement."

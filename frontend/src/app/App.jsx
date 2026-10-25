@@ -11,6 +11,7 @@ import { AmbientBackdrop } from "../components/AmbientBackdrop.jsx";
 // on Netlify where the fallback (index.html) may be served for stale chunks.
 import LandingPage from "../pages/landing/LandingPage.jsx";
 import LobbyPage from "../pages/lobby/LobbyPage.jsx";
+import TestLobbyPage from "../pages/test/TestLobbyPage.jsx";
 const GamePage = lazy(() => import("../pages/game/GamePage.jsx"));
 
 export default function App() {
@@ -23,6 +24,7 @@ export default function App() {
       <Suspense fallback={<LoadingScreen />}>
         <Routes location={location} key={location.pathname}>
           <Route path={ROUTES.landing} element={<LandingPage />} />
+          <Route path="/test" element={<TestLobbyPage />} />
           <Route path={ROUTES.lobby} element={<LobbyPage />} />
           <Route path="/game/:roomId" element={<GamePage />} />
           <Route path="*" element={<Navigate to={ROUTES.landing} replace />} />

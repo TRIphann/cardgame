@@ -29,7 +29,7 @@ public interface ITurnTimeoutHandler
 /// <summary>
 /// In-memory registry of currently-active game rooms and the moment their
 /// current player's turn started. Lets the <c>TurnClockService</c> background
-/// worker auto-draw for players who let their 60s turn timer expire.
+/// worker auto-draw for players who let their turn timer expire.
 ///
 /// GameService is the single writer: it calls <see cref="Register"/> when
 /// a turn starts (game start, AdvanceTurn after draw/nope chain) and
@@ -42,21 +42,30 @@ public interface ITurnClockRegistry
     /// Mark that <paramref name="roomId"/> has an active turn that started
     /// at <paramref name="startedAtUtc"/>. If the room was already tracked,
     /// the start time is overwritten with the new value.
+    /// <paramref name="timeoutSeconds"/> overrides the default 60s window —
+    /// pass 0 to fire the next tick immediately (used for AFK auto-play
+    /// players whose turns should resolve without waiting).
     /// </summary>
-    void Register(string roomId, DateTime startedAtUtc);
+    void Register(string roomId, DateTime startedAtUtc, int timeoutSeconds = 60);
 
     /// <summary>Drop the room from the registry (game ended, room removed).</summary>
     void Unregister(string roomId);
 
     /// <summary>
     /// Snapshot of all currently-tracked rooms. Each entry includes the
-    /// current turn start time so the background service can decide which
-    /// rooms have exceeded their window.
+    /// current turn start time and the per-room timeout window so the
+    /// background service can decide which rooms have exceeded their
+    /// window.
     /// </summary>
     IReadOnlyList<TurnClockEntry> Snapshot();
 }
 
-public readonly record struct TurnClockEntry(string RoomId, DateTime StartedAtUtc);
+/// <summary>
+/// One row in the turn-clock registry. <see cref="TimeoutSeconds"/> lets
+/// callers shorten the window for AFK players (0 = fire on the very next
+/// poll) without lying about <see cref="StartedAtUtc"/>.
+/// </summary>
+public readonly record struct TurnClockEntry(string RoomId, DateTime StartedAtUtc, int TimeoutSeconds);
 
 /// <summary>
 /// Registry of rooms whose Nope window is currently open. Lets the

@@ -1,0 +1,108 @@
+# Dependabot config for Arcana — Card Battle.
+#
+# Dependabot opens PRs for outdated dependencies weekly. We group minor
+# + patch updates per-package to keep the PR stream manageable, and let
+# major upgrades (which often need a code change) open individually so
+# we can review them in isolation.
+#
+# Why weekly and not daily?
+#   - GitHub limits free Dependabot runs; weekly keeps us under the cap.
+#   - .NET + npm packages churn a lot — daily would generate noise.
+#   - Renovate would be another option but Dependabot is built-in.
+
+version: 2
+
+updates:
+  # ── NuGet (backend) ────────────────────────────────────────────────────
+  - package-ecosystem: "nuget"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "Asia/Ho_Chi_Minh"
+    open-pull-requests-limit: 5
+    groups:
+      microsoft-extensions:
+        patterns:
+          - "Microsoft.Extensions.*"
+          - "Microsoft.AspNetCore.*"
+        update-types:
+          - "minor"
+          - "patch"
+      firestore:
+        patterns:
+          - "Google.Cloud.Firestore.*"
+        update-types:
+          - "minor"
+          - "patch"
+      signalr:
+        patterns:
+          - "Microsoft.AspNetCore.SignalR.*"
+          - "Microsoft.AspNetCore.SignalR.Common.*"
+        update-types:
+          - "minor"
+          - "patch"
+    labels:
+      - "dependencies"
+      - "backend"
+    reviewers:
+      - "gmae-backend-team"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+
+  # ── npm (frontend) ────────────────────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "Asia/Ho_Chi_Minh"
+    open-pull-requests-limit: 5
+    groups:
+      react:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "react-router-dom"
+        update-types:
+          - "minor"
+          - "patch"
+      build:
+        patterns:
+          - "vite"
+          - "@vitejs/*"
+          - "esbuild"
+        update-types:
+          - "minor"
+          - "patch"
+      e2e:
+        patterns:
+          - "@playwright/test"
+        update-types:
+          - "minor"
+          - "patch"
+    labels:
+      - "dependencies"
+      - "frontend"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+
+  # ── GitHub Actions ───────────────────────────────────────────────────
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "wednesday"
+      time: "08:00"
+      timezone: "Asia/Ho_Chi_Minh"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "ci"
+    commit-message:
+      prefix: "ci(actions)"
+      include: "scope"

@@ -20,8 +20,8 @@ public sealed class NopeTimeoutService : BackgroundService
     /// <summary>How often this loop scans for stale Nope windows.</summary>
     private const int PollIntervalMs = 500;
 
-    /// <summary>Total window length — must mirror GameService's NopeWindowSeconds.</summary>
-    public const int NopeWindowSeconds = 5;
+    /// <summary>Total window length — unified 10s rule, mirrors GameService.NopeWindowSeconds.</summary>
+    public const int NopeWindowSeconds = 10;
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly INopeWindowRegistry _registry;

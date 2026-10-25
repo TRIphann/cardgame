@@ -50,6 +50,11 @@ public interface IRoomRepository
     Task<Room?> UpdateGameStateAsync(string roomId, Domain.Entities.GameState? gameState, Domain.Enums.RoomStatus? status, CancellationToken ct = default);
 
     /// <summary>
+    /// Update the room's invitation code. Used by test room to set fixed code.
+    /// </summary>
+    Task<bool> UpdateRoomCodeAsync(string roomId, string code, CancellationToken ct = default);
+
+    /// <summary>
     /// Snapshot every room whose status is <c>Playing</c>. Used by background
     /// sweepers (e.g. <c>FuturePeekSweeperService</c>) that need to walk all
     /// in-flight games without going through the lobby / snapshot path.

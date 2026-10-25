@@ -12,4 +12,6 @@ public class RoomMember
     // heartbeat window are pruned by the polling endpoint on the server.
     public DateTime LastSeenAt { get; set; } = DateTime.UtcNow;
     public bool IsOnline { get; set; } = true;
+    // Indicates if this member is a test bot
+    public bool IsBot { get; set; }
 }

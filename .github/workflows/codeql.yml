@@ -1,0 +1,102 @@
+name: CodeQL Security Scan
+
+# Static security analysis for backend (.NET / C#) and frontend
+# (JavaScript / TypeScript). Runs on every push and weekly, then
+# uploads SARIF results to the GitHub Security tab.
+#
+# Why weekly?
+#   GitHub CodeQL has a monthly minute quota for private repos. For a
+#   public repo like this one, the limit is higher, but weekly keeps
+#   SARIF results fresh and avoids one-off duplicates.
+#
+# What CodeQL catches:
+#   - SQL injection, path traversal, XSS
+#   - Hard-coded credentials
+#   - Insecure deserialization
+#   - Missing authorization checks
+#   - Memory-unsafe patterns (in C#: insecure random, weak crypto)
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  schedule:
+    - cron: '17 6 * * 1'   # Mondays 06:17 UTC
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  analyze-backend:
+    name: Backend (.NET) analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [csharp]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # CodeQL needs full history for accurate taint tracking
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          # Build-mode means CodeQL will compile the project. This gives
+          # better precision than analysis-mode for C#.
+          build-mode: autobuild
+          queries: security-and-quality
+          paths: backend/
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
+          output: codeql-results-${{ matrix.language }}.sarif
+          # Don't fail the build on findings — we want them surfaced as
+          # Security tab alerts, not as PR-status blockers. Use the
+          # PR-status alerts workflow for blocking behaviour.
+        continue-on-error: false
+
+  analyze-frontend:
+    name: Frontend (JS/TS) analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none   # frontend source is small, autobuild not needed
+          queries: security-and-quality
+          paths: frontend/src/
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
+          output: codeql-results-${{ matrix.language }}.sarif

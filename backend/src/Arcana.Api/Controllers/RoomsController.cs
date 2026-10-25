@@ -1,8 +1,10 @@
 using Arcana.Application.Abstractions;
 using Arcana.Application.Game;
 using Arcana.Application.Services;
+using Arcana.Application.Services.TestRoom;
 using Arcana.Domain.Common;
 using Arcana.Domain.Entities;
+using Arcana.Domain.Repositories;
 using Arcana.Shared.Contracts;
 using Microsoft.AspNetCore.Mvc;
 
@@ -13,12 +15,39 @@ namespace Arcana.Api.Controllers;
 public class RoomsController : ControllerBase
 {
     private readonly IRoomService _roomService;
+    private readonly ITestRoomService _testRoomService;
+    private readonly ITestRoomRepository _testRoomRepository;
     private readonly GameService _gameService;
+    private readonly StaleMemberPruner _stalePruner;
 
-    public RoomsController(IRoomService roomService, GameService gameService)
+    public RoomsController(
+        IRoomService roomService,
+        ITestRoomService testRoomService,
+        ITestRoomRepository testRoomRepository,
+        GameService gameService,
+        StaleMemberPruner stalePruner)
     {
         _roomService = roomService;
+        _testRoomService = testRoomService;
+        _testRoomRepository = testRoomRepository;
         _gameService = gameService;
+        _stalePruner = stalePruner;
+    }
+
+    /// <summary>
+    /// Pick the room service for a given room id. Test rooms (rooms previously
+    /// created via <c>/api/test/room</c>) live in <see cref="ITestRoomRepository"/>;
+    /// everything else falls through to the production Firestore-backed service.
+    ///
+    /// The probe is a single <c>ConcurrentDictionary.TryGet</c> — cheap, no IO,
+    /// and bounded by server lifetime. Lobby/phòng thường never hit the test repo
+    /// because their ids are random GUIDs that TestController never registers.
+    /// </summary>
+    private async Task<IRoomService> ResolveRoomServiceAsync(string roomId, CancellationToken ct)
+    {
+        if (!string.IsNullOrEmpty(roomId) && await _testRoomRepository.GetByIdAsync(roomId, ct) is not null)
+            return _testRoomService;
+        return _roomService;
     }
 
     [HttpPost]
@@ -43,7 +72,7 @@ public class RoomsController : ControllerBase
         [FromBody] KickMemberRequest request,
         CancellationToken ct)
     {
-        var room = await _roomService.KickMemberAsync(id, request.HostId, request.TargetMemberId, ct);
+        var room = await (await ResolveRoomServiceAsync(id, ct)).KickMemberAsync(id, request.HostId, request.TargetMemberId, ct);
         return Ok(MapToDto(room!, request.HostId));
     }
 
@@ -53,7 +82,7 @@ public class RoomsController : ControllerBase
         [FromBody] SetReadyRequest request,
         CancellationToken ct)
     {
-        var member = await _roomService.SetReadyAsync(id, request.MemberId, request.IsReady, ct);
+        var member = await (await ResolveRoomServiceAsync(id, ct)).SetReadyAsync(id, request.MemberId, request.IsReady, ct);
         if (member is null) return NotFound(new ErrorResponse("member_not_found", "Thành viên không còn trong phòng."));
         return Ok(MapMemberDto(member));
     }
@@ -64,9 +93,38 @@ public class RoomsController : ControllerBase
         [FromBody] HeartbeatRequest request,
         CancellationToken ct)
     {
-        var member = await _roomService.HeartbeatAsync(id, request.MemberId, ct);
+        var member = await (await ResolveRoomServiceAsync(id, ct)).HeartbeatAsync(id, request.MemberId, ct);
         if (member is null) return NotFound(new ErrorResponse("member_not_found", "Thành viên không còn trong phòng."));
         return NoContent();
+    }
+
+    [HttpPost("{id}/members/{memberId}/resume")]
+    public async Task<ActionResult<RoomDto>> ResumeFromAfk(
+        [FromRoute] string id,
+        [FromRoute] string memberId,
+        CancellationToken ct)
+    {
+        var room = await _gameService.ResumeFromAfkAsync(id, memberId, ct);
+        return Ok(MapToDto(room, memberId));
+    }
+
+    /// <summary>
+    /// Fired by the game page once its UI has finished its initial render.
+    /// This tells the server to ARM the turn clock — previously the clock was
+    /// armed by <c>StartGameAsync</c> directly, which meant it would tick
+    /// down during the few seconds the player needs to navigate from the
+    /// lobby to the game tab, and they would be greeted with an AFK modal.
+    /// </summary>
+    [HttpPost("{id}/members/{memberId}/ready")]
+    public async Task<ActionResult<RoomDto>> ClientReady(
+        [FromRoute] string id,
+        [FromRoute] string memberId,
+        CancellationToken ct)
+    {
+        // Test rooms and prod rooms share the same GameService — the
+        // underlying repository doesn't matter for the ready gate.
+        var room = await _gameService.MarkClientReadyAsync(id, memberId, ct);
+        return Ok(MapToDto(room, memberId));
     }
 
     [HttpGet("{id}/snapshot")]
@@ -75,8 +133,16 @@ public class RoomsController : ControllerBase
         [FromQuery(Name = "memberId")] string? memberId,
         CancellationToken ct)
     {
-        var room = await _roomService.GetRoomWithPruneAsync(id, ct);
+        // Snapshot hot path: serve from cache immediately (no Firestore
+        // round-trip for the room doc), then kick off the "mark stale
+        // members offline" sweep in the background. Before this the
+        // snapshot endpoint issued one Firestore read+write per request;
+        // with the polling hook hitting this every 2-5s during lobby wait
+        // the resulting traffic was the bulk of our quota consumption.
+        var room = await (await ResolveRoomServiceAsync(id, ct)).GetRoomAsync(id, ct);
         if (room is null) return NotFound(new ErrorResponse("room_not_found", "Phòng không tồn tại."));
+        // Debounced background prune — never block the response on it.
+        _stalePruner.PruneAsync(id, ct);
         return Ok(MapToDto(room, memberId));
     }
 
@@ -86,14 +152,15 @@ public class RoomsController : ControllerBase
         [FromRoute] string memberId,
         CancellationToken ct)
     {
-        var room = await _roomService.GetRoomAsync(id, ct);
+        var svc = await ResolveRoomServiceAsync(id, ct);
+        var room = await svc.GetRoomAsync(id, ct);
         if (room is null) return NoContent();
         if (string.Equals(room.HostId, memberId, StringComparison.Ordinal)) return NoContent();
         var member = room.Members.FirstOrDefault(m => m.Id == memberId);
         if (member is null) return NoContent();
         try
         {
-            await _roomService.KickMemberAsync(id, room.HostId, memberId, ct);
+            await svc.KickMemberAsync(id, room.HostId, memberId, ct);
         }
         catch (DomainException)
         {
@@ -123,7 +190,7 @@ public class RoomsController : ControllerBase
         [FromBody] StartGameRequest request,
         CancellationToken ct)
     {
-        var room = await _gameService.StartGameAsync(id, request.HostId, ct);
+        var room = await _gameService.StartGameAsync(id, request.HostId, customHands: null, ct: ct);
         return Ok(MapToDto(room, request.HostId));
     }
 
@@ -158,7 +225,8 @@ public class RoomsController : ControllerBase
             result.RequiresDefuse, result.RequiresDiscardPick, result.RequiresTargetPick,
             result.RequiresFavorTargetPick, result.FavorTargetId, result.FavorCandidates,
             result.FuturePeek,
-            result.RequiresMoreDraws, result.RemainingDraws));
+            result.RequiresMoreDraws, result.RemainingDraws,
+            result.RequiresFavorPick));
     }
 
     [HttpPost("{id}/game/draw-card")]
@@ -290,10 +358,10 @@ public class RoomsController : ControllerBase
             gs.LastPlayedAt?.ToString("O"),
             gs.LastPlayedByNope,
             gs.TurnStartedAt?.ToString("O"),
-            60,
+            GameService.TurnTimeLimitSeconds,
             gs.TurnStartedAt.HasValue
-                ? Math.Max(0, (int)(60 - (DateTime.UtcNow - gs.TurnStartedAt.Value).TotalSeconds))
-                : 60,
+                ? Math.Max(0, (int)(GameService.TurnTimeLimitSeconds - (DateTime.UtcNow - gs.TurnStartedAt.Value).TotalSeconds))
+                : GameService.TurnTimeLimitSeconds,
             gs.TurnOrder?.ToList() ?? new List<string>(),
             futurePeek?.ToList() ?? new List<string>(),
             // Favor-pick pending DTO. The TARGET is the only player who
@@ -307,7 +375,24 @@ public class RoomsController : ControllerBase
                     gs.PendingFavorPick.InitiatorId,
                     string.Equals(gs.PendingFavorPick.TargetMemberId, viewerMemberId, StringComparison.Ordinal)
                         ? gs.PendingFavorPick.ShuffledCandidates
-                        : new List<string>()));
+                        : new List<string>()),
+            // AFK auto-play list — every viewer can see who is currently AFK
+            // (the modal decides whether to show for the local player).
+            gs.AfkMemberIds?.ToList() ?? new List<string>(),
+            // Client-ready gate (see GameService.MarkClientReadyAsync and
+            // GameState.ClientReady). Front-end uses this for info only;
+            // the server is the source of truth for whether the clock is
+            // ticking.
+            gs.ClientReady,
+            // Bot turn override: seconds a bot takes to act. 0 = instant
+            // (uses the unified 10s turn budget for the AFK auto-draw chain).
+            gs.BotTurnSeconds,
+            // MyHand: mirror RoomDto.MyHand at the GameStateDto level so the
+            // front-end always has a top-level `room.myHand` to read from
+            // regardless of which REST endpoint returned the snapshot.
+            viewerMemberId is not null && gs.Hands.TryGetValue(viewerMemberId, out var gsMyHand)
+                ? gsMyHand
+                : null);
     }
 
     private static RoomMemberDto MapMemberDto(RoomMember m) => new(

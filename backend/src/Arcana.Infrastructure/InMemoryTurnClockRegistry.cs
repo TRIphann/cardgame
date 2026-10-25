@@ -11,23 +11,22 @@ namespace Arcana.Infrastructure;
 /// </summary>
 public sealed class InMemoryTurnClockRegistry : ITurnClockRegistry
 {
-    private readonly ConcurrentDictionary<string, DateTime> _entries = new();
+    private readonly ConcurrentDictionary<string, Entry> _entries = new();
 
-    public void Register(string roomId, DateTime startedAtUtc)
+    private readonly record struct Entry(DateTime StartedAtUtc, int TimeoutSeconds);
+
+    public void Register(string roomId, DateTime startedAtUtc, int timeoutSeconds = 60)
     {
-        // StartedAtUtc is always DateTime.UtcNow from callers; we store the
-        // value verbatim and let the reader compare against its own clock.
-        _entries[roomId] = startedAtUtc;
+        _entries[roomId] = new Entry(startedAtUtc, timeoutSeconds);
     }
 
     public void Unregister(string roomId) => _entries.TryRemove(roomId, out _);
 
     public IReadOnlyList<TurnClockEntry> Snapshot()
     {
-        var now = DateTime.UtcNow;
         var list = new List<TurnClockEntry>(_entries.Count);
         foreach (var kv in _entries)
-            list.Add(new TurnClockEntry(kv.Key, kv.Value));
+            list.Add(new TurnClockEntry(kv.Key, kv.Value.StartedAtUtc, kv.Value.TimeoutSeconds));
         return list;
     }
 }

@@ -7,7 +7,7 @@
 // instance per render. The hook just gives React a way to read state + trigger
 // actions.
 
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 
 const STORAGE_KEY = "arcana.audio.v1";
 

@@ -1,9 +1,29 @@
 // Rooms API — fetch wrappers. Used by useOptimisticRoom + LobbyPage.
 
 import { API_BASE_URL } from "@config/env.js";
+import { normalizeRestRoom } from "../realtime/useGameChannel.js";
 
-const COLD_START_TIMEOUT_MS = 50000;
-const WARM_TIMEOUT_MS = 15000;
+// Normalize a GameActionResponse which contains a RoomDto with MyHand (PascalCase).
+// Converts RoomDto to camelCase so callers can read room.myHand.
+function normalizeGameActionResponse(res) {
+  if (!res) return res;
+  // Handle both PascalCase Room and camelCase room
+  const roomData = res.Room ?? res.room;
+  if (!roomData) return res;
+  console.log("[normalizeGameActionResponse] Room keys:", Object.keys(roomData), "MyHand:", roomData.MyHand, "myHand:", roomData.myHand);
+  const normalizedRoom = normalizeRestRoom(roomData, null);
+  const result = {
+    ...res,
+    Room: res.Room ? normalizedRoom : undefined,
+    room: res.room ? normalizedRoom : undefined,
+  };
+  console.log("[normalizeGameActionResponse] AFTER Room.myHand:", result.Room?.myHand, "room.myHand:", result.room?.myHand);
+  return result;
+}
+
+// Optimized timeouts for responsive gameplay
+const COLD_START_TIMEOUT_MS = 10000; // Reduced from 50s for faster error detection
+const WARM_TIMEOUT_MS = 5000;       // Reduced from 15s for faster response
 const MAX_RETRIES = 1;
 
 function isAbort(err) {
@@ -97,7 +117,7 @@ export const roomsApi = {
   // the 35s offline prune from kicking us while we're actively polling).
   snapshot(roomId, memberId) {
     const qs = memberId ? `?memberId=${encodeURIComponent(memberId)}` : "";
-    return jsonRequest(`/api/rooms/${roomId}/snapshot${qs}`);
+    return jsonRequest(`/api/rooms/${roomId}/snapshot${qs}`).then(r => normalizeRestRoom(r, memberId));
   },
   kick(roomId, hostId, targetMemberId) {
     return jsonRequest(`/api/rooms/${roomId}/kick`, {
@@ -126,10 +146,33 @@ export const roomsApi = {
       body: JSON.stringify({ memberId }),
     });
   },
+  // Resume from AFK auto-play: the player explicitly says "I'm back" so
+  // the server can stop auto-drawing on their turns and restore the normal
+  // 60s turn window for them.
+  resumeFromAfk(roomId, memberId) {
+    return jsonRequest(
+      `/api/rooms/${roomId}/members/${encodeURIComponent(memberId)}/resume`,
+      { method: "POST" },
+    ).then(r => normalizeRestRoom(r, memberId));
+  },
+  // Fires once the game UI has finished its initial render. Tells the
+  // server to ARM the turn clock; until this endpoint is hit the clock is
+  // paused so the player gets a full 60s window when they actually see the
+  // game tab (instead of arriving to find they're already AFK).
+  markClientReady(roomId, memberId) {
+    return jsonRequest(
+      `/api/rooms/${roomId}/members/${encodeURIComponent(memberId)}/ready`,
+      { method: "POST" },
+    );
+  },
+  // Test mode: uses in-memory repository instead of Firestore
+  snapshotTest(roomId) {
+    return jsonRequest(`/api/test/room/${roomId}/snapshot`);
+  },
   // Game endpoints
   snapshotWithViewer(roomId, memberId) {
     const qs = memberId ? `?memberId=${encodeURIComponent(memberId)}` : "";
-    return jsonRequest(`/api/rooms/${roomId}/snapshot${qs}`);
+    return jsonRequest(`/api/rooms/${roomId}/snapshot${qs}`).then(r => normalizeRestRoom(r, memberId));
   },
   startGame(roomId, hostId) {
     return jsonRequest(`/api/rooms/${roomId}/start`, {
@@ -144,9 +187,15 @@ export const roomsApi = {
     });
   },
   playCard(roomId, payload) {
+    console.log("[roomsApi.playCard] BEFORE fetch, payload:", payload);
     return jsonRequest(`/api/rooms/${roomId}/game/play-card`, {
       method: "POST",
       body: JSON.stringify(payload),
+    }).then((rawRes) => {
+      console.log("[roomsApi.playCard] rawRes keys:", rawRes ? Object.keys(rawRes) : "null");
+      console.log("[roomsApi.playCard] rawRes.room:", rawRes?.room);
+      console.log("[roomsApi.playCard] rawRes.Room:", rawRes?.Room);
+      return normalizeGameActionResponse(rawRes);
     });
   },
   // Cancel a pending combo target pick after the user dismissed the
@@ -156,30 +205,36 @@ export const roomsApi = {
     return jsonRequest(`/api/rooms/${roomId}/game/cancel-pending`, {
       method: "POST",
       body: JSON.stringify(payload),
-    });
+    }).then(normalizeGameActionResponse);
   },
   drawCard(roomId, memberId) {
+    console.log("[roomsApi.drawCard] BEFORE fetch");
     return jsonRequest(`/api/rooms/${roomId}/game/draw-card`, {
       method: "POST",
       body: JSON.stringify({ memberId }),
+    }).then((rawRes) => {
+      console.log("[roomsApi.drawCard] rawRes keys:", rawRes ? Object.keys(rawRes) : "null");
+      console.log("[roomsApi.drawCard] rawRes.room:", rawRes?.room);
+      console.log("[roomsApi.drawCard] rawRes.Room:", rawRes?.Room);
+      return normalizeGameActionResponse(rawRes);
     });
   },
   useDefuse(roomId, memberId, slotIndex) {
     return jsonRequest(`/api/rooms/${roomId}/game/defuse`, {
       method: "POST",
       body: JSON.stringify({ memberId, slotIndex }),
-    });
+    }).then(normalizeGameActionResponse);
   },
   nope(roomId, memberId) {
     return jsonRequest(`/api/rooms/${roomId}/game/nope`, {
       method: "POST",
       body: JSON.stringify({ memberId }),
-    });
+    }).then(normalizeGameActionResponse);
   },
   concede(roomId, memberId) {
     return jsonRequest(`/api/rooms/${roomId}/game/concede`, {
       method: "POST",
       body: JSON.stringify({ memberId }),
-    });
+    }).then(normalizeGameActionResponse);
   },
 };

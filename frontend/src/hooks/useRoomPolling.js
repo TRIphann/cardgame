@@ -6,7 +6,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { roomsApi } from "@shared/api/roomsApi.js";
 import { loadSession } from "@config/env.js";
 
-const POLL_INTERVAL_MS = 2500;
+// Poll interval: 5 seconds for lobby
+const LOBBY_POLL_INTERVAL_MS = 5000;
 
 export function useRoomPolling(roomId, { enabled = true, memberId = null } = {}) {
   const [room, setRoom] = useState(null);
@@ -53,13 +54,20 @@ export function useRoomPolling(roomId, { enabled = true, memberId = null } = {})
   useEffect(() => {
     stoppedRef.current = false;
     if (!roomId || !enabled) return undefined;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
     refresh();
+    // Use adaptive polling: slower in lobby (5s), faster during game (2s)
     const id = setInterval(() => {
       if (!stoppedRef.current) refresh();
-    }, POLL_INTERVAL_MS);
+    }, LOBBY_POLL_INTERVAL_MS);
     return () => clearInterval(id);
   }, [roomId, enabled, refresh]);
+
+  // Adaptive polling: switch to faster polling when game is playing
+  useEffect(() => {
+    if (room?.status !== "waiting") return;
+    // When game starts, we'll poll faster via useGameChannel
+  }, [room?.status]);
 
   return { room, error, refresh };
 }

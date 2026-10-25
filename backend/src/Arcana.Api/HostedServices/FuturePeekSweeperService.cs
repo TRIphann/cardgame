@@ -1,3 +1,5 @@
+using Arcana.Application.Abstractions;
+using Arcana.Application.Services;
 using Arcana.Domain.Repositories;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -6,57 +8,54 @@ using Microsoft.Extensions.Logging;
 namespace Arcana.Api.HostedServices;
 
 /// <summary>
-/// Background loop that auto-clears stale <c>GameState.FuturePeek</c> entries
-/// once the peek lifetime expires. Without this the modal would re-open on
-/// every SignalR snapshot poll until the player takes their next action
-/// (which clears it via <c>AdvanceTurn</c>).
+/// Background loop that auto-clears stale <c>FuturePeek</c> entries once the
+/// peek lifetime expires. Without this the modal would re-open on every
+/// SignalR snapshot poll until the player takes their next action.
 ///
-/// The lifetime is intentionally short: <c>NopeWindowSeconds</c> (5s) for
-/// the nope chain plus another 8s grace for the actor to view the cards.
-/// Combined: 13s. By the time we sweep, the actor has either committed the
-/// peek mentally or moved on. We also broadcast so subscribers see the
-/// cleared state in real-time.
+/// <para>
+/// <b>Quota-safe design:</b> This service uses an in-memory
+/// <see cref="IFuturePeekRegistry"/> instead of scanning Firestore. When a
+/// Future card is played, <c>GameService</c> registers the room ID with an
+/// expiry timestamp. When the turn advances (or the peek is noped), the
+/// registry is cleared. This sweeper only reads Firestore for rooms that are
+/// <i>known</i> to have an active peek — never a full-collection scan.
+/// </para>
 ///
-/// Quota safety: the previous 2s poll hammered Firestore with a full
-/// collection scan every tick and triggered <c>ResourceExhausted / Quota
-/// exceeded</c> on the free tier within hours of cold-start. This version
-/// polls every 30s and backs off to 5 minutes whenever a quota error fires,
-/// so a single deployed instance can run indefinitely without burning the
-/// daily read budget.
+/// <para>
+/// The lifetime is <c>PeekLifetime</c> (13s): 5s nope window + 8s view time.
+/// The poll interval is <c>PollIntervalMs</c> (10s), giving a ≤10s grace
+/// window for a 13s peek. Rooms with an active peek are swept as soon as
+/// they appear in the registry — the 10s tick is the max delay, not a
+/// guaranteed delay.
+/// </para>
 /// </summary>
 public sealed class FuturePeekSweeperService : BackgroundService
 {
-    /// <summary>
-    /// How often this loop scans for stale FuturePeek entries. Tuned to
-    /// 30s — a FuturePeek's lifetime is 13s, so a 30s sweep gives roughly
-    /// a 17s window for stale entries to be reaped. The previous 2s sweep
-    /// hammered Firestore with full-collection scans and triggered
-    /// <c>ResourceExhausted / Quota exceeded</c> on the free tier.
-    /// </summary>
-    private const int PollIntervalMs = 30_000;
+    /// <summary>How often this loop scans the registry for expired entries.</summary>
+    private const int PollIntervalMs = 10_000;
 
-    /// <summary>
-    /// When a Firestore quota error fires, back off this many ms before the
-    /// next attempt. Prevents a tight retry loop from burning through the
-    /// remaining daily budget.
-    /// </summary>
+    /// <summary>When a Firestore quota error fires, back off this many ms.</summary>
     private const int QuotaBackoffMs = 300_000;
 
     /// <summary>
-    /// Total lifetime of a Future peek before the sweeper wipes it. Tuned to
-    /// "nope window (5s) + generous view time (8s)" = 13s. Anything longer
-    /// risks the modal lingering past the actor's actual viewing time.
+    /// Total lifetime of a Future peek before the sweeper wipes it.
+    /// Unified 10s rule: the Future modal runs on the same 10s budget as
+    /// every other picker (Nope window, Favor target/card, Combo, Bomb
+    /// placement). Mirrors GameService.FuturePeekSeconds.
     /// </summary>
-    public static readonly TimeSpan PeekLifetime = TimeSpan.FromSeconds(13);
+    public static readonly TimeSpan PeekLifetime = TimeSpan.FromSeconds(GameService.FuturePeekSeconds);
 
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IFuturePeekRegistry _registry;
     private readonly ILogger<FuturePeekSweeperService> _logger;
 
     public FuturePeekSweeperService(
         IServiceScopeFactory scopeFactory,
+        IFuturePeekRegistry registry,
         ILogger<FuturePeekSweeperService> logger)
     {
         _scopeFactory = scopeFactory;
+        _registry = registry;
         _logger = logger;
     }
 
@@ -83,8 +82,6 @@ public sealed class FuturePeekSweeperService : BackgroundService
             catch (Grpc.Core.RpcException rex) when (
                 rex.StatusCode == Grpc.Core.StatusCode.ResourceExhausted)
             {
-                // Quota / rate limit hit — back off hard so we don't burn the
-                // remaining daily budget in a tight retry loop.
                 quotaExceeded = true;
                 nextDelayMs = QuotaBackoffMs;
                 _logger.LogWarning(
@@ -102,7 +99,6 @@ public sealed class FuturePeekSweeperService : BackgroundService
             }
             catch (OperationCanceledException) { break; }
 
-            // After a successful tick, reset to the normal poll cadence.
             if (!quotaExceeded) nextDelayMs = PollIntervalMs;
         }
 
@@ -112,28 +108,73 @@ public sealed class FuturePeekSweeperService : BackgroundService
     private async Task TickAsync(CancellationToken ct)
     {
         var now = DateTime.UtcNow;
+
+        // Read the registry snapshot — zero Firestore reads here.
+        // Only rooms with a known-active peek are included.
+        var entries = _registry.Snapshot();
+        if (entries.Count == 0) return;
+
         using var scope = _scopeFactory.CreateScope();
         var repo = scope.ServiceProvider.GetRequiredService<IRoomRepository>();
+        // Test rooms (created through /api/test/room) live in the in-memory
+        // test repository, NOT in Firestore. The test repo is optional so
+        // production deployments without it keep working unchanged.
+        var testRepo = scope.ServiceProvider.GetService<ITestRoomRepository>();
 
-        // Scan every active room. The number of rooms in flight is small
-        // (single-digit for a casual party game) so an O(rooms) scan is fine.
-        var rooms = await repo.GetAllPlayingAsync(ct);
-        if (rooms.Count == 0) return;
-
-        foreach (var room in rooms)
+        foreach (var entry in entries)
         {
-            var gs = room.GameState;
-            if (gs?.FuturePeek is null || gs.FuturePeekAt is null) continue;
-            if (now - gs.FuturePeekAt.Value < PeekLifetime) continue;
+            if (now < entry.ExpiresAtUtc) continue;
 
-            // Expired — wipe and persist so the modal stops re-opening.
-            gs.FuturePeek = null;
-            gs.FuturePeekAt = null;
-            await repo.UpdateGameStateAsync(room.Id, gs, null, ct);
-            // Debug — FuturePeek wipes happen every 13s per active peek; an
-            // Info-level log here would create one line per wipe.
-            _logger.LogDebug(
-                "Cleared stale FuturePeek for room {RoomId}", room.Id);
+            try
+            {
+                // Resolve the WRITE target the same way GameService does:
+                // prefer the test repo when the room actually lives there.
+                // Without this the sweeper wrote test rooms to Firestore and
+                // every tick failed with "No document to update" (NotFound),
+                // spamming the log and leaving the peek stuck forever.
+                var writeRepo = await ResolveWriteRepositoryAsync(entry.RoomId, testRepo, repo, ct);
+
+                // Fetch the room so we can clear only FuturePeek fields without
+                // wiping the rest of the game state (deck, hands, etc.).
+                var room = await writeRepo.GetByIdAsync(entry.RoomId, ct);
+                if (room?.GameState is null) { _registry.Unregister(entry.RoomId); continue; }
+
+                var gs = room.GameState;
+                gs.FuturePeek = null;
+                gs.FuturePeekAt = null;
+
+                // UpdateGameStateAsync: 1 read (GetByIdAsync inside) + 1 write.
+                await writeRepo.UpdateGameStateAsync(entry.RoomId, gs, null, ct);
+                _registry.Unregister(entry.RoomId);
+                _logger.LogDebug(
+                    "Cleared stale FuturePeek for room {RoomId}", entry.RoomId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex,
+                    "Failed to clear FuturePeek for room {RoomId}; will retry next tick",
+                    entry.RoomId);
+            }
         }
+    }
+
+    /// <summary>
+    /// Picks the repository that OWNS the room: the in-memory test repo when
+    /// the room lives there, otherwise the production Firestore-backed repo.
+    /// Mirrors <c>GameService.ResolveWriteRepositoryAsync</c> so the sweeper
+    /// and the game engine always agree on where a room's state lives.
+    /// </summary>
+    private static async Task<IRoomRepository> ResolveWriteRepositoryAsync(
+        string roomId,
+        ITestRoomRepository? testRepo,
+        IRoomRepository productionRepo,
+        CancellationToken ct)
+    {
+        if (testRepo is not null)
+        {
+            var testRoom = await testRepo.GetByIdAsync(roomId, ct);
+            if (testRoom is not null) return testRepo;
+        }
+        return productionRepo;
     }
 }

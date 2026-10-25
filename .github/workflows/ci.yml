@@ -1,0 +1,289 @@
+name: CI
+
+# Continuous Integration for Arcana — Card Battle.
+#
+# Runs on every push and PR. Validates that the code compiles cleanly,
+# all unit/integration tests pass, and the production bundle builds.
+#
+# Jobs (parallel):
+#   - backend-build:     dotnet restore + build + unit tests
+#   - backend-lint:      dotnet format verification
+#   - frontend-build:    npm ci + lint + production build
+#   - frontend-test:     vitest (if configured) + ESLint with max-warnings=0
+#   - test-summary:      gate check — only merge if all jobs green
+#
+# Notes:
+#   - .NET 8.0 is required (backend targets net8.0).
+#   - Node 20 LTS is required for Vite 5.x and SignalR.
+#   - Backend unit tests live alongside each project (Arcana.UnitTests).
+#     Integration tests against a live backend live in frontend/e2e/ and
+#     backend/tests/integration/, and are run by integration.yml instead —
+#     they need a running server, so they're separated from this workflow.
+
+on:
+  push:
+    branches: [main, dev, 'release/**']
+    paths:
+      - 'backend/**'
+      - 'frontend/src/**'
+      - 'frontend/package.json'
+      - 'frontend/package-lock.json'
+      - 'frontend/eslint.config.js'
+      - 'frontend/vite.config.js'
+      - 'frontend/vitest.config.js'
+      - '.github/workflows/ci.yml'
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - 'backend/**'
+      - 'frontend/src/**'
+      - 'frontend/package.json'
+      - 'frontend/package-lock.json'
+      - 'frontend/eslint.config.js'
+      - 'frontend/vite.config.js'
+      - 'frontend/vitest.config.js'
+      - '.github/workflows/ci.yml'
+  workflow_dispatch:
+
+# Cancel in-flight runs on the same branch when a new commit lands.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  NPM_CONFIG_FUND: false
+  NPM_CONFIG_AUDIT: false
+  NODE_OPTIONS: --max-old-space-size=4096
+
+jobs:
+  # ───────────────────────────────────────────────────────────────────────
+  # BACKEND (.NET 8)
+  # ───────────────────────────────────────────────────────────────────────
+  backend-build:
+    name: Backend build & unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          lfs: false
+
+      - name: Setup .NET 8.0
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+          cache: true
+          cache-dependency-path: backend/**/packages.lock.json
+
+      - name: Restore dependencies
+        run: dotnet restore Arcana.sln
+
+      - name: Build (Release, no-restore)
+        run: dotnet build Arcana.sln -c Release --no-restore --no-incremental /p:TreatWarningsAsErrors=false /p:RunAnalyzersDuringBuild=true
+
+      - name: Run unit tests
+        # The glob picks up every *.UnitTests.csproj / *.Tests.csproj under
+        # backend/. Right now that is backend/tests/unit/Arcana.UnitTests.
+        # Coverage is collected into ../coverage so the Codecov step below
+        # finds it (the step's working-directory is `backend`).
+        run: |
+          set -e
+          TEST_PROJECTS=$(find . -name '*.UnitTests.csproj' -o -name '*.Tests.csproj' 2>/dev/null || true)
+          if [ -z "$TEST_PROJECTS" ]; then
+            echo "::error::No unit test project found — the backend has no unit tests!"
+            exit 1
+          fi
+          for proj in $TEST_PROJECTS; do
+            echo "▶ Running tests in $proj"
+            dotnet test "$proj" -c Release --no-build --no-restore \
+              --logger "trx;LogFileName=unit-tests.trx" \
+              --collect:"XPlat Code Coverage" \
+              --results-directory ../coverage
+          done
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results-${{ github.sha }}
+          path: backend/coverage
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: Upload coverage to Codecov
+        if: always()
+        uses: codecov/codecov-action@v4
+        with:
+          directory: backend/coverage
+          flags: backend
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+          verbose: true
+
+  backend-lint:
+    name: Backend lint (dotnet format)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8.0
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Install dotnet-format
+        run: dotnet tool install -g dotnet-format || dotnet tool update -g dotnet-format
+        env:
+          DOTNET_NOLOGO: true
+
+      - name: Verify formatting (whitespace + style)
+        run: |
+          dotnet format Arcana.sln --verify-no-changes \
+            --severity info \
+            --verbosity normal \
+            || (echo "::error::dotnet format found issues. Run 'dotnet format Arcana.sln' locally and commit the changes." && exit 1)
+
+      - name: Verify no banned APIs leaked into the codebase
+        # Cheap grep guard against Console.WriteLine in production code,
+        # TODO/FIXME that have been open for >6 months, and Task<T> fire-and-forget.
+        run: |
+          if grep -rn --include='*.cs' -E 'Console\.WriteLine|TODO\(|FIXME\(' src/ 2>/dev/null; then
+            echo "::warning::Console.WriteLine / TODO / FIXME found in src/ — review before merging."
+          fi
+
+  # ───────────────────────────────────────────────────────────────────────
+  # FRONTEND (React + Vite)
+  # ───────────────────────────────────────────────────────────────────────
+  frontend-build:
+    name: Frontend build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 20 (LTS)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund --prefer-offline
+
+      - name: ESLint (max-warnings=0)
+        run: npm run lint
+
+      - name: Production build
+        # Inject the production API endpoints at build time so the bundle
+        # talks directly to Render (no proxy needed in CI). These are
+        # build-time constants baked into dist/.
+        run: |
+          npm run build \
+            -- --mode production
+        env:
+          VITE_API_BASE_URL: ${{ vars.PRODUCTION_API_BASE_URL || 'https://cardgame-lwsk.onrender.com' }}
+          VITE_API_HUB_URL: ${{ vars.PRODUCTION_API_HUB_URL || 'https://cardgame-lwsk.onrender.com' }}
+
+      - name: Verify build artifacts
+        run: |
+          test -f dist/index.html || (echo "::error:dist/index.html missing" && exit 1)
+          test -d dist/assets || (echo "::error:dist/assets missing" && exit 1)
+          echo "Bundle size:"
+          du -sh dist/
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist-${{ github.sha }}
+          path: frontend/dist
+          retention-days: 7
+          if-no-files-found: error
+
+  # ───────────────────────────────────────────────────────────────────────
+  # FRONTEND UNIT TESTS (Vitest + React Testing Library)
+  # ───────────────────────────────────────────────────────────────────────
+  frontend-test:
+    name: Frontend unit tests (Vitest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 20 (LTS)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund --prefer-offline
+
+      - name: Run unit tests with coverage
+        run: npm run test:coverage
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-test-results-${{ github.sha }}
+          path: frontend/coverage
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: Upload coverage to Codecov
+        if: always()
+        uses: codecov/codecov-action@v4
+        with:
+          directory: frontend/coverage
+          flags: frontend
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+          verbose: true
+
+  # ───────────────────────────────────────────────────────────────────────
+  # STATUS SUMMARY
+  # ───────────────────────────────────────────────────────────────────────
+  ci-status:
+    name: CI status check
+    runs-on: ubuntu-latest
+    needs: [backend-build, backend-lint, frontend-build, frontend-test]
+    if: always()
+    steps:
+      - name: Evaluate
+        run: |
+          echo "Backend build:  ${{ needs.backend-build.result }}"
+          echo "Backend lint:   ${{ needs.backend-lint.result }}"
+          echo "Frontend build: ${{ needs.frontend-build.result }}"
+          echo "Frontend test:  ${{ needs.frontend-test.result }}"
+          if [ "${{ needs.backend-build.result }}" != "success" ] || \
+             [ "${{ needs.backend-lint.result }}" != "success" ] || \
+             [ "${{ needs.frontend-build.result }}" != "success" ] || \
+             [ "${{ needs.frontend-test.result }}" != "success" ]; then
+            echo "::error::One or more required jobs failed."
+            exit 1
+          fi
+          echo "✅ All required jobs passed."

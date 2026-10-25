@@ -1,0 +1,394 @@
+name: Integration Tests
+
+# Integration tests against the LIVE BACKEND + a freshly-built frontend.
+#
+# Why a separate workflow from ci.yml?
+#   - These tests need a running backend (.NET API + Firestore or in-mem repo)
+#     and a serving frontend (vite preview).
+#   - We spin up both as background processes inside the GitHub runner and
+#     run the existing PowerShell integration suite + Playwright E2E suite.
+#   - These are slower (~3-6 min) and require environment secrets, so they
+#     live in their own workflow with manual_dispatch + scheduled triggers.
+#
+# Two flavours:
+#   1) Backend integration (backend/tests/integration/*.ps1) — REST-only, no UI.
+#   2) Frontend E2E (frontend/e2e/*.spec.ts) — Playwright + Chromium.
+#
+# Targets:
+#   - PR:   against a temporary ephemeral build (in-process, no Firebase).
+#   - main: against staging if available, otherwise ephemeral.
+#   - cron: weekly against production smoke test.
+
+on:
+  push:
+    branches: [main, dev]
+    paths:
+      - 'backend/**'
+      - 'frontend/src/**'
+      - 'frontend/e2e/**'
+      - 'backend/tests/**'
+      - '.github/workflows/integration.yml'
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - 'backend/**'
+      - 'frontend/src/**'
+      - 'frontend/e2e/**'
+      - 'backend/tests/**'
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Where to run the tests'
+        required: true
+        type: choice
+        default: 'ephemeral'
+        options:
+          - ephemeral
+          - staging
+          - production-smoke
+      backend_url:
+        description: 'Backend base URL (overrides target)'
+        required: false
+        type: string
+      frontend_url:
+        description: 'Frontend base URL (overrides target)'
+        required: false
+        type: string
+  schedule:
+    # Weekly Sunday 02:00 UTC — production smoke test
+    - cron: '0 2 * * 0'
+
+concurrency:
+  group: integration-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  NPM_CONFIG_FUND: false
+  NPM_CONFIG_AUDIT: false
+
+jobs:
+  # ───────────────────────────────────────────────────────────────────────
+  # BACKEND INTEGRATION (PowerShell)
+  # ───────────────────────────────────────────────────────────────────────
+  backend-integration:
+    name: Backend integration tests
+    runs-on: ubuntu-latest
+    # 12 per-card suites + 2 lobby suites + 2 existing suites = ~16 suites
+    # Many have 10-30s waits (turn timers, defuse timeout) — allow generous time.
+    timeout-minutes: 45
+    outputs:
+      backend-url: ${{ steps.resolve-url.outputs.url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve backend URL
+        id: resolve-url
+        # Priority: workflow_dispatch input → GitHub var → ephemeral fallback
+        run: |
+          TARGET='${{ inputs.target || github.event_name }}'
+          if [ -n "${{ inputs.backend_url }}" ]; then
+            echo "url=${{ inputs.backend_url }}" >> "$GITHUB_OUTPUT"
+          elif [ "$TARGET" = "production-smoke" ]; then
+            echo "url=https://cardgame-lwsk.onrender.com" >> "$GITHUB_OUTPUT"
+          elif [ "$TARGET" = "staging" ]; then
+            echo "url=${STAGING_API_BASE_URL:-http://localhost:5000}" >> "$GITHUB_OUTPUT"
+          else
+            # Ephemeral — use the in-process server we spin up below.
+            echo "url=http://localhost:5000" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Backend URL: $(cat "$GITHUB_OUTPUT" | grep ^url= || true)"
+
+      # -- Ephemeral backend (only when not pointed at staging/prod) --------
+      - name: Setup .NET 8.0
+        if: steps.resolve-url.outputs.url == 'http://localhost:5000'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Start backend (ephemeral)
+        if: steps.resolve-url.outputs.url == 'http://localhost:5000'
+        working-directory: backend
+        run: |
+          dotnet restore Arcana.sln
+          dotnet build Arcana.sln -c Release --no-restore
+          # Configure the API to use in-memory repos so we don't burn the
+          # shared Firestore quota. The production test controller is enabled
+          # unconditionally (no flag), so /api/test/* works for E2E.
+          export Cors__AllowedOrigins__0='http://localhost:4173'
+          export Firestore__UseInMemoryRepository=true
+          nohup dotnet run --project src/Arcana.Api/Arcana.Api.csproj \
+            -c Release --no-build \
+            --urls "http://localhost:5000" \
+            > /tmp/backend.log 2>&1 &
+          echo $! > /tmp/backend.pid
+          # Wait until the health endpoint returns 200 (max 60s)
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:5000/health > /dev/null 2>&1; then
+              echo "Backend ready after ${i}s"
+              break
+            fi
+            sleep 1
+          done
+          curl -fsS http://localhost:5000/health || (echo "Backend failed to start"; cat /tmp/backend.log; exit 1)
+
+      - name: Install PowerShell
+        if: steps.resolve-url.outputs.url == 'http://localhost:5000'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq powershell
+
+      - name: Check PowerShell test syntax
+        working-directory: backend/tests/integration
+        run: pwsh -NoProfile -File ./_tools/_check-syntax.ps1
+
+      - name: Run normal-game-flow.ps1
+        working-directory: backend/tests/integration
+        env:
+          ARCANA_API_BASE_URL: ${{ steps.resolve-url.outputs.url }}
+        run: |
+          pwsh -NoProfile -Command "
+            \$env:ARCANA_API_BASE_URL = '${{ steps.resolve-url.outputs.url }}'
+            ./flow/normal-game-flow.ps1
+          "
+
+      - name: Run bot-modes-test.ps1
+        working-directory: backend/tests/integration
+        env:
+          ARCANA_API_BASE_URL: ${{ steps.resolve-url.outputs.url }}
+        run: |
+          # This test takes longer (one-card-bot scenarios wait for turns).
+          pwsh -NoProfile -Command "
+            \$env:ARCANA_API_BASE_URL = '${{ steps.resolve-url.outputs.url }}'
+            ./flow/bot-modes-test.ps1
+          "
+
+      - name: Run all fast per-card + lobby suites
+        working-directory: backend/tests/integration
+        env:
+          ARCANA_API_BASE_URL: ${{ steps.resolve-url.outputs.url }}
+        # run-all.ps1 continues on individual suite failure so we get full coverage;
+        # the step itself exits 0 only if all suites pass.
+        #
+        # normal-game-flow and bot-modes are skipped here because they already
+        # ran in the two dedicated steps above (running them twice would
+        # double the CI time for no extra coverage).
+        run: |
+          pwsh -NoProfile -Command "
+            \$env:ARCANA_API_BASE_URL = '${{ steps.resolve-url.outputs.url }}'
+            ./run-all.ps1 -Skip card-bomb,game-flow,timer,lobby-test-bot,normal-game-flow,bot-modes
+          "
+
+      - name: Run long-running suites (game-flow / bomb / timer / lobby-bot)
+        working-directory: backend/tests/integration
+        env:
+          ARCANA_API_BASE_URL: ${{ steps.resolve-url.outputs.url }}
+        # These scenarios wait on 10-60s timers, so they run as a separate step
+        # to keep the fast suites' feedback loop short.
+        continue-on-error: false
+        run: |
+          pwsh -NoProfile -Command "
+            \$env:ARCANA_API_BASE_URL = '${{ steps.resolve-url.outputs.url }}'
+            ./run-all.ps1 -Only game-flow,card-bomb,timer,lobby-test-bot
+          "
+
+      - name: Tail backend log on failure
+        if: failure()
+        run: |
+          echo "==== Backend log (last 100 lines) ===="
+          tail -n 100 /tmp/backend.log || echo "No backend log"
+
+      - name: Upload backend log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-log-${{ github.sha }}
+          path: /tmp/backend.log
+          retention-days: 3
+          if-no-files-found: ignore
+
+      - name: Stop backend
+        if: always()
+        run: |
+          if [ -f /tmp/backend.pid ]; then
+            kill $(cat /tmp/backend.pid) || true
+          fi
+
+  # ───────────────────────────────────────────────────────────────────────
+  # FRONTEND E2E (Playwright)
+  # ───────────────────────────────────────────────────────────────────────
+  frontend-e2e:
+    name: Frontend E2E (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [backend-integration]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve frontend URL
+        id: resolve-fe
+        run: |
+          if [ -n "${{ inputs.frontend_url }}" ]; then
+            echo "url=${{ inputs.frontend_url }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ inputs.target }}" = "production-smoke" ]; then
+            echo "url=https://tricardgame.netlify.app" >> "$GITHUB_OUTPUT"
+          elif [ "${{ inputs.target }}" = "staging" ]; then
+            echo "url=${STAGING_FRONTEND_BASE_URL:-http://localhost:4173}" >> "$GITHUB_OUTPUT"
+          else
+            echo "url=http://localhost:4173" >> "$GITHUB_OUTPUT"
+          fi
+
+      # -- Ephemeral frontend build (only when not pointed at staging/prod)
+      - name: Setup Node 20 (LTS)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+
+      - name: Build frontend (production)
+        working-directory: frontend
+        env:
+          VITE_API_BASE_URL: ${{ needs.backend-integration.outputs.backend-url }}
+          VITE_API_HUB_URL: ${{ needs.backend-integration.outputs.backend-url }}
+        run: |
+          npm run build -- --mode production
+
+      - name: Serve frontend (vite preview)
+        working-directory: frontend
+        run: |
+          nohup npx vite preview --host 127.0.0.1 --port 4173 > /tmp/frontend.log 2>&1 &
+          echo $! > /tmp/frontend.pid
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:4173/ > /dev/null 2>&1; then
+              echo "Frontend ready after ${i}s"
+              break
+            fi
+            sleep 1
+          done
+          curl -fsS http://localhost:4173/ > /dev/null || (echo "Frontend failed to start"; cat /tmp/frontend.log; exit 1)
+
+      - name: Install Playwright deps
+        working-directory: frontend
+        run: |
+          npx playwright install --with-deps chromium
+
+      - name: Run Playwright tests
+        working-directory: frontend
+        env:
+          BASE_URL: ${{ steps.resolve-fe.outputs.url }}
+          ARCANA_API_BASE_URL: ${{ needs.backend-integration.outputs.backend-url }}
+        run: |
+          # The Playwright config defaults to http://localhost:5173 — we pass
+          # overrides here so the tests run against the same host GitHub uses.
+          npx playwright test \
+            --reporter=list,html,junit \
+            --output=/tmp/playwright-output \
+            || (echo "Playwright tests failed"; exit 1)
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ github.sha }}
+          path: frontend/playwright-report
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Upload test-results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results-${{ github.sha }}
+          path: frontend/test-results
+          retention-days: 7
+
+      - name: Tail frontend log on failure
+        if: failure()
+        run: tail -n 80 /tmp/frontend.log || echo "No frontend log"
+
+      - name: Stop frontend
+        if: always()
+        run: |
+          if [ -f /tmp/frontend.pid ]; then
+            kill $(cat /tmp/frontend.pid) || true
+          fi
+
+  # ───────────────────────────────────────────────────────────────────────
+  # PRODUCTION SMOKE (only when target=production-smoke)
+  # ───────────────────────────────────────────────────────────────────────
+  production-smoke:
+    name: Production smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Only run when explicitly requested via workflow_dispatch (the
+    # scheduled weekly cron also lands here since it dispatches with the
+    # default target).
+    if: github.event_name == 'workflow_dispatch' && (inputs.target == 'production-smoke' || github.event.schedule != '')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+
+      - name: Install Playwright deps
+        working-directory: frontend
+        run: |
+          npx playwright install --with-deps chromium
+
+      - name: Run smoke tests against production
+        working-directory: frontend
+        env:
+          ARCANA_API_BASE_URL: https://cardgame-lwsk.onrender.com
+          BASE_URL: https://tricardgame.netlify.app
+        run: |
+          # Run ONLY the smoke-test spec — never the full E2E suite (those
+          # mutate shared production Firestore data and would tickle the
+          # daily quota).
+          npx playwright test e2e/smoke-production.spec.ts \
+            --reporter=list \
+            --output=/tmp/smoke-output \
+          || (echo "Production smoke failed"; exit 1)
+
+      - name: Upload smoke report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-report-${{ github.run_id }}
+          path: frontend/playwright-report
+          retention-days: 30
+
+  # ───────────────────────────────────────────────────────────────────────
+  # SUMMARY
+  # ───────────────────────────────────────────────────────────────────────
+  summary:
+    name: Integration summary
+    runs-on: ubuntu-latest
+    needs: [backend-integration, frontend-e2e, production-smoke]
+    if: always()
+    steps:
+      - name: Print results
+        run: |
+          echo "Backend integration: ${{ needs.backend-integration.result }}"
+          echo "Frontend E2E:        ${{ needs.frontend-e2e.result }}"
+          echo "Production smoke:    ${{ needs.production-smoke.result }}"
+          if [ "${{ needs.backend-integration.result }}" = "failure" ] || \
+             [ "${{ needs.frontend-e2e.result }}" = "failure" ]; then
+            echo "::error::One or more integration jobs failed."
+            exit 1
+          fi
+          echo "✅ Integration tests passed."

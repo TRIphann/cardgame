@@ -32,6 +32,12 @@ export const CARD_FX = {
   back:     { glyph: "✦", color: "#a98cff", accent: "#cdb9ff", particle: "✧", count: 6,  ring: false },
 };
 
+// Combo defuse variants all share the "combo" effect. Without this mapping
+// fxFor("ninja") would fall through to the generic "general" sparkle, and the
+// dedicated "combo" entry below would never be used.
+const COMBO_DEFUSE_KEYS = new Set(["ninja", "superman", "zombie", "robot", "hải-tặc", "hải tặc"]);
+
 export function fxFor(key) {
+  if (key && COMBO_DEFUSE_KEYS.has(key)) return CARD_FX.combo;
   return CARD_FX[key] || CARD_FX.general;
 }

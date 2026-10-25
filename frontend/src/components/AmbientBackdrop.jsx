@@ -1,30 +1,18 @@
-// AmbientBackdrop — fixed-position decoration (blobs, stars, floating
-// tarot cards) shared across all routes. Mounted once in <App />.
+// AmbientBackdrop — shared gradient backdrop fixed to the full viewport.
+// Rendered via React Portal directly into <body> so it sits at the root
+// stacking context, OUTSIDE of any flex containers that could clip it.
+// This is the SOURCE OF TRUTH for the page's background gradient.
+// Floating cards, stars, and ambient blobs are rendered separately by each
+// page's own backdrop component (landing-backdrop / lobby-backdrop) to avoid
+// duplicate stacking contexts that interfere with page layout.
 
 import React from "react";
-
-const FLOATING_CARDS = [
-  { glyph: "☼", title: "SOL", cls: "card-sun" },
-  { glyph: "☾", title: "LUNA", cls: "card-moon" },
-  { glyph: "◉", title: "ORACLE", cls: "card-eye" },
-  { glyph: "✦", title: "ASTRA", cls: "card-star" },
-  { glyph: "♠", title: "IGNIS", cls: "card-flame" },
-];
+import { createPortal } from "react-dom";
 
 export function AmbientBackdrop() {
-  return (
-    <div className="arc-ambient" aria-hidden="true">
-      <div className="ambient ambient-one" />
-      <div className="ambient ambient-two" />
-      <div className="stars" />
-      <div className="cards-scene">
-        {FLOATING_CARDS.map((c) => (
-          <article key={c.title} className={`floating-card ${c.cls}`}>
-            <span className="card-glyph">{c.glyph}</span>
-            <span className="card-title">{c.title}</span>
-          </article>
-        ))}
-      </div>
-    </div>
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <div className="arc-ambient" aria-hidden="true" />,
+    document.body,
   );
 }

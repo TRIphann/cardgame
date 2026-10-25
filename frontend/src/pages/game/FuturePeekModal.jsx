@@ -1,42 +1,43 @@
-// FuturePeekModal — cinematic 3-card reveal.
 //
-// Per the user-confirmed spec the player can study the 3 cards and the modal
-// MUST stay open until either:
-//   * the local player's turn timer drops to <= 10s (then we auto-close), or
-//   * the player explicitly clicks "Úp xuống & đặt lại" (with a confirm
-//     dialog if > 20s remain on the turn clock — the spec says "nếu thời gian
-//     còn 20s thì không hiện thông báo đó", meaning ≥20s requires confirm).
-//
-// When the modal closes the player continues with their normal turn — the
-// deck positions are NOT altered (the spec says "Úp xuống & đặt lại", i.e.
-// just hide the peek overlay, the cards stay where they were).
+// Per the user-confirmed spec (unified 10s rule):
+//   1. Modal opens with ALL 3 cards face-down (no peeking during mandatory wait)
+//   2. After a mandatory 10-second viewing period, cards flip one by one (400ms stagger)
+//   3. ALL game actions are blocked while the modal is open
+//   4. Modal auto-closes when turn timer ≤ 10s (i.e. when the parent budget runs out)
+//   5. Player can close early by clicking "Úp xuống & đặt lại"
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { cardImageUrl } from "@games/exploding-cats/cardCloudinary.js";
 import { getCardLabel } from "./cardLabels.js";
 
-const FLIP_STAGGER_MS       = 400;  // ms between each card flip (still fast but readable)
-const AUTO_CLOSE_SEC       = 10;   // auto-close when turn timer ≤ this
-const CONFIRM_THRESHOLD_SEC = 20;  // confirm dialog when turn timer > this
+// Mirrors GameService.FuturePeekSeconds (10). When the mandatory wait
+// elapses the Future modal hands control back to the parent, which then
+// resets the turn timer back to 10 seconds (TURN_TIME_LIMIT_SEC).
+const MANDATORY_VIEW_MS = 10_000; // 10 seconds: all cards face-down
+const FLIP_STAGGER_MS   = 400;    // ms between each card flip
+const AUTO_CLOSE_SEC    = 10;     // auto-close when turn timer ≤ this
 
-export function FuturePeekModal({ peek, onClose, originRect, turnRemainingSec = 60 }) {
+export function FuturePeekModal({ peek, onClose, originRect, turnRemainingSec = 10 }) {
   const [revealedCount, setRevealedCount] = useState(0);
-  const [showConfirm, setShowConfirm] = useState(false);
-  const modalRef   = useRef(null);
-  const confirmRef  = useRef(null);
+  const [isLocked, setIsLocked] = useState(true); // true = face-down wait phase
+  const modalRef = useRef(null);
 
-  // Cascade reveal: one card flips per FLIP_STAGGER_MS.
+  // Phase 1 → Phase 2: after mandatory wait, start flipping cards
   useEffect(() => {
     if (!peek || peek.length === 0) return undefined;
-    const timers = peek.map((_, idx) =>
-      setTimeout(() => setRevealedCount(idx + 1), idx * FLIP_STAGGER_MS)
-    );
-    return () => timers.forEach(clearTimeout);
+    setIsLocked(true);
+    setRevealedCount(0);
+    const unlockT = setTimeout(() => {
+      setIsLocked(false);
+      const timers = peek.map((_, idx) =>
+        setTimeout(() => setRevealedCount(idx + 1), idx * FLIP_STAGGER_MS)
+      );
+      return () => timers.forEach(clearTimeout);
+    }, MANDATORY_VIEW_MS);
+    return () => clearTimeout(unlockT);
   }, [peek]);
 
-  // Auto-close when the local player's turn drops to ≤ AUTO_CLOSE_SEC.
-  // The actor still keeps their turn clock — closing the peek just hides
-  // the overlay, doesn't draw or change anything in the deck.
+  // Auto-close when turn timer ≤ AUTO_CLOSE_SEC
   useEffect(() => {
     if (!peek || peek.length === 0) return undefined;
     if (typeof turnRemainingSec !== "number") return undefined;
@@ -45,35 +46,15 @@ export function FuturePeekModal({ peek, onClose, originRect, turnRemainingSec = 
     return () => clearTimeout(t);
   }, [peek, turnRemainingSec, onClose]);
 
-  // ESC key: trigger confirm logic or direct close.
+  // ESC key: close instantly
   useEffect(() => {
     const handler = (e) => {
       if (e.key !== "Escape" && e.key !== "Esc") return;
-      if (showConfirm) { setShowConfirm(false); return; }
-      if (turnRemainingSec > CONFIRM_THRESHOLD_SEC) {
-        setShowConfirm(true);
-        setTimeout(() => confirmRef.current?.querySelector("button")?.focus(), 50);
-      } else {
-        onClose?.();
-      }
+      onClose?.();
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [showConfirm, turnRemainingSec, onClose]);
-
-  // Focus management for confirm sub-dialog.
-  useEffect(() => {
-    if (showConfirm) {
-      setTimeout(() => confirmRef.current?.querySelector("button")?.focus(), 50);
-    } else {
-      modalRef.current?.querySelector(".future-peek-info__close")?.focus();
-    }
-  }, [showConfirm]);
-
-  const cancelConfirm = useCallback(() => {
-    setShowConfirm(false);
-    setTimeout(() => modalRef.current?.querySelector(".future-peek-info__close")?.focus(), 30);
-  }, []);
+  }, [onClose]);
 
   if (!peek || peek.length === 0) return null;
 
@@ -81,27 +62,18 @@ export function FuturePeekModal({ peek, onClose, originRect, turnRemainingSec = 
   const cardH  = 186;
   const vw     = typeof window !== "undefined" ? window.innerWidth : 1280;
   const vh     = typeof window !== "undefined" ? window.innerHeight : 720;
-  const gap     = 28;
-  const totalW  = peek.length * cardW + (peek.length - 1) * gap;
-  const startX  = vw / 2 - totalW / 2;
-  const baseY   = vh * 0.36;
+  const gap    = 28;
+  const totalW = peek.length * cardW + (peek.length - 1) * gap;
+  const targetX = vw / 2 - totalW / 2;
+  const targetY = vh * 0.36;
 
-  // Target positions (where each card lands).
-  const targets = peek.map((_, i) => ({
-    x: startX + i * (cardW + gap),
-    y: baseY,
-  }));
-
-  // Source (deck pile rect → originRect prop) → compute fly-from delta.
-  // Default: fly in from centre-top if no origin given.
   const flyFromX = originRect
     ? originRect.left + originRect.width / 2 - cardW / 2
     : vw / 2 - cardW / 2;
   const flyFromY = originRect
     ? originRect.top + originRect.height / 2 - cardH / 2
-    : vh * 0.55;
+    : vh * 0.5;
 
-  // Floating shimmer particles (fixed set, reused).
   const shimmerN = 8;
   const shimmers = Array.from({ length: shimmerN }).map((_, i) => ({
     i,
@@ -114,7 +86,7 @@ export function FuturePeekModal({ peek, onClose, originRect, turnRemainingSec = 
     <div ref={modalRef} className="future-peek-scene" role="dialog" aria-modal="true">
       {/* A11Y: visually hidden */}
       <div id="fpm-desc" style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0,0,0,0)", whiteSpace: "nowrap" }}>
-        Xem trước 3 lá: {peek.map((k, i) => getCardLabel(k).label).join(", ")}. Trái = bạn rút tiếp.
+        Xem trước 3 lá: {peek.map((k) => getCardLabel(k).label).join(", ")}. Trái = bạn rút tiếp.
       </div>
 
       {/* Purple glow backdrop */}
@@ -133,19 +105,23 @@ export function FuturePeekModal({ peek, onClose, originRect, turnRemainingSec = 
         />
       ))}
 
-      {/* Cards */}
+      {/* Cards — all face-down during mandatory wait, then flip one by one */}
       <div className="future-peek-stage">
         {peek.map((key, i) => {
-          const revealed = i < revealedCount;
+          // When locked: no card is revealed yet (all face-down)
+          // When unlocked: cards flip based on revealedCount
+          const revealed = !isLocked && i < revealedCount;
+          const cardX = targetX + i * (cardW + gap);
+          const cardY = targetY;
           return (
             <div
               key={i}
-              className={`fp-card${revealed ? " fp-card--revealed" : ""}`}
+              className={`fp-card${revealed ? " fp-card--revealed" : ""}${isLocked ? " fp-card--locked" : ""}`}
               style={{
-                "--fp-x":       `${targets[i].x}px`,
-                "--fp-y":       `${targets[i].y}px`,
-                "--fp-fly-x":   `${flyFromX - targets[i].x}px`,
-                "--fp-fly-y":   `${flyFromY - targets[i].y}px`,
+                left: `${cardX}px`,
+                top: `${cardY}px`,
+                "--fp-fly-x": `${flyFromX - cardX}px`,
+                "--fp-fly-y": `${flyFromY - cardY}px`,
                 animationDelay: `${i * 80}ms`,
                 zIndex: 246 + i,
               }}
@@ -168,61 +144,24 @@ export function FuturePeekModal({ peek, onClose, originRect, turnRemainingSec = 
       <div className="future-peek-info">
         <div className="future-peek-info__title">Xem trước 3 lá</div>
         <div className="future-peek-info__sub">
-          {turnRemainingSec <= AUTO_CLOSE_SEC
-            ? `Còn ${turnRemainingSec}s — sẽ tự đóng sau khi bạn sẵn sàng`
-            : turnRemainingSec <= CONFIRM_THRESHOLD_SEC
-              ? `Còn ${turnRemainingSec}s — đóng không cần xác nhận`
+          {isLocked
+            ? `Đang xào bài… chờ ${Math.ceil(MANDATORY_VIEW_MS / 1000)}s`
+            : turnRemainingSec <= AUTO_CLOSE_SEC
+              ? `Còn ${turnRemainingSec}s — sẽ tự đóng`
               : "Lá trái = bạn rút tiếp. Hai lá còn lại = người kế tiếp."}
         </div>
-        <button
-          type="button"
+        {!isLocked && (
+          <button
+            type="button"
           className="future-peek-info__close"
-          onClick={() => {
-            if (turnRemainingSec > CONFIRM_THRESHOLD_SEC) {
-              setShowConfirm(true);
-              setTimeout(() => confirmRef.current?.querySelector("button")?.focus(), 50);
-            } else {
-              onClose?.();
-            }
-          }}
+          onClick={() => onClose?.()}
           aria-label="Đóng peek"
           aria-describedby="fpm-desc"
         >
           Úp xuống &amp; đặt lại
         </button>
+        )}
       </div>
-
-      {/* Confirm sub-dialog */}
-      {showConfirm && (
-        <div className="game-modal__scrim" role="presentation" onClick={cancelConfirm}>
-          <div
-            ref={confirmRef}
-            className="game-modal"
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="fpm-confirm-title"
-            onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: 360 }}
-          >
-            <h3 className="game-modal__title" id="fpm-confirm-title">Xác nhận đóng peek?</h3>
-            <p className="game-modal__sub">
-              Còn <strong>{turnRemainingSec}s</strong> trên lượt. Đóng ngay có thể khiến bạn bỏ lỡ thông tin.
-            </p>
-            <div className="game-modal__actions">
-              <button type="button" className="game-action-btn" onClick={cancelConfirm} autoFocus>
-                Ở lại
-              </button>
-              <button
-                type="button"
-                className="game-action-btn game-action-btn--danger"
-                onClick={() => { setShowConfirm(false); onClose?.(); }}
-              >
-                Đóng peek
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

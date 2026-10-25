@@ -81,7 +81,6 @@ export function useOptimisticRoom({ onNavigate } = {}) {
     // The cold-start on Render can take 30-60s, so we navigate after 1.5s
     // with a placeholder and patch the real id in the background.
     const raced = await raceWithFallback(postPromise, OPTIMISTIC_TIMEOUT_MS);
-    const isColdStart = raced.kind === "timeout";
 
     const finalize = (room, member) => {
       // isHost is decided by the *action*, not by inspecting the server's

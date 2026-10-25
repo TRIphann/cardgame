@@ -22,4 +22,25 @@ public class SignalRGameBroadcaster : IGameBroadcaster
         var group = $"room-{roomId}";
         return _hub.Clients.Group(group).SendAsync("room-updated", payload, ct);
     }
+
+    public Task BroadcastRoomSnapshotAsync(string roomId, object roomSnapshot, CancellationToken ct = default)
+    {
+        var group = $"room-{roomId}";
+        return _hub.Clients.Group(group).SendAsync("room-snapshot", roomSnapshot, ct);
+    }
+
+    public Task BroadcastRoomToastAsync(
+        string roomId,
+        string toastText,
+        IEnumerable<string>? excludeMemberIds,
+        CancellationToken ct = default)
+    {
+        var group = $"room-{roomId}";
+        var payload = new
+        {
+            text = toastText,
+            excludeMemberIds = excludeMemberIds?.ToArray() ?? Array.Empty<string>(),
+        };
+        return _hub.Clients.Group(group).SendAsync("room-toast", payload, ct);
+    }
 }

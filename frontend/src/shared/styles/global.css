@@ -52,16 +52,29 @@
   box-sizing: border-box;
 }
 
+/* FIX: Use min-height instead of fixed height so the body fills the viewport
+   on mobile when browser chrome shows/hides (dynamic viewport).
+   ALSO: transparent background so the .arc-ambient fixed backdrop (z-index:-1)
+   shows through. The body background was double-painting and causing the
+   page to look black/dark instead of the gradient. */
 html, body {
   margin: 0;
   padding: 0;
-  height: 100%;
-  background: var(--c-bg-deep);
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: transparent;
   color: var(--c-text);
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+/* Fallback: if .arc-ambient fails (e.g. disabled by browser extension),
+   paint the dark base color on html so the page isn't white. */
+html {
+  background-color: var(--c-bg-deep);
 }
 
 button {

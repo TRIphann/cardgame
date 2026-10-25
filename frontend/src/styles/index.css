@@ -8,29 +8,47 @@
 @import "../shared/styles/settings.css";
 
 /* ============================================
-   React-only additions
+   Ambient Background — single fixed full-viewport backdrop.
+   FIX: Use a FIXED positioned div (rendered by AmbientBackdrop in App.jsx)
+   instead of body::before. body::before with z-index:-1 is hidden behind
+   the body background. The .arc-ambient class is the SINGLE source of
+   truth for the radial gradient background.
    ============================================ */
 
 .arc-ambient {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  /* Sits BEHIND every page (which all set position:relative z-index>=1) so
-     floating cards stay visible across navigation. Pages override this with
-     `position: relative; z-index: 1;` so they stay on top.
-     This needs its OWN background because pages are now `height: 100vh`
-     (can be shorter than the actual viewport on mobile when the browser
-     chrome hides/shows). Without this background the radial-gradient on
-     `.game-page` would only fill the 100vh box and you'd see the body color
-     peek through at the bottom-right where the viewport is taller. */
+  overflow: hidden;
+  z-index: -1;
   background:
     radial-gradient(ellipse at 20% 10%, rgba(110, 60, 200, 0.28), transparent 60%),
     radial-gradient(ellipse at 85% 90%, rgba(220, 70, 140, 0.22), transparent 65%),
     radial-gradient(ellipse at 50% 50%, rgba(40, 30, 90, 0.4), transparent 80%),
     linear-gradient(180deg, #0a0820 0%, #060314 100%);
-  background-attachment: fixed;
-  z-index: -1;
 }
+
+/* If any page also uses .arc-ambient (e.g. decorative layer), keep it fixed
+   and BEHIND the page content but ABOVE the .arc-ambient backdrop. */
+.arc-ambient ~ .arc-ambient {
+  z-index: 0;
+}
+
+/* Pages: ensure stacking context above the fixed backdrop.
+   NOTE: z-index was lowered from 1 → 0 across landing/lobby/game so the
+   global `.arc-ambient` radial-gradient (z-index:-1 on <body>) stays
+   visible through every page. The previous z-index:1 with opaque page
+   backgrounds created a "split background" symptom — a visible seam when
+   navigating between routes. The decorative in-page layers (lobby-backdrop,
+   game-backdrop) also use z-index:0 so they don't paint over the ambient
+   gradient. */
+.landing-page,
+.lobby-page,
+.game-page {
+  position: relative;
+  z-index: 0;
+}
+
 .arc-ambient .ambient,
 .arc-ambient .stars,
 .arc-ambient .cards-scene {
@@ -54,6 +72,24 @@
   border: 3px solid rgba(159, 113, 241, 0.2);
   border-top-color: rgba(159, 113, 241, 0.95);
   animation: arc-spin 0.8s linear infinite;
+}
+.arc-loading__error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 14px 18px;
+  background: rgba(40, 12, 18, 0.7);
+  border: 1px solid rgba(255, 110, 110, 0.5);
+  border-radius: 12px;
+  color: rgba(255, 220, 220, 0.95);
+  font-size: 14px;
+  max-width: 320px;
+  text-align: center;
+}
+.arc-loading__error .game-action-btn {
+  min-width: 130px;
 }
 @keyframes arc-spin { to { transform: rotate(360deg); } }
 
@@ -145,6 +181,17 @@
   z-index: 1;
 }
 
+/* Global overflow guards — prevent horizontal scroll */
+html {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+body {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+/* Settings member list (shared across lobby + game settings) */
 .settings-member-list {
   list-style: none;
   padding: 0;
@@ -173,12 +220,20 @@
 }
 .settings-button-danger:hover { background: rgba(255, 100, 100, 0.2); }
 
+/* Game page: ensure game-page fills viewport */
 .game-page {
-  /* Layout is owned by pages/styles/game.css. We only declare positioning
-     here so the ambient/backdrop renders behind it without bleeding into
-     siblings. */
-  position: relative;
-  z-index: 1;
+  min-height: 100dvh;
+  height: 100dvh;
+}
+
+/* Lobby page: allow scroll on tall content */
+.lobby-page {
+  min-height: 100dvh;
+}
+
+/* Landing page: center content, allow scroll */
+.landing-page {
+  min-height: 100dvh;
 }
 
 .form-attention { animation: arc-shake 0.4s ease-in-out; }

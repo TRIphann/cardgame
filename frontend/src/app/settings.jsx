@@ -9,9 +9,7 @@ import React, {
   useMemo,
   useRef,
   useState,
-  useEffect,
 } from "react";
-import { useAudio } from "@shared/audio/AudioManager.jsx";
 
 const SettingsContext = createContext(null);
 
@@ -19,27 +17,27 @@ export function SettingsProvider({ children }) {
   const [isOpen, setIsOpen] = useState(false);
   const [tabs, setTabs] = useState([]);
   const [activeTabId, setActiveTabId] = useState(null);
-  const actionsRef = useRef(new Map()); // tabId -> onAction callback
-  const rendersRef = useRef(new Map()); // tabId -> { mount, refresh? }
+  const actionsRef = useRef(new Map());
+  const rendersRef = useRef(new Map());
 
   const open = useCallback(() => {
     setIsOpen(true);
-    if (!activeTabId && tabs[0]) setActiveTabId(tabs[0].id);
-  }, [activeTabId, tabs]);
+  }, []);
 
   const close = useCallback(() => setIsOpen(false), []);
 
-  const registerTabs = useCallback((newTabs, onAction) => {
+  const registerTabs = useCallback((newTabs) => {
     setTabs(newTabs);
     actionsRef.current.clear();
+    rendersRef.current.clear();
     for (const t of newTabs) {
       if (t.onAction) actionsRef.current.set(t.id, t.onAction);
       rendersRef.current.set(t.id, { mount: t.render });
     }
-    if (newTabs.length > 0 && !newTabs.find((t) => t.id === activeTabId)) {
+    if (newTabs.length > 0) {
       setActiveTabId(newTabs[0].id);
     }
-  }, [activeTabId]);
+  }, []);
 
   const dispatchAction = useCallback((action, payload) => {
     const fn = actionsRef.current.get(activeTabId);
@@ -63,13 +61,12 @@ export function SettingsProvider({ children }) {
       dispatchAction,
       refreshActive,
     }),
-    [isOpen, open, close, tabs, activeTabId, registerTabs, dispatchAction, refreshActive],
+    [isOpen, tabs, activeTabId, dispatchAction, refreshActive],
   );
 
   return (
     <SettingsContext.Provider value={value}>
       {children}
-      {/* Modal is mounted at the App level via <SettingsModal />. */}
     </SettingsContext.Provider>
   );
 }

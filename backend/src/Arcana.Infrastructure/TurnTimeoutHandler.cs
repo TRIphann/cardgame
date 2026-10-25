@@ -78,14 +78,34 @@ public sealed class TurnTimeoutHandler : ITurnTimeoutHandler
         var memberId = gs.CurrentTurnMemberId;
         try
         {
-            await gameService.DrawCardAsync(roomId, memberId, ct);
-            // DrawCardAsync advances the turn and resets TurnStartedAt, but
-            // GameService doesn't know about the registry. We re-register
-            // here using the fresh state so the next player is on the clock.
-            var refreshed = await roomRepo.GetByIdAsync(roomId, ct);
-            if (refreshed?.GameState is { EndedAt: null, TurnStartedAt: not null })
+            // isAutoDraw=true tells GameService to mark the player AFK on
+            // their first timeout. After PersistAsync runs, the turn clock
+            // for the NEXT player is re-registered below from the result
+            // payload — no extra Firestore read needed.
+            //
+            // Pass `room` we just read so DrawCardAsync doesn't issue its
+            // own GetByIdAsync (saves 1 read per auto-draw — important for
+            // AFK auto-play chains that fire every 2s).
+            var drawResult = await gameService.DrawCardAsync(
+                roomId, memberId, room, ct, isAutoDraw: true);
+
+            // The fresh room snapshot is already on drawResult.Room from
+            // DrawCardAsync's final read — use it directly to re-register
+            // the next player's clock. If they're AFK too the timeout goes
+            // to 0 so the auto-draw chain keeps firing.
+            var refreshedGs = drawResult.Room?.GameState;
+            if (refreshedGs is { EndedAt: null, TurnStartedAt: not null })
             {
-                _registry.Register(roomId, refreshed.GameState.TurnStartedAt!.Value);
+                // Unified 10s rule: every action resets the timer back to 10.
+                // AFK players still get timeout=0 so the auto-draw chain keeps
+                // firing without burning the 10s budget they aren't watching.
+                var timeoutSeconds = refreshedGs.AfkMemberIds.Contains(refreshedGs.CurrentTurnMemberId)
+                    ? 0
+                    : GameService.TurnTimeLimitSeconds;
+                _registry.Register(
+                    roomId,
+                    refreshedGs.TurnStartedAt!.Value,
+                    timeoutSeconds);
             }
             else
             {
@@ -99,7 +119,11 @@ public sealed class TurnTimeoutHandler : ITurnTimeoutHandler
         {
             // Race: another player already moved, the deck ran dry, or a
             // nope window opened in between. Drop the room — next mutation
-            // will re-register if needed.
+            // will re-register if needed. (The previous code had two extra
+            // catch arms below for `deck_empty_during_attack` and a duplicate
+            // `deck_empty`, but both are dead: `GameService` only throws
+            // `deck_empty` (not `deck_empty_during_attack`) and the OR-list
+            // above already swallows it.)
             _logger.LogDebug(
                 "Auto-draw skipped for room {RoomId}: {Reason}",
                 roomId, ex.Code);

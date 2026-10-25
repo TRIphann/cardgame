@@ -1,18 +1,23 @@
 // CardActionModal — cinematic xác nhận đánh bài. Hiển thị card art lớn, tên
 // + mô tả, hiệu ứng nền theo loại (glow ring tinted theo card key), floating
 // glyphs đặc trưng (attack → ⚔, future → ◉, v.v.).
+//
+// Animation:
+//   • Scrim fade-in + scale-up tuần tự
+//   • Modal slide-up + scale spring (outBack)
+//   • Card art flip Y nhẹ khi vào
+//   • Glyph spin + pulse loop
+//   • Background art-glow pulse loop
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cardImageUrl } from "@games/exploding-cats/cardCloudinary.js";
 import { fxFor } from "./cardFx.js";
+import { getAnime, preloadAnime } from "@shared/animation/useAnimeFx.js";
 
 export function CardActionModal({
   card, onClose, onConfirm, requiresTarget, opponents, onPickTarget,
 }) {
   const fx = useMemo(() => fxFor(card?.key || "general"), [card?.key]);
-  // UX-1 fix: guard against double-clicking a target button before the
-  // request resolves. The parent handles the actual flow; we just disable
-  // after the first click.
   const [pickedId, setPickedId] = useState(null);
   const handlePick = useCallback((id) => {
     if (pickedId !== null) return;
@@ -20,9 +25,16 @@ export function CardActionModal({
     onPickTarget(id);
   }, [pickedId, onPickTarget]);
 
-  // A11Y-3 fix: ESC key + focus trap + role="dialog".
   const modalRef = useRef(null);
-  const titleId = "cam-title";
+  const scrimRef = useRef(null);
+  const artRef   = useRef(null);
+  const glowRef  = useRef(null);
+  const glyphRef = useRef(null);
+  const titleId  = "cam-title";
+
+  useEffect(() => { preloadAnime(); }, []);
+
+  // ESC + focus trap
   useEffect(() => {
     const handler = (e) => {
       if (e.key === "Escape" || e.key === "Esc") onClose?.();
@@ -49,12 +61,109 @@ export function CardActionModal({
     return () => el.removeEventListener("keydown", trap);
   }, []);
 
+  // Anime.js entry + loops
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    if (!card) return undefined;
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (reduce) return undefined;
+
+    let cancelled = false;
+    let instances = [];
+
+    (async () => {
+      try {
+        const animate = await getAnime();
+        if (cancelled) return;
+
+        // Scrim fade-in
+        if (scrimRef.current) {
+          instances.push(animate(scrimRef.current, {
+            opacity: [0, 1],
+            duration: 240,
+            ease: "outQuad",
+          }));
+        }
+
+        // Modal pop-in
+        if (modalRef.current) {
+          instances.push(animate(modalRef.current, {
+            opacity:   [0, 1],
+            scale:     [0.85, 1.04, 1],
+            translateY: [40, 0],
+            duration:  460,
+            ease:      "outBack",
+          }));
+        }
+
+        // Card art: subtle rotateY + lift
+        if (artRef.current) {
+          instances.push(animate(artRef.current, {
+            rotateY:  [-180, 0],
+            opacity:  [0, 1],
+            duration: 620,
+            delay:    80,
+            ease:     "outExpo",
+          }));
+        }
+
+        // Glow: pulse loop
+        if (glowRef.current) {
+          instances.push(animate(glowRef.current, {
+            scale:   [0.6, 1.2],
+            opacity: [0, 0.8],
+            duration: 500,
+            delay:    200,
+            ease:     "outExpo",
+          }));
+          instances.push(animate(glowRef.current, {
+            scale:    [1, 1.18, 1],
+            opacity:  [0.8, 0.4, 0.8],
+            duration: 1600,
+            delay:    700,
+            loop:     true,
+            alternate: true,
+            ease:     "inOutSine",
+          }));
+        }
+
+        // Glyph: spin + pulse loop
+        if (glyphRef.current) {
+          instances.push(animate(glyphRef.current, {
+            scale:    [0.4, 1.2, 1],
+            rotate:   [-90, 0],
+            opacity:  [0, 1],
+            duration: 560,
+            delay:    240,
+            ease:     "outBack",
+          }));
+          instances.push(animate(glyphRef.current, {
+            scale:    [1, 1.15, 1],
+            rotate:   [0, 8, -8, 0],
+            duration: 2400,
+            delay:    800,
+            loop:     true,
+            ease:     "inOutSine",
+          }));
+        }
+      } catch (_) { /* */ }
+    })();
+
+    return () => {
+      cancelled = true;
+      instances.forEach((i) => { try { i?.cancel?.(); } catch (_) { /* */ } });
+    };
+  }, [card?.key]);
+
   if (!card) return null;
   const url = cardImageUrl(card.key);
 
   return (
-    <div className="game-modal__scrim card-action-scrim" onClick={onClose}>
-      {/* Backdrop colored by card fx */}
+    <div
+      ref={scrimRef}
+      className="game-modal__scrim card-action-scrim card-action-scrim--anime"
+      onClick={onClose}
+    >
       <div
         className="card-action-modal__backdrop"
         style={{
@@ -66,19 +175,21 @@ export function CardActionModal({
 
       <div
         ref={modalRef}
-        className={`game-modal card-action-modal card-action-modal--${card.key}`}
+        className={`game-modal card-action-modal card-action-modal--${card.key} card-action-modal--anime`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         onClick={(e) => e.stopPropagation()}
         style={{ "--fx-color": fx.color, "--fx-accent": fx.accent }}
       >
-        <button className="game-modal__close" type="button" onClick={onClose} aria-label="Đóng">×</button>
+        <button className="game-modal__close" type="button" onClick={onClose} aria-label="�óng">×</button>
         <div className="card-action-modal__layout">
           <div className="card-action-modal__art">
-            <img src={url} alt={card.label || card.key} draggable={false} />
-            <span className="card-action-modal__art-glow" aria-hidden="true" />
-            <span className="card-action-modal__art-glyph" aria-hidden="true">{fx.glyph}</span>
+            <div ref={artRef} style={{ transformStyle: "preserve-3d" }}>
+              <img src={url} alt={card.label || card.key} draggable={false} />
+            </div>
+            <span ref={glowRef} className="card-action-modal__art-glow" aria-hidden="true" />
+            <span ref={glyphRef} className="card-action-modal__art-glyph" aria-hidden="true">{fx.glyph}</span>
           </div>
           <div className="card-action-modal__body">
             <h3 className="game-modal__title" id={titleId}>Dùng lá: {card.label || card.key}</h3>

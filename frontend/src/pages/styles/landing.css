@@ -4,10 +4,12 @@
 body { }
 
 
-/* Decorative backdrop wrapper — fills the page, sits behind all content */
-.landing-backdrop,
-.lobby-backdrop {
-  position: absolute;
+/* Decorative backdrop wrapper — fixed position, covers full viewport.
+   Contains: ambient blobs, stars, floating cards.
+   The gradient background is handled by body::before (index.css) — NOT duplicated here.
+   z-index:0 so it stays behind the landing content (z-index:1). */
+.landing-backdrop {
+  position: fixed;
   inset: 0;
   pointer-events: none;
   overflow: hidden;
@@ -100,14 +102,24 @@ body { }
 
 /* Welcome panel */
 .landing-page {
-  min-height: 100vh;
-  overflow: hidden;
+  min-height: 100dvh;
+  overflow-y: auto;
+  overflow-x: hidden;
   position: relative;
-  z-index: 1;
+  /* z-index 0 (same as global .arc-ambient backdrop) so the radial-gradient
+     ambient background stays visible through this page. The previous
+     `z-index: 1` with `background: rgba(7, 8, 26, 0.88)` blocked the
+     ambient backdrop and created a visible seam when navigating from
+     landing → lobby → game. We now let the ambient layer paint through
+     and rely on the ::before pseudo-element for the dimming tint. */
+  z-index: 0;
   display: grid;
   place-items: center;
   padding: 40px 20px;
-  background: rgba(7, 8, 26, 0.88);
+  /* Removed opaque `background: rgba(7, 8, 26, 0.88)` so the global
+     .arc-ambient radial-gradient can show through. The dimming effect
+     is now handled by the `::before` pseudo below plus the welcome
+     panel's own translucent background. */
   backdrop-filter: blur(6px);
   box-shadow: inset 0 0 80px rgba(77, 62, 161, 0.15);
 }
@@ -396,10 +408,103 @@ h1 {
   .corner { width: 15px; height: 15px; }
 }
 
+/* Extra small — iPhone SE / small Android (≤400px) */
+@media (max-width: 400px) {
+  .landing-page {
+    padding: 12px 8px;
+    min-height: 0;
+  }
+  .welcome-panel {
+    padding: 20px 14px 16px;
+    min-height: 0;
+    border-radius: 0;
+  }
+  .eyebrow { font-size: 8px; letter-spacing: 0.15em; }
+  h1 { font-size: clamp(28px, 8vw, 38px); line-height: 1.1; }
+  .player-form input { height: 44px; font-size: 14px; padding-left: 40px; }
+  .input-icon { font-size: 16px; left: 12px; }
+  .landing-actions .action-button {
+    height: 44px;
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    width: 100%;
+    margin: 0;
+  }
+  .divider { margin: 16px 0 18px; }
+  .brand-mark span { width: 16px; }
+}
+
+/* Small — generic Android / iPhone (401–480px) */
+@media (max-width: 480px) {
+  .landing-page {
+    padding: 16px 10px;
+    min-height: 0;
+  }
+  .welcome-panel {
+    padding: 28px 16px 20px;
+    width: 100%;
+    border-radius: 0;
+    min-height: 0;
+  }
+  .brand-mark span { width: 20px; }
+  .eyebrow { font-size: 9px; letter-spacing: 0.2em; }
+  h1 { font-size: clamp(30px, 9vw, 44px); line-height: 1.15; }
+  .player-form input { height: 46px; font-size: 15px; }
+  .landing-actions .action-button { height: 46px; font-size: 13px; width: 100%; margin: 0; }
+  .input-icon { font-size: 18px; left: 14px; }
+  .player-form input { padding-left: 42px; }
+  .divider { margin: 18px 0 20px; }
+}
+
+@media (max-height: 600px) and (min-width: 600px) {
+  .landing-page { padding: 16px 20px; }
+  .welcome-panel { padding: 28px 36px 24px; }
+  .eyebrow { margin-bottom: 6px; }
+  .divider { margin: 16px 0 18px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Test Lobby Link */
+.test-lobby-link {
+  margin-top: 24px;
+  text-align: center;
+}
+
+.test-lobby-button {
+  background: transparent;
+  border: 1px dashed rgba(255, 215, 0, 0.4);
+  color: rgba(255, 215, 0, 0.7);
+  padding: 10px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  letter-spacing: 0.05em;
+  transition: all 0.2s;
+}
+
+.test-lobby-button:hover {
+  background: rgba(255, 215, 0, 0.1);
+  border-color: rgba(255, 215, 0, 0.7);
+  color: #ffd700;
+}
+
+/* Disable ambient backdrop for test lobby */
+.test-lobby .arc-ambient,
+body.test-lobby-route .arc-ambient {
+  display: none !important;
+}
+
+/* When anime.js drives the welcome-panel entry, cancel CSS panel-in so the
+   JS animation wins. */
+.landing-page.anime-driven .welcome-panel {
+  animation: none !important;
+  /* anime.js will set opacity 0→1 itself. */
+  opacity: 0;
 }

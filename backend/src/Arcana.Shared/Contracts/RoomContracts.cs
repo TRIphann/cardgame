@@ -53,6 +53,9 @@ public record GameStateDto(
     string? LastPlayedByNope = null,
     // Turn timer — when the current player's turn started (UTC ISO-8601)
     // and how many seconds they have until the server auto-draws.
+    // Window is unified at 10s for every lobby (mirrors
+    // GameService.TurnTimeLimitSeconds). Reset back to 10 on every
+    // committed action.
     string? TurnStartedAt = null,
     int TurnTimeLimitSec = 60,
     // F-1 fix: remaining seconds on the current turn clock. Used by the
@@ -66,7 +69,26 @@ public record GameStateDto(
     IReadOnlyList<string>? FuturePeek = null,
     // Favor-pick pending state — surfaces which player must pick the card
     // they want to give, and the shuffled candidate list.
-    PendingFavorPickDto? PendingFavorPick = null);
+    PendingFavorPickDto? PendingFavorPick = null,
+    // AFK auto-play: list of memberIds the server has marked as AFK (their
+    // first 10s turn timed out). Exposed so the client can render the
+    // "Bạn có đang chơi không?" modal and surface a "X đã quay lại" toast
+    // when the player explicitly returns. Without this the modal never
+    // knows who to show it to.
+    IReadOnlyList<string>? AfkMemberIds = null,
+    // Client-ready gate: true once at least one human has called /ready
+    // for this room. The turn clock only ticks when this is true — that
+    // way the player has a full 60s window the moment the game UI renders,
+    // instead of opening the tab to find they're already AFK.
+    bool ClientReady = false,
+// Bot turn override: seconds a bot takes to act. 0 = instant action on
+    // the bot's turn (default). Capped at GameService.TurnTimeLimitSeconds
+    // (10s) so a slow bot can never outlive the player it shares a room with.
+    int BotTurnSeconds = 0,
+// Local hand: exposed only to the viewing member via GameState so the
+// client always has a top-level `room.myHand` regardless of which DTO
+// layer carries it. Eliminates stale-hand-closure bugs in card validation.
+    IReadOnlyList<string>? MyHand = null);
 
 public record PendingFavorPickDto(
     string TargetMemberId,
@@ -110,6 +132,14 @@ public record GameActionResponse(
     IReadOnlyList<string>? FavorCandidates,
     IReadOnlyList<string>? FuturePeek,
     bool RequiresMoreDraws = false,
-    int RemainingDraws = 0);
+    int RemainingDraws = 0,
+    /// <summary>
+    /// True when the ACTOR must pick a card from the target's shuffled hand
+    /// (Combo 2-same). The front-end reads this to open the card picker.
+    /// Without it the Combo 2 flow can never complete — the server returned
+    /// the candidate list but the client had no way of knowing it had to
+    /// show a picker.
+    /// </summary>
+    bool RequiresFavorPick = false);
 
 public record ErrorResponse(string Code, string Message);

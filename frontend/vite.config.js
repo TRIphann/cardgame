@@ -57,14 +57,20 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       // Proxy /api to the .NET dev server so the browser doesn't hit CORS
-      // during development.
+      // during development. Port matches backend launch URL (`--urls http://localhost:5000`).
       "/api": {
-        target: "http://localhost:5080",
+        target: "http://localhost:5000",
         changeOrigin: true,
       },
       "/health": {
-        target: "http://localhost:5080",
+        target: "http://localhost:5000",
         changeOrigin: true,
+      },
+      // Proxy SignalR hub to the .NET dev server.
+      "/hubs": {
+        target: "http://localhost:5000",
+        changeOrigin: true,
+        ws: true,
       },
     },
   },

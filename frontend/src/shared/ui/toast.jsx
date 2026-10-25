@@ -11,7 +11,6 @@ import React, {
   useCallback,
   useContext,
   useEffect,
-  useId,
   useMemo,
   useReducer,
   useRef,
@@ -151,7 +150,7 @@ export function useToast() {
 
 // Back-compat named export for any non-component callers.
 export const toast = {
-  show: (msg, opts) => {
+  show: (_msg, _opts) => {
     console.warn("[arcana] toast.show() called outside React tree — ignored");
   },
 };

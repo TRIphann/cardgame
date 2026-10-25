@@ -1,45 +1,82 @@
-## .NET build output
+# ─── Dependencies ──────────────────────────────────────────────────────────
+node_modules/
+.pnp/
+.pnp.js
+
+# ─── Build output ──────────────────────────────────────────────────────────
+dist/
+build/
+out/
+artifacts/
 bin/
 obj/
-*.user
-*.suo
-.vs/
+*.dll
+*.pdb
+*.exe
+*.cache
 
-## Frontend build output (Vite)
-frontend/dist/
-node_modules/
+# ─── Environment / secrets ────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+Secrets/
+firebase-credentials.json
+*-firebase-adminsdk-*.json
 
-## Secrets — never commit
-backend/src/Arcana.Api/Secrets/
-*.firebase-adminsdk*.json
-# Ignore JSON files generically, then allow the safe ones below.
-*.json
-!backend/src/Arcana.Api/appsettings*.json
-!create_preset.json
-!frontend/src/config/firebase.js
-!frontend/package-lock.json
-!frontend/package.json
-!frontend/tsconfig*.json
+# ─── Logs ──────────────────────────────────────────────────────────────────
+*.log
+*.err
+*.out
+dev.err.log
+dev.out.log
+api.err.log
+api.out.log
+backend.log
+test-output.txt
+test2.txt
+last-run.log
+stdout.log
+stderr.log
 
-## OS
+# ─── OS / editor ──────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
-
-## IDE
-.idea/
 .vscode/
+.idea/
+*.swp
+*.swo
+*~
 
-## Logs
-*.log
-backend/.api.err
-backend/.api.out
-.fake
+# ─── Vite / ESLint ────────────────────────────────────────────────────────
+.eslintcache
+.vite/
 
-## Upload results
+# ─── Coverage ─────────────────────────────────────────────────────────────
+coverage/
+*.coverage
+coverage.xml
+*.trx
+
+# ─── Playwright ───────────────────────────────────────────────────────────
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+
+# ─── Screenshots & test artefacts ─────────────────────────────────────────
+screenshots*/
+GALLERY.html
+frontend/outputs/
+backend/tests/**/_logs/
+
+# ─── Image assets ─────────────────────────────────────────────────────────
+# Card artwork and the card tooling live in img/ but are NOT tracked:
+# they are build inputs that get uploaded to Cloudinary (see img/tools/).
+img/
 card-upload-results.json
 
-## Card assets (designed via local SVG, part of repo)
-# (no longer ignored — card SVGs are committed so Netlify can serve them)
-## Vite preview server junk
-.vite-preview*.err
-.vite-preview*.out
+# ─── Backend-specific ─────────────────────────────────────────────────────
+backend/artifacts/
+backend/coverage/
+**/bin/
+**/obj/

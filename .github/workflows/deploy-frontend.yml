@@ -1,0 +1,214 @@
+name: Deploy Frontend (Netlify)
+
+# Deploys the React SPA to Netlify.
+#
+# Two deployment paths are supported:
+#   1. Auto-deploy from main (Netlify's built-in git integration). This
+#      workflow mirrors it as a backup + lets us run pre-deploy checks.
+#   2. Manual release tag (`v*.*.*`) — pins a release and deploys with
+#      cache invalidation.
+#
+# Netlify CLI (`netlify deploy --prod --dir=frontend/dist`) is the
+# canonical deploy path because it can run even when the Netlify
+# git-integration is misconfigured. The deploy auth token is stored as
+# a GitHub Actions secret (NETLIFY_AUTH_TOKEN) and the site ID as
+# NETLIFY_SITE_ID.
+#
+# Pre-deploy gate:
+#   - Integration tests must pass on the same SHA (integrate with the
+#     integration.yml workflow via workflow_run).
+#   - Build is performed fresh — we don't reuse the ci.yml artifact
+#     because the user might have triggered a manual build with a
+#     different VITE_API_BASE_URL.
+
+on:
+  push:
+    branches: [main, dev]
+  workflow_run:
+    workflows: [Integration Tests]
+    types: [completed]
+    branches: [main, dev]
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Netlify deploy target'
+        required: true
+        type: choice
+        default: 'production'
+        options:
+          - production
+          - preview
+          - draft
+
+concurrency:
+  group: deploy-frontend-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  deployments: write
+  pull-requests: read
+
+env:
+  NODE_VERSION: '20'
+  NPM_CONFIG_FUND: 'false'
+  NPM_CONFIG_AUDIT: 'false'
+
+jobs:
+  # ───────────────────────────────────────────────────────────────────────
+  # PRE-DEPLOY GATE — block deployment if integration tests failed.
+  # ───────────────────────────────────────────────────────────────────────
+  gate:
+    name: Pre-deploy gate
+    runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_dispatch' && github.event_name != 'release'
+    outputs:
+      should-deploy: ${{ steps.check.outputs.should-deploy }}
+    steps:
+      - name: Check upstream integration tests
+        id: check
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            if [ "${{ github.event.workflow_run.conclusion }}" = "success" ]; then
+              echo "should-deploy=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "should-deploy=false" >> "$GITHUB_OUTPUT"
+              echo "::warning::Upstream integration tests failed (${{ github.event.workflow_run.conclusion }}). Skipping deploy."
+            fi
+          else
+            # Push event — always deploy (CI workflow already gates).
+            echo "should-deploy=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ───────────────────────────────────────────────────────────────────────
+  # BUILD & DEPLOY
+  # ───────────────────────────────────────────────────────────────────────
+  build-and-deploy:
+    name: Build & deploy
+    runs-on: ubuntu-latest
+    needs: [gate]
+    if: needs.gate.outputs.should-deploy != 'false' || github.event_name == 'workflow_dispatch' || github.event_name == 'release'
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Determine deploy target
+        id: target
+        run: |
+          EVENT='${{ github.event_name }}'
+          if [ "$EVENT" = "release" ]; then
+            echo "target=production" >> "$GITHUB_OUTPUT"
+            echo "Deploying release ${{ github.event.release.tag_name }} to production"
+          elif [ "$EVENT" = "workflow_dispatch" ]; then
+            echo "target=${{ inputs.target }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            echo "target=production" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.ref }}" = "refs/heads/dev" ]; then
+            echo "target=preview" >> "$GITHUB_OUTPUT"
+          else
+            echo "target=draft" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Resolved target: $(cat $GITHUB_OUTPUT | grep ^target=)"
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+
+      # Build with the production API URL by default. Override via env
+      # vars in the GitHub repo settings if you want a different target.
+      - name: Build frontend
+        working-directory: frontend
+        env:
+          VITE_API_BASE_URL: ${{ vars.PRODUCTION_API_BASE_URL || 'https://cardgame-lwsk.onrender.com' }}
+          VITE_API_HUB_URL: ${{ vars.PRODUCTION_API_HUB_URL || 'https://cardgame-lwsk.onrender.com' }}
+        run: npm run build -- --mode production
+
+      - name: Install Netlify CLI
+        run: npm install -g netlify-cli@latest
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
+
+      - name: Deploy to Netlify
+        working-directory: frontend
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+          DEPLOY_TARGET: ${{ steps.target.outputs.target }}
+          DEPLOY_MESSAGE: "Deploy from GitHub Actions — ${{ github.sha }} (ref: ${{ github.ref }}, event: ${{ github.event_name }})"
+        run: |
+          # The flag table:
+          #   --prod          → production deploy (main)
+          #   --alias <branch>→ preview with a stable alias
+          #   --message       → shows up in the Netlify dashboard
+          #   --dir           → path to the built SPA
+          #   --no-build      → skip Netlify's auto-build (we already built)
+          case "$DEPLOY_TARGET" in
+            production)
+              netlify deploy \
+                --prod \
+                --dir=dist \
+                --message="$DEPLOY_MESSAGE" \
+                --no-build
+              ;;
+            preview)
+              # Preview deploy pinned to the branch name (so URLs are stable).
+              netlify deploy \
+                --alias="${{ github.ref_name }}" \
+                --dir=dist \
+                --message="$DEPLOY_MESSAGE" \
+                --no-build
+              ;;
+            draft)
+              netlify deploy \
+                --dir=dist \
+                --message="$DEPLOY_MESSAGE" \
+                --no-build
+              ;;
+          esac
+
+      - name: Smoke check (production only)
+        if: steps.target.outputs.target == 'production'
+        # Cheap verification: hit the SPA root and check the title appears.
+        # Full E2E is covered by the integration.yml workflow.
+        run: |
+          DEPLOY_URL="${{ vars.PRODUCTION_FRONTEND_URL || 'https://tricardgame.netlify.app' }}"
+          for i in $(seq 1 30); do
+            if curl -fsSL "$DEPLOY_URL" 2>/dev/null | grep -q 'Arcana'; then
+              echo "✅ Smoke check passed ($DEPLOY_URL)"
+              exit 0
+            fi
+            echo "Waiting for deploy to propagate ($i/30)..."
+            sleep 2
+          done
+          echo "::error::Smoke check failed after 60s. Frontend may not be live yet."
+          exit 1
+
+      - name: Comment on PR (preview/draft only)
+        if: github.event_name == 'pull_request' && steps.target.outputs.target != 'production'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: netlify-preview
+          message: |
+            🚀 Netlify preview deployed: https://deploy-preview-${{ github.event.number }}--${{ secrets.NETLIFY_SITE_ID }}.netlify.app
+          env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Rollback on failure (production only)
+        if: failure() && steps.target.outputs.target == 'production'
+        run: |
+          echo "::error::Production deploy failed. Rolling back to last deploy via Netlify API."
+          curl -X POST "https://api.netlify.com/api/v1/sites/${{ secrets.NETLIFY_SITE_ID }}/rollback" \
+            -H "Authorization: Bearer ${{ secrets.NETLIFY_AUTH_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{}' || echo "Rollback request failed — manual rollback required."

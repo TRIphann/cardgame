@@ -1,8 +1,10 @@
+using Arcana.Api.Controllers;
 using Arcana.Api.Hubs;
 using Arcana.Api.HostedServices;
 using Arcana.Api.Middleware;
 using Arcana.Application.Abstractions;
 using Arcana.Infrastructure;
+using Arcana.Domain.Repositories;
 using Microsoft.OpenApi.Models;
 
 // Disable FileSystemWatcher + config hot-reload. Render free-tier containers
@@ -15,6 +17,15 @@ Environment.SetEnvironmentVariable("DOTNET_hostBuilder__reloadConfigOnChange", "
 Environment.SetEnvironmentVariable("DOTNET_fileWatcher__enabled", "false");
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Render / Docker: bind to the runtime-injected $PORT.
+// (Docker bakes ENV at build time, so ASPNETCORE_URLS can't see Render's
+// runtime PORT — read it here instead. Falls back to launchSettings locally.)
+var portEnv = Environment.GetEnvironmentVariable("PORT");
+if (!string.IsNullOrWhiteSpace(portEnv) && int.TryParse(portEnv, out var port))
+{
+    builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
+}
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -32,6 +43,15 @@ builder.Services.AddSingleton<IGameBroadcaster, SignalRGameBroadcaster>();
 builder.Services.AddHostedService<TurnClockService>();
 builder.Services.AddHostedService<NopeTimeoutService>();
 builder.Services.AddHostedService<FuturePeekSweeperService>();
+builder.Services.AddHostedService<FavorPickAutoResolverService>();
+
+// Debounced background pruner so /snapshot endpoints don't pay a
+// Firestore read+write per request — the polling hook fires snapshot
+// every 2-5s during lobby wait.
+builder.Services.AddSingleton<StaleMemberPruner>();
+// Scoped IRoomRepository is wired up by AddArcanaInfrastructure below;
+// StaleMemberPruner grabs it lazily via IServiceScopeFactory so the
+// debounced prune task can fire Firestore writes outside the HTTP scope.
 
 builder.Services.AddArcanaInfrastructure(builder.Configuration);
 

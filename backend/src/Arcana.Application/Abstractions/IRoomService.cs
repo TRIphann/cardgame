@@ -62,7 +62,7 @@ public class GameActionResult
     public List<string>? FuturePeek { get; set; }
     // Set when the player must draw more cards (Attack chain). The client
     // should auto-prompt for another draw rather than waiting for the
-    // 60s turn timer.
+    // 10s turn timer to expire.
     public bool RequiresMoreDraws { get; set; }
     // How many more draws are required when RequiresMoreDraws is true.
     public int RemainingDraws { get; set; }

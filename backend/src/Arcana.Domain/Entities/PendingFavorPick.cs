@@ -20,4 +20,9 @@ public class PendingFavorPick
     // Whose Favor card is in flight. Used by the controller to scope the
     // picker modal response to the right viewer.
     public string InitiatorId { get; set; } = string.Empty;
+    // Timestamp when this Favor pick became pending. The FavorPickAutoResolver
+    // background sweep checks this and auto-picks a random candidate if the
+    // target has not chosen within 10 seconds (per user request: don't make
+    // the target stall the game if they walk away or don't engage).
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

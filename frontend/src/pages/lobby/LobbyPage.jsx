@@ -11,6 +11,7 @@ import { useToast } from "@shared/ui/toast.jsx";
 import { useI18n } from "@shared/i18n/i18n.jsx";
 import { useSettings } from "../../app/settings.jsx";
 import { useRoomPolling } from "../../hooks/useRoomPolling.js";
+import { useGameChannel } from "@shared/realtime/useGameChannel.js";
 import { useDeckAnimation } from "../../hooks/useDeckAnimation.js";
 import { roomsApi } from "@shared/api/roomsApi.js";
 import { FlyingCards } from "./FlyingCards.jsx";
@@ -108,7 +109,42 @@ export default function LobbyPage() {
   const isPending = !roomId || (typeof roomId === "string" && roomId.startsWith("PENDING-"));
   const pollRoomId = isPending ? null : roomId;
   const myPlayerId = session?.playerId;
-  const { room, error: roomError, refresh } = useRoomPolling(pollRoomId, { memberId: myPlayerId });
+  const [realtimeRoom, setRealtimeRoom] = useState(null);
+  const [realtimeRoomTs, setRealtimeRoomTs] = useState(0);
+  const [pollingRoomTs, setPollingRoomTs] = useState(0);
+  const { room: pollingRoom, error: roomError, refresh } = useRoomPolling(pollRoomId, { memberId: myPlayerId });
+
+  // Use SignalR for realtime updates when available
+  useGameChannel({
+    roomId: pollRoomId,
+    memberId: myPlayerId,
+    onUpdate: (data) => {
+      if (data?.room) {
+        setRealtimeRoom(data.room);
+        setRealtimeRoomTs(Date.now());
+      } else if (data) {
+        setRealtimeRoom(data);
+        setRealtimeRoomTs(Date.now());
+      }
+    },
+    enabled: !!pollRoomId,
+  });
+
+  // Track polling room updates
+  useEffect(() => {
+    if (pollingRoom) {
+      setPollingRoomTs(Date.now());
+    }
+  }, [pollingRoom]);
+
+  // Prefer the room data that was updated most recently, or fall back to either
+  const room = useMemo(() => {
+    if (!realtimeRoom && !pollingRoom) return null;
+    if (!realtimeRoom) return pollingRoom;
+    if (!pollingRoom) return realtimeRoom;
+    // Use the more recently updated data
+    return pollingRoomTs >= realtimeRoomTs ? pollingRoom : realtimeRoom;
+  }, [realtimeRoom, pollingRoom, realtimeRoomTs, pollingRoomTs]);
 
   // NOTE: displayCode and showCode are defined AFTER room is declared.
   // Prefer server code, fall back to session code
@@ -138,8 +174,11 @@ export default function LobbyPage() {
       }
       return m;
     });
-    // Inject the local player if they're missing from the server snapshot
-    if (myPlayerId && !merged.some((m) => m.id === myPlayerId) && (isPending || merged.length === 0)) {
+    // Inject the local player if they're missing from the server snapshot.
+    // This can happen when: 1) pending room awaiting server response, 2) just
+    // joined and server hasn't broadcast the new member yet, 3) joining an
+    // existing room where we're not in the snapshot yet.
+    if (myPlayerId && !merged.some((m) => m.id === myPlayerId)) {
       merged.push({
         id: myPlayerId,
         name: session?.playerName || "Bạn",
@@ -149,7 +188,7 @@ export default function LobbyPage() {
       });
     }
     return merged;
-  }, [room, localAvatar, myIsHost, myPlayerId, isPending, session?.playerName, optimisticReady]);
+  }, [room, localAvatar, myIsHost, myPlayerId, session?.playerName, optimisticReady]);
 
   // Redirect when session is missing. We read the raw session from storage as
   // a fallback because `useSession()` may not have flushed its state yet on
@@ -194,7 +233,7 @@ export default function LobbyPage() {
     // Fire one immediately so the server flips us back to IsOnline=true
     // when we re-open the tab.
     ping();
-    const id = setInterval(ping, 15000);
+    const id = setInterval(ping, 30000);
     return () => {
       cancelled = true;
       clearInterval(id);
@@ -259,6 +298,7 @@ export default function LobbyPage() {
   }, [pollRoomId, session?.playerId, refresh]);
 
   // Register settings tabs (members list if host, otherwise just defaults).
+  const prevTabsJsonRef = useRef(null);
   useEffect(() => {
     const myMember = members?.find((m) => m.id === session?.playerId);
     const isHost = session?.isHost && myMember?.isHost;
@@ -266,7 +306,7 @@ export default function LobbyPage() {
       settings.registerTabs([]);
       return;
     }
-    settings.registerTabs([
+    const tabsToRegister = [
       {
         id: "members",
         label: "Thành viên",
@@ -292,17 +332,18 @@ export default function LobbyPage() {
         onAction: async (action, payload) => {
           if (action === "kick") {
             try {
-              // Use the shared wrapper so the request goes to the configured
-              // backend (relative URLs would hit the Netlify SPA fallback and
-              // silently serve index.html instead of reaching the API).
               await roomsApi.kick(roomId, session?.playerId, payload.memberId);
               refresh();
-            } catch (e) { toast.error("Kick thất bại."); }
+            } catch (_) { toast.error("Kick thất bại."); }
           }
         },
       },
-    ]);
-  }, [members, session, sessionCtx, settings, roomId, refresh, toast]);
+    ];
+    const tabsJson = JSON.stringify(tabsToRegister.map(t => ({ id: t.id, label: t.label })));
+    if (prevTabsJsonRef.current === tabsJson) return;
+    prevTabsJsonRef.current = tabsJson;
+    settings.registerTabs(tabsToRegister);
+  }, [room?.status, members, session?.playerId, session?.isHost]);
 
   // Once room status flips to "playing", navigate to the game route.
   useEffect(() => {
@@ -336,7 +377,7 @@ export default function LobbyPage() {
   const offlineAtRef = useRef(null);
   useEffect(() => {
     if (!room || !session?.session?.playerId) return;
-    const me = room.members.find((m) => m.id === session?.session?.playerId);
+    const me = room?.members?.find((m) => m.id === session?.session?.playerId);
     // Still in the room → reset the offline timer.
     if (me) {
       offlineAtRef.current = null;
@@ -359,7 +400,7 @@ export default function LobbyPage() {
       audio.playSfx("playerJoin");
       toast.success(t("lobby.copied"), { duration: 1500 });
       setTimeout(() => setCopyState("idle"), 1500);
-    } catch (e) {
+    } catch (_) {
       toast.error("Không thể sao chép. Hãy copy thủ công.");
     }
   }, [room, session, audio, toast, t]);
@@ -421,11 +462,12 @@ export default function LobbyPage() {
       // Use the shared wrapper so we get the same timeout/retry/error
       // handling as the rest of the app.
       await roomsApi.startGame(roomId, session?.playerId);
-      refresh();
+      // Navigate immediately since the server just set status to "playing"
+      navigate(ROUTES.game(roomId), { replace: true });
     } catch (e) {
       toast.error(e.message || "Không bắt đầu được ván.");
     }
-  }, [audio, roomId, session, refresh, toast, allOtherPlayersReady]);
+  }, [audio, roomId, session, navigate, toast, allOtherPlayersReady]);
 
   const handlePrevMode = useCallback(() => {
     audio.playSfx("buttonClick");
