@@ -12,8 +12,8 @@
          without each tab polling every 1-2s. The Hub broadcasts
          "room-updated" after every GameService mutation. -->
     <PackageReference Include="Microsoft.AspNetCore.SignalR" Version="1.2.0" />
-    <PackageReference Include="Microsoft.AspNetCore.SignalR.Common" Version="8.0.10" />
-    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="8.0.10" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Common" Version="8.0.33" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="8.0.33" />
   </ItemGroup>
 
   <ItemGroup>
