@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { createStartedGame, openGameAsHost, dismissTurnIntro } from './helpers/game';
 
 // Helper: create a room via API (faster than driving the landing form for setup)
 async function createRoom(apiUrl: string, hostName: string) {
@@ -216,76 +217,41 @@ test.describe('Normal game flow - multiplayer UI', () => {
 //  Test 3: Game page renders correctly when navigated to
 // ─────────────────────────────────────────────────────────────────────
 test.describe('Normal game flow - game page', () => {
-  // NOTE: Tests 3.1 and 3.2 are skipped because they require a live SignalR
-  // connection (useGameChannel). The GamePage polls the snapshot endpoint but also
-  // connects to SignalR for realtime updates. In a headless CI environment without
-  // a SignalR hub, the game page shows a "Mất kết nối" (disconnected) overlay
-  // that blocks rendering. These tests would pass in a browser with full
-  // realtime connectivity. For now, backend integration tests cover game state
-  // mutations (draw, play-card, etc.) in normal-game-flow.ps1.
-  test.skip('3.1 Game page: deck, hand, opponents render', async ({ page }) => {
-    const room = await createRoom(API_URL, 'GameHost');
-    await joinRoom(API_URL, room.code, 'Bob');
-    await joinRoom(API_URL, room.code, 'Carol');
-    await heartbeat(API_URL, room.id, room.hostId);
+  // The game page fetches its snapshot over plain HTTP on mount (see the
+  // "Direct snapshot fetch" effect in GamePage.jsx), so it renders fine in
+  // CI without a SignalR hub. These tests used to be skipped on the wrong
+  // assumption that it could not.
+  test('3.1 Game page: deck, hand, opponents render', async ({ page }) => {
+    const game = await createStartedGame('GameHost');
+    await openGameAsHost(page, game);
 
-    const startRes = await fetch(`${API_URL}/api/rooms/${room.id}/start`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ hostId: room.hostId }),
-    });
-    expect(startRes.ok).toBeTruthy();
-    const started = await startRes.json();
-    expect(started.status).toBe('playing');
-
-    await page.goto(WEB_URL);
-    await page.evaluate((r) => {
-      sessionStorage.setItem('arcana.session.v1', JSON.stringify({
-        roomId: r.id, playerId: r.hostId, memberId: r.hostId,
-        playerName: r.hostName, hostName: r.hostName,
-        roomCode: r.code, isHost: true, stage: 'game',
-      }));
-    }, room);
-    await page.goto(`${WEB_URL}/game/${room.id}`);
-    await page.waitForLoadState('networkidle');
-    await page.waitForURL(/\/game\//, { timeout: 10_000 });
+    await expect(page).toHaveURL(/\/game\//);
     await expect(page.locator('.deck-pile').first()).toBeVisible({ timeout: 5_000 });
     await expect(page.locator('.hand-arc').first()).toBeVisible({ timeout: 5_000 });
+    // 3 players, 5 cards each is dealt to the host in a normal game.
+    expect(await page.locator('.hand-card').count()).toBeGreaterThanOrEqual(1);
+    // Two opponents (Bob, Carol) are seated around the table.
+    await expect(page.locator('.game-seat')).toHaveCount(2, { timeout: 5_000 });
   });
 
-  test.skip('3.2 Game page: hand cards have hover effect', async ({ page }) => {
-    const room = await createRoom(API_URL, 'HoverHost');
-    await joinRoom(API_URL, room.code, 'Bob');
-    await joinRoom(API_URL, room.code, 'Carol');
-    await heartbeat(API_URL, room.id, room.hostId);
+  test('3.2 Game page: hand cards have hover effect', async ({ page }) => {
+    const game = await createStartedGame('HoverHost');
+    await openGameAsHost(page, game);
+    // The "Bạn sẽ đi thứ X" overlay covers the table until dismissed, and
+    // would intercept the hover exactly like it blocks a real player.
+    await dismissTurnIntro(page);
 
-    const startRes = await fetch(`${API_URL}/api/rooms/${room.id}/start`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ hostId: room.hostId }),
-    });
-    expect(startRes.ok).toBeTruthy();
-
-    await page.goto(WEB_URL);
-    await page.evaluate((r) => {
-      sessionStorage.setItem('arcana.session.v1', JSON.stringify({
-        roomId: r.id, playerId: r.hostId, memberId: r.hostId,
-        playerName: r.hostName, hostName: r.hostName,
-        roomCode: r.code, isHost: true, stage: 'game',
-      }));
-    }, room);
-    await page.goto(`${WEB_URL}/game/${room.id}`);
-    await page.waitForLoadState('networkidle');
-
-    await page.waitForSelector('.hand-card', { timeout: 15_000 });
     const firstCard = page.locator('.hand-card').first();
     await expect(firstCard).toBeVisible();
+    // Let the mount fan-in animation settle so we compare steady states.
+    await expect(firstCard).not.toHaveClass(/hand-card--hovered/);
+    const before = await firstCard.evaluate((el) => window.getComputedStyle(el).transform);
 
-    const beforeTransform = await firstCard.evaluate(el => window.getComputedStyle(el).transform);
     await firstCard.hover();
-    await page.waitForTimeout(300);
-    const afterTransform = await firstCard.evaluate(el => window.getComputedStyle(el).transform);
-    expect(afterTransform).not.toEqual(beforeTransform);
+    await expect(firstCard).toHaveClass(/hand-card--hovered/, { timeout: 3_000 });
+    await expect
+      .poll(() => firstCard.evaluate((el) => window.getComputedStyle(el).transform), { timeout: 3_000 })
+      .not.toEqual(before);
   });
 });
 

@@ -113,6 +113,23 @@ test.describe('Lobby code reveal — session queue regression', () => {
     await expect(page.locator('.copy-button')).toBeDisabled();
   });
 
+  // Behavioural twin of 1.3 that runs on EVERY build (incl. the production
+  // bundle CI serves): reproduce the incident through the UI. A double-click
+  // on "Tạo phòng" fires two optimistic PENDING writes plus the real one; the
+  // lobby must still end up with the REAL code, not a stuck "••••••".
+  test('1.4 Double-clicking Create still lands on a real, copyable room code', async ({ page }) => {
+    await page.goto(WEB_URL);
+    await page.waitForLoadState('networkidle');
+    await page.fill('#player-name', 'DoubleClick');
+
+    await page.locator('#create-button').dblclick();
+    await page.waitForURL(/\/lobby/, { timeout: 15_000 });
+
+    await page.locator('.code-visibility').click();
+    await expect(page.locator('#invite-code')).toHaveText(/^[A-Z0-9]{6}$/, { timeout: 15_000 });
+    await expect(page.locator('.copy-button')).toBeEnabled({ timeout: 10_000 });
+  });
+
   test('1.3 Session patch queue: last write wins in arrival order', async ({ page }) => {
     // Needs the raw ES module, which only the dev server serves. The same
     // ordering guarantee is covered in src/__tests__/env.test.js (vitest).
