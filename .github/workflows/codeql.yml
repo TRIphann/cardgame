@@ -47,7 +47,7 @@ jobs:
         language: [csharp]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0  # CodeQL needs full history for accurate taint tracking
 
@@ -85,7 +85,7 @@ jobs:
         language: [javascript-typescript]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4

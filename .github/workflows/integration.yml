@@ -86,7 +86,7 @@ jobs:
     outputs:
       backend-url: ${{ steps.resolve-url.outputs.url }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Resolve backend URL
         id: resolve-url
@@ -234,7 +234,7 @@ jobs:
     timeout-minutes: 30
     needs: [backend-integration]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Resolve frontend URL
         id: resolve-fe
@@ -394,7 +394,7 @@ jobs:
     # smoke test — the one job that actually verifies production was dead.
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup Node 20
         uses: actions/setup-node@v4
