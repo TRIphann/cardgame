@@ -17,9 +17,9 @@
          client can indefinitely block broadcasts via MessageBuffer
          backpressure and retain resources (remote DoS). 8.0.32 is the
          patched release on the .NET 8 branch. -->
-    <PackageReference Include="Microsoft.AspNetCore.SignalR" Version="1.2.0" />
-    <PackageReference Include="Microsoft.AspNetCore.SignalR.Common" Version="8.0.32" />
-    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="8.0.32" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR" Version="1.2.13" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Common" Version="8.0.33" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="8.0.33" />
   </ItemGroup>
 
   <ItemGroup>
