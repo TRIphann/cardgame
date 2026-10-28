@@ -104,8 +104,11 @@ jobs:
           REASON: ${{ github.event.inputs.reason || format('GitHub Actions — ref={0} event={1} sha={2}', github.ref, github.event_name, github.sha) }}
         run: |
           if [ -z "$RENDER_DEPLOY_HOOK_URL" ]; then
-            echo "::error::RENDER_DEPLOY_HOOK_URL secret is missing. See .github/workflows/deploy-backend.yml header for setup instructions."
-            exit 1
+            # Render already auto-deploys from `main` (see render.yaml), so a
+            # missing hook secret must not fail the pipeline — it only means
+            # this manual-trigger/audit-trail step has nothing to call.
+            echo "::warning::RENDER_DEPLOY_HOOK_URL secret is missing. Skipping Render deploy-hook call — Render auto-deploy from main still applies."
+            exit 0
           fi
           echo "Triggering Render deploy — reason: $REASON"
           # Render's deploy hooks accept plain GET or POST and ignore the body.

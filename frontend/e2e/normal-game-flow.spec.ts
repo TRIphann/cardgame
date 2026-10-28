@@ -322,11 +322,30 @@ test.describe('Normal game flow - landing validation', () => {
     expect(page.url()).toContain('/lobby');
   });
 
-  test('4.3 Test Lobby link: clicking navigates to /test', async ({ page }) => {
+  test('4.3 Test Lobby link: dev-only button navigates to /test, hidden in production', async ({ page }) => {
     await page.goto(WEB_URL);
     await page.waitForLoadState('networkidle');
 
-    await page.click('.test-lobby-button');
+    // The Test Lobby button is gated on import.meta.env.DEV on purpose (a prod
+    // build once exposed it and confused players). Detect the build type: the
+    // dev server serves /@vite/client as JS, `vite preview` answers it with
+    // the SPA HTML fallback.
+    let isDevServer = false;
+    try {
+      const res = await fetch(`${WEB_URL}/@vite/client`);
+      isDevServer = (res.headers.get('content-type') || '').includes('javascript');
+    } catch {
+      isDevServer = false;
+    }
+
+    const button = page.locator('.test-lobby-button');
+    if (!isDevServer) {
+      // Production bundle: the button must not exist at all.
+      await expect(button).toHaveCount(0);
+      return;
+    }
+
+    await button.click();
     await page.waitForURL(/\/test/, { timeout: 5_000 });
     expect(page.url()).toContain('/test');
   });
