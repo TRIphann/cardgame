@@ -220,7 +220,7 @@ jobs:
 
       - name: Comment on PR (preview/draft only)
         if: github.event_name == 'pull_request' && steps.target.outputs.target != 'production'
-        uses: marocchino/sticky-pull-request-comment@v2
+        uses: marocchino/sticky-pull-request-comment@v3
         with:
           header: netlify-preview
           message: |
