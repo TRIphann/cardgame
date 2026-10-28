@@ -19,7 +19,7 @@
     "e2e:smoke": "playwright test e2e/smoke-production.spec.ts"
   },
   "dependencies": {
-    "@microsoft/signalr": "^8.0.7",
+    "@microsoft/signalr": "^10.0.11",
     "animejs": "^4.0.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
