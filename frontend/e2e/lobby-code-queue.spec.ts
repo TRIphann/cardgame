@@ -17,6 +17,32 @@ import { test, expect, Page } from '@playwright/test';
 const WEB_URL = process.env.BASE_URL || 'http://localhost:5173';
 const API_URL = process.env.ARCANA_API_BASE_URL || 'http://localhost:5000';
 
+// `import('/src/...')` only resolves on the Vite DEV server. CI serves the
+// production bundle (`vite preview`), where /src/* falls back to index.html
+// and the dynamic import fails. The dev server exposes /@vite/client as JS;
+// the preview server answers it with the SPA HTML fallback.
+async function isViteDevServer(): Promise<boolean> {
+  try {
+    const res = await fetch(`${WEB_URL}/@vite/client`);
+    return (res.headers.get('content-type') || '').includes('javascript');
+  } catch {
+    return false;
+  }
+}
+
+// Exactly what config/env.js `emitSessionChange` does after it writes the
+// session: persist to sessionStorage, then fire the in-tab `arcana:session`
+// event the React SessionProvider listens to. Works on any build.
+async function emitSessionPatch(page: Page, patch: Record<string, unknown>) {
+  await page.evaluate((p) => {
+    const key = 'arcana.session.v1';
+    const current = JSON.parse(sessionStorage.getItem(key) || '{}');
+    const next = { ...current, ...p };
+    sessionStorage.setItem(key, JSON.stringify(next));
+    window.dispatchEvent(new CustomEvent('arcana:session', { detail: next }));
+  }, patch);
+}
+
 async function seedSession(page: Page, session: Record<string, unknown>) {
   await page.goto(WEB_URL);
   await page.evaluate((s) => {
@@ -88,6 +114,9 @@ test.describe('Lobby code reveal — session queue regression', () => {
   });
 
   test('1.3 Session patch queue: last write wins in arrival order', async ({ page }) => {
+    // Needs the raw ES module, which only the dev server serves. The same
+    // ordering guarantee is covered in src/__tests__/env.test.js (vitest).
+    test.skip(!(await isViteDevServer()), 'requires Vite dev server (module import from /src)');
     await page.goto(WEB_URL);
 
     // Queue three patches in the same tick — exactly what a double-click
@@ -136,17 +165,15 @@ test.describe('Lobby pending → real session handover', () => {
 
     // The real room arrives → the queued patch lands → the lobby leaves the
     // pending state and renders the real code.
-    await page.evaluate(async (r) => {
-      const mod = await import('/src/config/env.js');
-      mod.queueSessionPatch({
-        roomId: r.id,
-        roomCode: r.code,
-        playerId: r.hostId,
-        playerName: r.hostName,
-        isHost: true,
-        stage: 'lobby',
-      });
-    }, room);
+    await emitSessionPatch(page, {
+      roomId: room.id,
+      roomCode: room.code,
+      playerId: room.hostId,
+      memberId: room.hostId,
+      playerName: room.hostName,
+      isHost: true,
+      stage: 'lobby',
+    });
 
     // The lobby must now show the real code once the eye is opened.
     await page.locator('.code-visibility').click();
