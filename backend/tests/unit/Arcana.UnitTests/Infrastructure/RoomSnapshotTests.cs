@@ -31,7 +31,7 @@ public class RoomSnapshotTests
                 CurrentTurnMemberId = "m1",
                 AttackCounter = 2,
                 StartedAt = new DateTime(2026, 1, 1, 0, 1, 0, DateTimeKind.Utc),
-                Hands = { ["m1"] = new List<string> { "attack", "ninja" } },
+                Hands = { ["m1"] = ["attack", "ninja"] },
                 Alive = { ["m1"] = true, ["m2"] = false },
                 TurnOrder = { "m1", "m2" },
                 CardsPlayed = { ["m1"] = 3 },
@@ -192,7 +192,7 @@ public class RoomSnapshotTests
         clone.Alive["m1"] = false;
         clone.CardsPlayed["m1"] = 99;
         clone.TurnsTaken["m1"] = 99;
-        clone.Hands["m9"] = new List<string>();
+        clone.Hands["m9"] = [];
 
         Assert.Equal(2, source.Hands["m1"].Count);
         Assert.True(source.Alive["m1"]);
@@ -200,6 +200,8 @@ public class RoomSnapshotTests
         Assert.Equal(2, source.TurnsTaken["m1"]);
         Assert.False(source.Hands.ContainsKey("m9"));
     }
+
+    private static readonly string[] expectedMembers = ["m2"];
 
     [Fact]
     public void CloneGameState_ClonesPendingAction()
@@ -221,7 +223,7 @@ public class RoomSnapshotTests
         Assert.Equal("attack", clone.PendingAction.CardKey);
         // Regression guard: SkipTurnAdvance was previously dropped by the clone.
         Assert.True(clone.PendingAction.SkipTurnAdvance);
-        Assert.Equal(new[] { "m2" }, clone.PendingAction.NopeChain);
+        Assert.Equal(expectedMembers, clone.PendingAction.NopeChain);
     }
 
     [Fact]
@@ -242,8 +244,8 @@ public class RoomSnapshotTests
     public void CloneGameState_ClonesNullableListProperties()
     {
         var source = BuildRoom().GameState!;
-        source.PreShuffleDeck = new List<string> { "attack", "skip" };
-        source.FuturePeek = new List<string> { "bomb" };
+        source.PreShuffleDeck = ["attack", "skip"];
+        source.FuturePeek = ["bomb"];
 
         var clone = RoomSnapshot.CloneGameState(source)!;
         clone.PreShuffleDeck!.Add("nope");
@@ -327,5 +329,73 @@ public class RoomSnapshotTests
         Assert.NotNull(clone.Hands);
         Assert.NotNull(clone.Alive);
         Assert.NotNull(clone.DiscardPile);
+    }
+
+    private static readonly string[] expectedTargetMembers = ["m2", "m3"];
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Regression: PendingTargetPick (Favor phase-1 / combo target picker)
+    //
+    // The 10s picker timeout is armed on GameState.PendingTargetPick. All
+    // three clone helpers (RoomSnapshot, InMemoryRoomRepository,
+    // GameService.CloneGameStateForMutation) used to DROP this field, so
+    // the moment the state was cloned the server forgot a picker was open:
+    // the sweeper never fired, the room stalled forever waiting for a
+    // target, and the whole game froze.
+    //
+    // These tests pin the behaviour so the field can't be dropped again.
+    // ─────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void CloneGameState_CopiesPendingTargetPick()
+    {
+        var source = BuildRoom().GameState!;
+        source.PendingTargetPick = new PendingTargetPick
+        {
+            Kind = TargetPickKind.FavorTarget,
+            CardKey = "favor",
+            InitiatorId = "m1",
+            CandidateMemberIds = { "m2", "m3" },
+            CreatedAt = new DateTime(2026, 1, 1, 0, 2, 0, DateTimeKind.Utc),
+        };
+
+        var clone = RoomSnapshot.CloneGameState(source)!;
+
+        Assert.NotNull(clone.PendingTargetPick);
+        Assert.Equal(TargetPickKind.FavorTarget, clone.PendingTargetPick!.Kind);
+        Assert.Equal("favor", clone.PendingTargetPick.CardKey);
+        Assert.Equal("m1", clone.PendingTargetPick.InitiatorId);
+        Assert.Equal(expectedTargetMembers, clone.PendingTargetPick.CandidateMemberIds);
+        Assert.Equal(source.PendingTargetPick.CreatedAt, clone.PendingTargetPick.CreatedAt);
+    }
+
+    [Fact]
+    public void CloneGameState_PendingTargetPickCandidateListIsNotShared()
+    {
+        var source = BuildRoom().GameState!;
+        source.PendingTargetPick = new PendingTargetPick
+        {
+            Kind = TargetPickKind.ComboTarget,
+            CardKey = "ninja",
+            InitiatorId = "m1",
+        };
+        source.PendingTargetPick.CandidateMemberIds.Add("m2");
+
+        var clone = RoomSnapshot.CloneGameState(source)!;
+        clone.PendingTargetPick!.CandidateMemberIds.Add("m3");
+
+        Assert.Single(source.PendingTargetPick.CandidateMemberIds);
+        Assert.Equal(2, clone.PendingTargetPick.CandidateMemberIds.Count);
+    }
+
+    [Fact]
+    public void CloneGameState_PendingTargetPickIsNullWhenSourceIsNull()
+    {
+        var source = BuildRoom().GameState!;
+        source.PendingTargetPick = null;
+
+        var clone = RoomSnapshot.CloneGameState(source)!;
+
+        Assert.Null(clone.PendingTargetPick);
     }
 }

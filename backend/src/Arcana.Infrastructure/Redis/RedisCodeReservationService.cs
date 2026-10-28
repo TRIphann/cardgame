@@ -4,30 +4,24 @@ using StackExchange.Redis;
 
 namespace Arcana.Infrastructure.Redis;
 
-public class RedisCodeReservationService : ICodeReservationService
+public class RedisCodeReservationService(
+    IConnectionMultiplexer redis,
+    ILogger<RedisCodeReservationService> logger) : ICodeReservationService
 {
-    private readonly IDatabase _db;
-    private readonly ILogger<RedisCodeReservationService> _logger;
-    
+    private readonly IDatabase _db = redis.GetDatabase();
+    private readonly ILogger<RedisCodeReservationService> _logger = logger;
+
     private const string KeyPrefix = "room:code:";
     private static readonly TimeSpan DefaultExpiry = TimeSpan.FromHours(24);
-
-    public RedisCodeReservationService(
-        IConnectionMultiplexer redis,
-        ILogger<RedisCodeReservationService> logger)
-    {
-        _db = redis.GetDatabase();
-        _logger = logger;
-    }
 
     public async Task<bool> TryReserveCodeAsync(string code, string roomId, CancellationToken ct = default)
     {
         var key = GetKey(code);
-        
+
         // SETNX with expiry - atomic reservation
         // If key exists, returns false (already taken)
         var result = await _db.StringSetAsync(key, roomId, DefaultExpiry, When.NotExists);
-        
+
         if (result)
         {
             _logger.LogDebug("Reserved code {Code} for room {RoomId}", code, roomId);
@@ -36,7 +30,7 @@ public class RedisCodeReservationService : ICodeReservationService
         {
             _logger.LogDebug("Code {Code} already reserved", code);
         }
-        
+
         return result;
     }
 
@@ -44,13 +38,13 @@ public class RedisCodeReservationService : ICodeReservationService
     {
         var key = GetKey(code);
         var roomId = await _db.StringGetAsync(key);
-        
+
         if (roomId.IsNullOrEmpty)
         {
             _logger.LogDebug("Code {Code} not found or expired", code);
             return null;
         }
-        
+
         _logger.LogDebug("Resolved code {Code} to room {RoomId}", code, roomId.ToString());
         return roomId.ToString();
     }

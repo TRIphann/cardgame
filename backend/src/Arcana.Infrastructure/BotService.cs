@@ -15,7 +15,10 @@ namespace Arcana.Infrastructure;
 /// Each room gets a dedicated scope so scoped services (GameService, repository)
 /// are properly disposed after each draw operation.
 /// </summary>
-public sealed class BotService : BackgroundService
+public sealed class BotService(
+    IServiceScopeFactory scopeFactory,
+    ILogger<BotService> logger,
+    IActiveTestRoom activeTestRoom) : BackgroundService
 {
     /// <summary>How often the background loop scans for bot turns.</summary>
     private const int PollIntervalMs = 1500;
@@ -26,20 +29,10 @@ public sealed class BotService : BackgroundService
     /// <summary>How long to suppress polling after a quota error.</summary>
     private static readonly TimeSpan QuotaCooldown = TimeSpan.FromSeconds(60);
 
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ILogger<BotService> _logger;
-    private readonly IActiveTestRoom _activeTestRoom;
+    private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
+    private readonly ILogger<BotService> _logger = logger;
+    private readonly IActiveTestRoom _activeTestRoom = activeTestRoom;
     private long _quotaCooldownUntilTicks;
-
-    public BotService(
-        IServiceScopeFactory scopeFactory,
-        ILogger<BotService> logger,
-        IActiveTestRoom activeTestRoom)
-    {
-        _scopeFactory = scopeFactory;
-        _logger = logger;
-        _activeTestRoom = activeTestRoom;
-    }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -106,7 +99,7 @@ public sealed class BotService : BackgroundService
         for (var e = ex; e != null; e = e.InnerException)
         {
             var msg = e.Message;
-            if (msg != null && msg.IndexOf("Quota exceeded", StringComparison.OrdinalIgnoreCase) >= 0)
+            if (msg != null && msg.Contains("Quota exceeded", StringComparison.OrdinalIgnoreCase))
                 return true;
         }
         return false;
@@ -185,7 +178,7 @@ public sealed class BotService : BackgroundService
             // ── Draw-only bot: draw, defuse if bomb (then die), or die ──
             if (isDrawOnly)
             {
-                await HandleDrawOnlyBotAsync(gameService, room, currentTurnId, currentMember, gs, ct);
+                await HandleDrawOnlyBotAsync(gameService, room, currentTurnId, currentMember, ct);
                 continue;
             }
 
@@ -253,7 +246,7 @@ public sealed class BotService : BackgroundService
                 // DrawCardAsync returns RequiresMoreDraws when an attack chain has
                 // remaining draws. We keep drawing until the turn actually advances
                 // or the deck empties.
-                var drawResult = await gameService.DrawCardAsync(room.Id, currentTurnId, ct);
+                var drawResult = await gameService.DrawCardAsync(room.Id, currentTurnId, ct: ct);
 
                 if (drawResult.RequiresMoreDraws && drawResult.RemainingDraws > 0)
                 {
@@ -304,7 +297,6 @@ public sealed class BotService : BackgroundService
         Room room,
         string memberId,
         RoomMember currentMember,
-        GameState gs,
         CancellationToken ct)
     {
         try
@@ -313,7 +305,7 @@ public sealed class BotService : BackgroundService
             while (true)
             {
                 // Draw a card - DrawCardAsync returns fresh room state
-                var drawResult = await gameService.DrawCardAsync(room.Id, memberId, ct);
+                var drawResult = await gameService.DrawCardAsync(room.Id, memberId, ct: ct);
                 var freshRoom = drawResult.Room;
                 var freshGs = freshRoom?.GameState;
                 var freshHand = freshGs?.Hands?.TryGetValue(memberId, out var fh) == true ? fh : null;
@@ -493,7 +485,7 @@ public sealed class BotService : BackgroundService
     {
         try
         {
-            await gameService.DrawCardAsync(roomId, memberId, ct);
+            await gameService.DrawCardAsync(roomId, memberId, ct: ct);
         }
         catch (DomainException)
         {
@@ -588,7 +580,7 @@ public sealed class BotService : BackgroundService
                             var favPending = updatedGs?.PendingFavorPick;
                             var candidates = favPending?.ShuffledCandidates
                                 ?? result.FavorCandidates
-                                ?? new List<string>();
+                                ?? [];
                             // Don't pick the bomb — the server rejects it.
                             var pool = candidates.Where(c => c != CardCatalog.Bomb).ToList();
                             if (pool.Count == 0)
@@ -722,14 +714,14 @@ public sealed class BotService : BackgroundService
 
         return new GameState
         {
-            Deck = source.Deck.ToList(),
-            DiscardPile = source.DiscardPile.ToList(),
+            Deck = [.. source.Deck],
+            DiscardPile = [.. source.DiscardPile],
             PreShuffleDeck = source.PreShuffleDeck?.ToList(),
             PreAttackCounter = source.PreAttackCounter,
             CurrentTurnMemberId = source.CurrentTurnMemberId,
             AttackCounter = source.AttackCounter,
             TurnStartedAt = source.TurnStartedAt,
-            TurnOrder = source.TurnOrder.ToList(),
+            TurnOrder = [.. source.TurnOrder],
             WinnerId = source.WinnerId,
             StartedAt = source.StartedAt,
             EndedAt = source.EndedAt,
@@ -761,18 +753,18 @@ public sealed class BotService : BackgroundService
             // next caller that iterated the set.
             DrawOnlyBotIds = source.DrawOnlyBotIds != null
                 ? new HashSet<string>(source.DrawOnlyBotIds)
-                : new HashSet<string>(),
+                : [],
             PlayCardsBotIds = source.PlayCardsBotIds != null
                 ? new HashSet<string>(source.PlayCardsBotIds)
-                : new HashSet<string>(),
+                : [],
             // FIX: OneCardBotCardMap was missing from the clone. Without this
             // the "play one specific card" bot mode silently degrades to
             // draw-only because the cached state the BotService reads had
             // no record of which card each bot was supposed to play.
             OneCardBotCardMap = source.OneCardBotCardMap != null
                 ? new Dictionary<string, string>(source.OneCardBotCardMap)
-                : new Dictionary<string, string>(),
-            AfkMemberIds = source.AfkMemberIds != null ? new HashSet<string>(source.AfkMemberIds) : new HashSet<string>(),
+                : [],
+            AfkMemberIds = source.AfkMemberIds != null ? new HashSet<string>(source.AfkMemberIds) : [],
             // FIX: BotTurnSeconds was missing, causing bots to never act (they
             // check `elapsed < BotTurnSeconds` but cloned gs always has 0).
             BotTurnSeconds = source.BotTurnSeconds,
@@ -788,7 +780,7 @@ public sealed class BotService : BackgroundService
             CardKey = source.CardKey,
             DiscardPickKey = source.DiscardPickKey,
             CreatedAt = source.CreatedAt,
-            NopeChain = source.NopeChain.ToList(),
+            NopeChain = [.. source.NopeChain],
             // FIX: SkipTurnAdvance was missing from the clone.
             SkipTurnAdvance = source.SkipTurnAdvance,
         };

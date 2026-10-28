@@ -14,20 +14,14 @@ namespace Arcana.Api.HostedServices;
 //
 // 2s tick is intentional: we want a 10s timeout to feel snappy, not "wait
 // 10s + a polling interval".
-public sealed class FavorPickAutoResolverService : BackgroundService
+public sealed class FavorPickAutoResolverService(
+    IServiceScopeFactory scopeFactory,
+    ILogger<FavorPickAutoResolverService> logger) : BackgroundService
 {
     private const int PollIntervalMs = 2_000;
 
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ILogger<FavorPickAutoResolverService> _logger;
-
-    public FavorPickAutoResolverService(
-        IServiceScopeFactory scopeFactory,
-        ILogger<FavorPickAutoResolverService> logger)
-    {
-        _scopeFactory = scopeFactory;
-        _logger = logger;
-    }
+    private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
+    private readonly ILogger<FavorPickAutoResolverService> _logger = logger;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {

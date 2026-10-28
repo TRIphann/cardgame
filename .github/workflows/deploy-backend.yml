@@ -166,9 +166,14 @@ jobs:
         if: github.event_name == 'release'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
-          gh release edit "${{ github.event.release.tag_name }}" \
-            --notes "$(gh release view "${{ github.event.release.tag_name }}" --json notes -q .notes)
+          # Re-write the release notes with the same content so the release
+          # shows up as "edited by the deploy". The previous version had an
+          # unbalanced quote (missing the closing " after the command
+          # substitution) which broke the shell script.
+          NOTES="$(gh release view "$RELEASE_TAG" --json notes -q .notes)"
+          gh release edit "$RELEASE_TAG" --notes "$NOTES"
 
       - name: Rollback on failure
         if: failure()

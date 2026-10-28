@@ -16,7 +16,7 @@ public class PendingFavorPick
     public string TargetMemberId { get; set; } = string.Empty;
     // Server-side shuffled list of the target's hand at the moment Favor
     // resolved. The TARGET picks one card to hand over to the actor.
-    public List<string> ShuffledCandidates { get; set; } = new();
+    public List<string> ShuffledCandidates { get; set; } = [];
     // Whose Favor card is in flight. Used by the controller to scope the
     // picker modal response to the right viewer.
     public string InitiatorId { get; set; } = string.Empty;

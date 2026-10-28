@@ -29,10 +29,10 @@ public static class CardCatalog
     public const string Shuffle = "shuffle";
     public const string Nope = "nope";
 
-    public static readonly IReadOnlyList<string> ComboDefuses = new[]
-    {
+    public static readonly IReadOnlyList<string> ComboDefuses =
+    [
         "ninja", "superman", "zombie", "robot", "hải-tặc"
-    };
+    ];
 
     public static readonly IReadOnlyDictionary<string, string> Names = new Dictionary<string, string>
     {
@@ -70,12 +70,12 @@ public static class CardCatalog
     /// Excludes bomb + back (back is not a real card; bomb is hidden from
     /// the public catalogue since nobody "wants" it).
     /// </summary>
-    public static readonly IReadOnlyList<string> PublicCardKeys = new[]
-    {
+    public static readonly IReadOnlyList<string> PublicCardKeys =
+    [
         Attack, Skip, Favor, Future, Shuffle, Nope,
         "ninja", "superman", "zombie", "robot", "hải-tặc",
         Defuse,
-    };
+    ];
 
     /// <summary>
     /// Build the full set of cards BEFORE dealing and BEFORE inserting bombs.

@@ -8,29 +8,21 @@ namespace Arcana.Api.Controllers;
 
 [ApiController]
 [Route("api/test")]
-public class TestController : ControllerBase
+public class TestController(
+    GameService gameService,
+    ITestRoomRepository inMemoryRepository,
+    IActiveTestRoom activeTestRoom,
+    IGameBroadcaster broadcaster) : ControllerBase
 {
-    private readonly GameService _gameService;
-    private readonly ITestRoomRepository _inMemoryRepository;
-    private readonly IActiveTestRoom _activeTestRoom;
-    private readonly IGameBroadcaster _broadcaster;
+    private readonly GameService _gameService = gameService;
+    private readonly ITestRoomRepository _inMemoryRepository = inMemoryRepository;
+    private readonly IActiveTestRoom _activeTestRoom = activeTestRoom;
+    private readonly IGameBroadcaster _broadcaster = broadcaster;
 
-    private static readonly string[] BotNames = new[]
-    {
+    private static readonly string[] BotNames =
+    [
         "🤖 Bot Alpha", "🤖 Bot Beta", "🤖 Bot Gamma", "🤖 Bot Delta"
-    };
-
-    public TestController(
-        GameService gameService,
-        ITestRoomRepository inMemoryRepository,
-        IActiveTestRoom activeTestRoom,
-        IGameBroadcaster broadcaster)
-    {
-        _gameService = gameService;
-        _inMemoryRepository = inMemoryRepository;
-        _activeTestRoom = activeTestRoom;
-        _broadcaster = broadcaster;
-    }
+    ];
 
     /// <summary>
     /// Creates a test room with 4 bots and returns the room info.
@@ -228,19 +220,19 @@ public class TestController : ControllerBase
                 initiatorId = gs.PendingFavorPick.InitiatorId,
                 shuffledCandidates = gs.PendingFavorPick.ShuffledCandidates,
             },
-            afkMemberIds = gs.AfkMemberIds?.ToList() ?? new List<string>(),
+            afkMemberIds = gs.AfkMemberIds?.ToList() ?? [],
             clientReady = gs.ClientReady,
             botTurnSeconds = gs.BotTurnSeconds,
-            oneCardBotCardMap = gs.OneCardBotCardMap ?? new Dictionary<string, string>(),
-            drawOnlyBotIds = gs.DrawOnlyBotIds?.ToList() ?? new List<string>(),
-            playCardsBotIds = gs.PlayCardsBotIds?.ToList() ?? new List<string>(),
+            oneCardBotCardMap = gs.OneCardBotCardMap ?? [],
+            drawOnlyBotIds = gs.DrawOnlyBotIds?.ToList() ?? [],
+            playCardsBotIds = gs.PlayCardsBotIds?.ToList() ?? [],
         };
 
         // myHand: the viewer's own hand (the host, since they're the only human
         // in a test room). This fixes the "hand doesn't update" bug where
         // safeSetRoom needs a top-level myHand to detect hand changes.
         var hostMember = room.Members.FirstOrDefault(m => m.Id == room.HostId);
-        var myHand = gs?.Hands?.GetValueOrDefault(room.HostId) ?? new List<string>();
+        var myHand = gs?.Hands?.GetValueOrDefault(room.HostId) ?? [];
 
         return Ok(new
         {
@@ -257,12 +249,12 @@ public class TestController : ControllerBase
                 isReady = m.IsReady,
                 isOnline = m.IsOnline,
                 isBot = m.IsBot,
-                hand = gs?.Hands?.GetValueOrDefault(m.Id) ?? new List<string>()
+                hand = gs?.Hands?.GetValueOrDefault(m.Id) ?? []
             }),
             myHand,
             gameState,
-            deck = gs?.Deck?.ToList() ?? new List<string>(),
-            discardPile = gs?.DiscardPile?.ToList() ?? new List<string>()
+            deck = gs?.Deck?.ToList() ?? [],
+            discardPile = gs?.DiscardPile?.ToList() ?? []
         });
     }
 
@@ -280,7 +272,7 @@ public class TestController : ControllerBase
         {
             // Log incoming request for debugging
             Console.WriteLine($"[TestController] StartTestGame received: RoomId={request.RoomId}, DealCards={request.DealCards}");
-            Console.WriteLine($"[TestController] CustomHands: {(request.CustomHands == null ? "null" : string.Join(", ", request.CustomHands.Select(kv => $"{kv.Key}:[{string.Join(",", kv.Value ?? new List<string>())}]")))}");
+            Console.WriteLine($"[TestController] CustomHands: {(request.CustomHands == null ? "null" : string.Join(", ", request.CustomHands.Select(kv => $"{kv.Key}:[{string.Join(",", kv.Value ?? [])}]")))}");
 
             var room = await _inMemoryRepository.GetByIdAsync(request.RoomId, ct);
             if (room == null)
@@ -307,11 +299,11 @@ public class TestController : ControllerBase
                 : defaultPlayBotIds;
             var drawOnlyBotIds = request.DrawOnlyBotIds != null
                 ? new HashSet<string>(request.DrawOnlyBotIds)
-                : new HashSet<string>();
+                : [];
             // Per-bot "play one specific card" map. Bots whose id appears
             // here will draw on their turn and then try to play the
             // designated card. Empty / null = no bots in this mode.
-            var oneCardBotCardMap = request.OneCardBotCardMap ?? new Dictionary<string, string>();
+            var oneCardBotCardMap = request.OneCardBotCardMap ?? [];
 
             var startedRoom = await _gameService.StartGameAsync(
                 request.RoomId,
@@ -376,12 +368,12 @@ public class TestController : ControllerBase
                     initiatorId = gs.PendingFavorPick.InitiatorId,
                     shuffledCandidates = gs.PendingFavorPick.ShuffledCandidates,
                 },
-                afkMemberIds = gs.AfkMemberIds?.ToList() ?? new List<string>(),
+                afkMemberIds = gs.AfkMemberIds?.ToList() ?? [],
                 clientReady = gs.ClientReady,
                 botTurnSeconds = gs.BotTurnSeconds,
-                oneCardBotCardMap = gs.OneCardBotCardMap ?? new Dictionary<string, string>(),
-                drawOnlyBotIds = gs.DrawOnlyBotIds?.ToList() ?? new List<string>(),
-                playCardsBotIds = gs.PlayCardsBotIds?.ToList() ?? new List<string>(),
+                oneCardBotCardMap = gs.OneCardBotCardMap ?? [],
+                drawOnlyBotIds = gs.DrawOnlyBotIds?.ToList() ?? [],
+                playCardsBotIds = gs.PlayCardsBotIds?.ToList() ?? [],
             };
 
             // myHand: the viewing player's hand (the host, since they're the
@@ -391,7 +383,7 @@ public class TestController : ControllerBase
             // which is also empty for the very first render (the test start
             // response previously omitted both fields, making the player think
             // their hand was wiped after every draw/play).
-            var hostHand = gs?.Hands?.GetValueOrDefault(room.HostId) ?? new List<string>();
+            var hostHand = gs?.Hands?.GetValueOrDefault(room.HostId) ?? [];
 
             return Ok(new
             {
@@ -408,7 +400,7 @@ public class TestController : ControllerBase
                     isReady = m.IsReady,
                     isOnline = m.IsOnline,
                     isBot = m.IsBot,
-                    hand = gs?.Hands?.GetValueOrDefault(m.Id) ?? new List<string>()
+                    hand = gs?.Hands?.GetValueOrDefault(m.Id) ?? []
                 }),
                 myHand = hostHand,
                 _viewerId = room.HostId,
@@ -417,9 +409,9 @@ public class TestController : ControllerBase
                 // lobby can confirm what was persisted (and so future
                 // re-joins inherit the configuration if the UI caches
                 // the start payload).
-                oneCardBotCardMap = gs?.OneCardBotCardMap ?? new Dictionary<string, string>(),
-                deck = gs?.Deck?.ToList() ?? new List<string>(),
-                discardPile = gs?.DiscardPile?.ToList() ?? new List<string>()
+                oneCardBotCardMap = gs?.OneCardBotCardMap ?? [],
+                deck = gs?.Deck?.ToList() ?? [],
+                discardPile = gs?.DiscardPile?.ToList() ?? []
             });
         }
         catch (Exception ex)

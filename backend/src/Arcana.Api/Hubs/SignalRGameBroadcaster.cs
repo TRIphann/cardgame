@@ -8,14 +8,9 @@ namespace Arcana.Api.Hubs;
 /// event to the matching hub group. Callers pass already-serialized payload
 /// so we don't double-JSON-encode (SignalR handles the wire format itself).
 /// </summary>
-public class SignalRGameBroadcaster : IGameBroadcaster
+public class SignalRGameBroadcaster(IHubContext<GameHub> hub) : IGameBroadcaster
 {
-    private readonly IHubContext<GameHub> _hub;
-
-    public SignalRGameBroadcaster(IHubContext<GameHub> hub)
-    {
-        _hub = hub;
-    }
+    private readonly IHubContext<GameHub> _hub = hub;
 
     public Task BroadcastRoomUpdatedAsync(string roomId, object payload, CancellationToken ct = default)
     {
@@ -39,7 +34,7 @@ public class SignalRGameBroadcaster : IGameBroadcaster
         var payload = new
         {
             text = toastText,
-            excludeMemberIds = excludeMemberIds?.ToArray() ?? Array.Empty<string>(),
+            excludeMemberIds = excludeMemberIds?.ToArray() ?? [],
         };
         return _hub.Clients.Group(group).SendAsync("room-toast", payload, ct);
     }

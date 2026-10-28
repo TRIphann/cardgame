@@ -7,7 +7,13 @@ using Arcana.Domain.Repositories;
 
 namespace Arcana.Application.Services;
 
-public class GameService
+public class GameService(
+    IRoomRepository repository,
+    ITestRoomRepository? testRepository,
+    IGameBroadcaster broadcaster,
+    ITurnClockRegistry turnClock,
+    INopeWindowRegistry nopeWindow,
+    IFuturePeekRegistry futurePeek)
 {
     // ──────────────────────────────────────────────────────────────
     // Unified 10-second timer rule
@@ -38,12 +44,12 @@ public class GameService
 
     private static readonly TimeSpan FuturePeekLifetime = TimeSpan.FromSeconds(FuturePeekSeconds);
 
-    private readonly IRoomRepository _repository;
-    private readonly ITestRoomRepository? _testRepository;
-    private readonly IGameBroadcaster _broadcaster;
-    private readonly ITurnClockRegistry _turnClock;
-    private readonly INopeWindowRegistry _nopeWindow;
-    private readonly IFuturePeekRegistry _futurePeek;
+    private readonly IRoomRepository _repository = repository;
+    private readonly ITestRoomRepository? _testRepository = testRepository;
+    private readonly IGameBroadcaster _broadcaster = broadcaster;
+    private readonly ITurnClockRegistry _turnClock = turnClock;
+    private readonly INopeWindowRegistry _nopeWindow = nopeWindow;
+    private readonly IFuturePeekRegistry _futurePeek = futurePeek;
 
     public GameService(
         IRoomRepository repository,
@@ -53,22 +59,6 @@ public class GameService
         IFuturePeekRegistry futurePeek)
         : this(repository, null, broadcaster, turnClock, nopeWindow, futurePeek)
     {
-    }
-
-    public GameService(
-        IRoomRepository repository,
-        ITestRoomRepository? testRepository,
-        IGameBroadcaster broadcaster,
-        ITurnClockRegistry turnClock,
-        INopeWindowRegistry nopeWindow,
-        IFuturePeekRegistry futurePeek)
-    {
-        _repository = repository;
-        _testRepository = testRepository;
-        _broadcaster = broadcaster;
-        _turnClock = turnClock;
-        _nopeWindow = nopeWindow;
-        _futurePeek = futurePeek;
     }
 
     /// <summary>
@@ -152,8 +142,8 @@ public class GameService
         {
             Deck = deck,
             StartedAt = DateTime.UtcNow,
-            DrawOnlyBotIds = drawOnlyBotIds ?? new HashSet<string>(),
-            PlayCardsBotIds = playCardsBotIds ?? new HashSet<string>(),
+            DrawOnlyBotIds = drawOnlyBotIds ?? [],
+            PlayCardsBotIds = playCardsBotIds ?? [],
             // FIX: OneCardBotCardMap was never assigned here, so the whole
             // "play one specific card" bot mode was silently dropped on
             // game start: the map came back empty from the API and the
@@ -161,7 +151,7 @@ public class GameService
             // the bot to plain "draw only".
             OneCardBotCardMap = oneCardBotCardMap != null
                 ? new Dictionary<string, string>(oneCardBotCardMap)
-                : new Dictionary<string, string>(),
+                : [],
             DisableBotService = disableBotService,
             BotTurnSeconds = botTurnSeconds,
             // Explicitly reset AFK, cinematic state, AND the client-ready gate. A new
@@ -173,7 +163,7 @@ public class GameService
             // human client calling /api/rooms/{id}/ready, AFTER the UI has
             // finished rendering — otherwise the 10s window burns down
             // during the lobby→game navigation.
-            AfkMemberIds = new HashSet<string>(),
+            AfkMemberIds = [],
             BombRevealActive = false,
             ClientReady = false,
             LastDrawnBy = null,
@@ -628,7 +618,7 @@ public class GameService
         // The caller's hand is needed for every code path below — for the
         // target-pick call the caller's hand IS the target's hand (the one
         // they're choosing the gift FROM).
-        var hand = gs.Hands.TryGetValue(memberId, out var hh) ? hh : new List<string>();
+        var hand = gs.Hands.TryGetValue(memberId, out var hh) ? hh : [];
 
         if (!isFavorPhase2 && !isComboPhase2 && !isFavorTargetPhase2)
         {
@@ -637,12 +627,8 @@ public class GameService
             if (CardCatalog.IsComboDefuse(cardKey))
             {
                 var playerCount = gs.Alive.Values.Count(v => v);
-                var combo = CardCatalog.DetectCombo(hand, playerCount);
-                if (combo is null)
-                {
-                    throw new DomainException("combo_impossible",
+                var combo = CardCatalog.DetectCombo(hand, playerCount) ?? throw new DomainException("combo_impossible",
                         "Cần ít nhất 2 lá combo giống nhau để dùng.");
-                }
                 // Fall through to ResolveComboAsync — do NOT call ValidateHandCard.
             }
             else
@@ -739,6 +725,33 @@ public class GameService
                     if (string.IsNullOrEmpty(targetMemberId))
                     {
                         result.RequiresTargetPick = true;
+                        // Server-side 10s picker timeout (unified rule — the
+                        // same budget as every other picker in the game).
+                        // We record WHO is waiting, WHICH card opened the
+                        // picker and the eligible targets, so the background
+                        // sweeper can auto-cancel the action when the player
+                        // walks away. Without this the room stalled forever:
+                        // the actor's turn never advanced and nobody was
+                        // asked to hand over a card.
+                        //
+                        // The candidate list is computed server-side (alive
+                        // players other than the actor, with a non-empty
+                        // hand) so the client picker and the auto-cancel
+                        // path agree on who is selectable.
+                        var favorCandidates = gs.Hands.Keys
+                            .Where(id => id != memberId
+                                && gs.Alive.GetValueOrDefault(id)
+                                && gs.Hands.TryGetValue(id, out var h) && h.Count > 0)
+                            .ToList();
+                        gs.PendingTargetPick = new PendingTargetPick
+                        {
+                            Kind = TargetPickKind.FavorTarget,
+                            CardKey = CardCatalog.Favor,
+                            InitiatorId = memberId,
+                            CandidateMemberIds = favorCandidates,
+                            CreatedAt = DateTime.UtcNow,
+                        };
+                        result.FavorCandidates = favorCandidates;
                         // Persist so other viewers see a consistent snapshot
                         // (no hand change yet, but we still want a fresh
                         // room reference for the client).
@@ -749,12 +762,12 @@ public class GameService
                     }
 
                     // Phase 1b: actor picked a target. Validate and commit.
-                    if (!gs.Hands.ContainsKey(targetMemberId))
+                    if (!gs.Hands.TryGetValue(targetMemberId, out List<string>? value))
                         throw new DomainException("target_not_found", "Đối thủ không hợp lệ.");
                     if (!gs.Alive.GetValueOrDefault(targetMemberId))
                         throw new DomainException("target_dead", "Đối thủ đã bị loại.");
 
-                    var tgtHand = gs.Hands[targetMemberId];
+                    var tgtHand = value;
                     if (tgtHand.Count == 0)
                         throw new DomainException("target_empty", "Đối thủ không còn lá bài.");
 
@@ -763,6 +776,10 @@ public class GameService
                     // resolves, the target picks which of their cards to give
                     // to the actor (per user-confirmed spec).
                     RemoveFromHand(hand, CardCatalog.Favor);
+                    // Phase 1 is over — the target picker is closed. Clear the
+                    // timeout state so the sweeper doesn't auto-cancel an
+                    // action that already advanced to phase 2.
+                    gs.PendingTargetPick = null;
 
                     var shuffled = new List<string>(tgtHand);
                     for (var i = shuffled.Count - 1; i > 0; i--)
@@ -1011,16 +1028,16 @@ public class GameService
                         .Distinct()
                         .Where(k => k != "bomb" && k != "back")
                         .ToList();
-                if (discardCandidates.Count == 0)
-                {
-                    // BUG-NEW: empty discard pile must still end the turn.
-                    SpendAnyComboFromHand(gs, hand, 5);
-                    gs.CardsPlayed[memberId] = gs.CardsPlayed.GetValueOrDefault(memberId) + 1;
-                    gs.TurnsTaken[memberId] = gs.TurnsTaken.GetValueOrDefault(memberId) + 1;
-                    AdvanceTurn(gs, room.Id);
-                    result.Toast = "Chồng bỏ trống — chưa có lá bài nào để lấy.";
-                    break;
-                }
+                    if (discardCandidates.Count == 0)
+                    {
+                        // BUG-NEW: empty discard pile must still end the turn.
+                        SpendAnyComboFromHand(gs, hand, 5);
+                        gs.CardsPlayed[memberId] = gs.CardsPlayed.GetValueOrDefault(memberId) + 1;
+                        gs.TurnsTaken[memberId] = gs.TurnsTaken.GetValueOrDefault(memberId) + 1;
+                        AdvanceTurn(gs, room.Id);
+                        result.Toast = "Chồng bỏ trống — chưa có lá bài nào để lấy.";
+                        break;
+                    }
                     result.RequiresDiscardPick = true;
                     result.FavorCandidates = discardCandidates;
                     result.Toast = "Chọn 1 lá đã được đánh để lấy lại.";
@@ -1075,6 +1092,77 @@ public class GameService
     //  ──────────────────────────────────────────────────────────────────
 
     /// <summary>
+    /// Auto-cancels a pending TARGET picker (Favor phase 1 — "pick who to
+    /// ask") after the unified 10s picker timeout expires.
+    ///
+    /// Per <c>TIMER_10S_SPEC.md</c> §4: when the actor doesn't pick a
+    /// target in time, the Favor is auto-cancelled — the card is spent, the
+    /// turn advances, and nobody is asked to hand over a card.
+    ///
+    /// Called by the background sweeper (<c>TargetPickAutoResolver</c>).
+    /// Idempotent: if the picker is already gone (the player picked in
+    /// time, or the game ended) this is a no-op.
+    /// </summary>
+    public async Task<GameActionResult?> AutoCancelPendingTargetPickAsync(
+        string roomId, CancellationToken ct = default)
+    {
+        var room = await LoadPlayingRoomAsync(roomId, ct);
+        if (room is null) return null;
+        var gs = room.GameState!;
+
+        var pending = gs.PendingTargetPick;
+        if (pending is null) return null;
+        if (pending.Kind != TargetPickKind.FavorTarget) return null;
+
+        // Defensive clone — same reasoning as every other mutation path.
+        {
+            var clonedGs = CloneGameStateForMutation(gs);
+            room = new Room
+            {
+                Id = room.Id,
+                Code = room.Code,
+                HostId = room.HostId,
+                HostName = room.HostName,
+                Status = room.Status,
+                MaxPlayers = room.MaxPlayers,
+                CreatedAt = room.CreatedAt,
+                Members = room.Members,
+                GameState = clonedGs,
+            };
+            gs = clonedGs;
+        }
+
+        var initiator = gs.PendingTargetPick!.InitiatorId;
+
+        // The Favor card is spent (the actor played it) and the turn ends.
+        // The card lands in the discard pile so the deck composition stays
+        // consistent.
+        var hand = gs.Hands.TryGetValue(initiator, out var hh) ? hh : [];
+        RemoveFromHand(hand, CardCatalog.Favor);
+        gs.DiscardPile.Add(CardCatalog.Favor);
+        gs.CardsPlayed[initiator] = gs.CardsPlayed.GetValueOrDefault(initiator) + 1;
+        gs.TurnsTaken[initiator] = gs.TurnsTaken.GetValueOrDefault(initiator) + 1;
+
+        gs.PendingTargetPick = null;
+        gs.PendingFavorPick = null;
+
+        // Drop the combo/peek cinematic overlay if it is still showing.
+        gs.LastPlayedBy = null;
+        gs.LastPlayedCardKey = null;
+        gs.LastPlayedAt = null;
+
+        AdvanceTurn(gs, room.Id);
+        CheckWinCondition(gs);
+        await PersistAsync(room.Id, gs, ct);
+
+        return new GameActionResult
+        {
+            Room = (await GetRoomAsync(room.Id, ct))!,
+            Toast = "Đã hủy Xin — hết thời gian chọn mục tiêu.",
+        };
+    }
+
+    /// <summary>
     /// Completes a pending Favor pick: target gave a specific card (or the
     /// 10s auto-pick resolver picked one for them). Transfers the card from
     /// target's hand into the Favor actor's hand (or discard pile if the
@@ -1093,9 +1181,7 @@ public class GameService
         if (gs.PendingAction is not null)
             throw new DomainException("action_pending", "Đang chờ phản ứng Nope.");
 
-        var pendingFav = gs.PendingFavorPick;
-        if (pendingFav is null)
-            throw new DomainException("no_pending_favor", "Không có Lá Xin nào đang chờ.");
+        var pendingFav = gs.PendingFavorPick ?? throw new DomainException("no_pending_favor", "Không có Lá Xin nào đang chờ.");
 
         // For manual picks, scope to the calling target. Auto-picks skip
         // this check since the resolver already validated the target id.
@@ -1197,7 +1283,7 @@ public class GameService
         if (!gs.Alive.GetValueOrDefault(memberId))
             throw new DomainException("already_dead", "Bạn đã không còn trong trò chơi.");
 
-        var hand = gs.Hands.TryGetValue(memberId, out var h) ? h : new List<string>();
+        var hand = gs.Hands.TryGetValue(memberId, out var h) ? h : [];
 
         // Favor is special: it was already removed from hand on phase 1, we
         // just need to drop the pending pick, end the turn, and treat the
@@ -1367,9 +1453,9 @@ public class GameService
     public async Task<GameActionResult> DrawCardAsync(
         string roomId,
         string memberId,
-        CancellationToken ct = default,
-        bool isAutoDraw = false)
-        => await DrawCardAsync(roomId, memberId, preloadedRoom: null, ct, isAutoDraw);
+        bool isAutoDraw = false,
+        CancellationToken ct = default)
+        => await DrawCardAsync(roomId, memberId, preloadedRoom: null, isAutoDraw, ct);
 
     /// <summary>
     /// Overload that accepts a room snapshot the caller has already fetched.
@@ -1382,8 +1468,8 @@ public class GameService
         string roomId,
         string memberId,
         Room? preloadedRoom,
-        CancellationToken ct = default,
-        bool isAutoDraw = false)
+        bool isAutoDraw = false,
+        CancellationToken ct = default)
     {
         var room = preloadedRoom ?? await LoadPlayingRoomAsync(roomId, ct);
         var gs = room.GameState!;
@@ -1398,7 +1484,7 @@ public class GameService
         if (preloadedRoom is null)
         {
             var clonedGs = CloneGameStateForMutation(gs);
-            room = new Room
+            _ = new Room
             {
                 Id = room.Id,
                 Code = room.Code,
@@ -1630,7 +1716,7 @@ public class GameService
         // Defensive clone (see CloneGameStateForMutation).
         {
             var clonedGs = CloneGameStateForMutation(gs);
-            room = new Room
+            _ = new Room
             {
                 Id = room.Id,
                 Code = room.Code,
@@ -1661,39 +1747,39 @@ public class GameService
         if (defuseIdx < 0)
             throw new DomainException("no_defuse", "Bạn không có lá cứu.");
 
-// Resolve the actual insert slot.
-//
-// IMPORTANT: the server draws from gs.Deck[^1] — the LAST element of the
-// list is the TOP of the deck. Inserting at a small index therefore puts
-// the bomb DEEP in the deck, not near the top.
-//
-// The 4 numbered buttons (1..4) sit just below the top of the deck so the
-// player can decide how many "free cards" the next player gets before
-// hitting the bomb. "Đặt dưới cùng" (slotIndex=5) buries the bomb under
-// every other card.
-//
-//   slotIndex 1 → top of the deck        → insert index = Deck.Count
-//   slotIndex 2 → 1 card below the top    → insert index = Deck.Count - 1
-//   slotIndex 3 → 2 cards below the top   → insert index = Deck.Count - 2
-//   slotIndex 4 → 3 cards below the top   → insert index = Deck.Count - 3
-//   slotIndex 5 → bottom of the deck      → insert index = 0
-//   slotIndex -1 → random position        → uniform pick
-int safeSlot;
-var deckCount = gs.Deck.Count;
-if (slotIndex == -1)
-{
-    safeSlot = Random.Shared.Next(0, deckCount + 1);
-}
-else if (slotIndex >= 1 && slotIndex <= 4)
-{
-    // Clamp so we never underflow when the deck is smaller than 4 cards.
-    safeSlot = Math.Max(0, deckCount - (slotIndex - 1));
-}
-else
-{
-    // slotIndex 0 / 5 / out of range → bottom of the deck.
-    safeSlot = 0;
-}
+        // Resolve the actual insert slot.
+        //
+        // IMPORTANT: the server draws from gs.Deck[^1] — the LAST element of the
+        // list is the TOP of the deck. Inserting at a small index therefore puts
+        // the bomb DEEP in the deck, not near the top.
+        //
+        // The 4 numbered buttons (1..4) sit just below the top of the deck so the
+        // player can decide how many "free cards" the next player gets before
+        // hitting the bomb. "Đặt dưới cùng" (slotIndex=5) buries the bomb under
+        // every other card.
+        //
+        //   slotIndex 1 → top of the deck        → insert index = Deck.Count
+        //   slotIndex 2 → 1 card below the top    → insert index = Deck.Count - 1
+        //   slotIndex 3 → 2 cards below the top   → insert index = Deck.Count - 2
+        //   slotIndex 4 → 3 cards below the top   → insert index = Deck.Count - 3
+        //   slotIndex 5 → bottom of the deck      → insert index = 0
+        //   slotIndex -1 → random position        → uniform pick
+        int safeSlot;
+        var deckCount = gs.Deck.Count;
+        if (slotIndex == -1)
+        {
+            safeSlot = Random.Shared.Next(0, deckCount + 1);
+        }
+        else if (slotIndex >= 1 && slotIndex <= 4)
+        {
+            // Clamp so we never underflow when the deck is smaller than 4 cards.
+            safeSlot = Math.Max(0, deckCount - (slotIndex - 1));
+        }
+        else
+        {
+            // slotIndex 0 / 5 / out of range → bottom of the deck.
+            safeSlot = 0;
+        }
 
         var defuseKey = hand[defuseIdx];
         hand.RemoveAt(defuseIdx);
@@ -1724,7 +1810,7 @@ else
         // Defensive clone (see CloneGameStateForMutation).
         {
             var clonedGs = CloneGameStateForMutation(gs);
-            room = new Room
+            _ = new Room
             {
                 Id = room.Id,
                 Code = room.Code,
@@ -2146,7 +2232,7 @@ else
             InitiatorId = initiatorId,
             CardKey = cardKey,
             CreatedAt = DateTime.UtcNow,
-            NopeChain = new List<string>(),
+            NopeChain = [],
             SkipTurnAdvance = skipTurnAdvance,
         };
         // Cinematic: surface the played card for everyone.
@@ -2301,7 +2387,7 @@ else
             await _broadcaster.BroadcastRoomToastAsync(
                 roomId,
                 $"{memberName} đang AFK — hệ thống sẽ tự động rút bài.",
-                new[] { memberId },
+                [memberId],
                 ct);
         }
         catch
@@ -2412,8 +2498,8 @@ else
     {
         return new GameState
         {
-            Deck = source.Deck.ToList(),
-            DiscardPile = source.DiscardPile.ToList(),
+            Deck = [.. source.Deck],
+            DiscardPile = [.. source.DiscardPile],
             PreShuffleDeck = source.PreShuffleDeck?.ToList(),
             PreAttackCounter = source.PreAttackCounter,
             Hands = source.Hands.ToDictionary(k => k.Key, k => k.Value.ToList()),
@@ -2432,7 +2518,7 @@ else
                 CardKey = source.PendingAction.CardKey,
                 DiscardPickKey = source.PendingAction.DiscardPickKey,
                 CreatedAt = source.PendingAction.CreatedAt,
-                NopeChain = source.PendingAction.NopeChain.ToList(),
+                NopeChain = [.. source.PendingAction.NopeChain],
                 // BUG-NEW fix: SkipTurnAdvance MUST survive the clone. It is
                 // what tells ResolveExpiredNopeAsync that a peek-style card
                 // (Future) must NOT end the player's turn when the Nope
@@ -2442,9 +2528,9 @@ else
             },
             TurnStartedAt = source.TurnStartedAt,
             ClientReady = source.ClientReady,
-            TurnOrder = source.TurnOrder.ToList(),
-            DrawOnlyBotIds = source.DrawOnlyBotIds is null ? new HashSet<string>() : new HashSet<string>(source.DrawOnlyBotIds),
-            PlayCardsBotIds = source.PlayCardsBotIds is null ? new HashSet<string>() : new HashSet<string>(source.PlayCardsBotIds),
+            TurnOrder = [.. source.TurnOrder],
+            DrawOnlyBotIds = source.DrawOnlyBotIds is null ? [] : new HashSet<string>(source.DrawOnlyBotIds),
+            PlayCardsBotIds = source.PlayCardsBotIds is null ? [] : new HashSet<string>(source.PlayCardsBotIds),
             DisableBotService = source.DisableBotService,
             BotTurnSeconds = source.BotTurnSeconds,
             LastDrawnBy = source.LastDrawnBy,
@@ -2456,6 +2542,20 @@ else
             LastPlayedAt = source.LastPlayedAt,
             LastPlayedByNope = source.LastPlayedByNope,
             PendingFavorPick = source.PendingFavorPick,
+            // FIX: PendingTargetPick (Favor phase-1 / combo target picker)
+            // was missing from the clone, so the 10s picker timeout state
+            // was silently dropped every time the state was cloned for
+            // mutation. The sweeper then never saw a pending picker and
+            // the room stalled forever waiting for a target that the
+            // server had already forgotten about.
+            PendingTargetPick = source.PendingTargetPick is null ? null : new PendingTargetPick
+            {
+                Kind = source.PendingTargetPick.Kind,
+                CardKey = source.PendingTargetPick.CardKey,
+                InitiatorId = source.PendingTargetPick.InitiatorId,
+                CandidateMemberIds = [.. source.PendingTargetPick.CandidateMemberIds],
+                CreatedAt = source.PendingTargetPick.CreatedAt,
+            },
             // FIX: OneCardBotCardMap was missing from the clone, so the
             // "play one specific card" bot mode silently degraded to
             // draw-only every time the state was cloned for mutation. The
@@ -2464,7 +2564,7 @@ else
             // never played.
             OneCardBotCardMap = source.OneCardBotCardMap != null
                 ? new Dictionary<string, string>(source.OneCardBotCardMap)
-                : new Dictionary<string, string>(),
+                : [],
             FuturePeek = source.FuturePeek?.ToList(),
             FuturePeekAt = source.FuturePeekAt,
             AfkMemberIds = new HashSet<string>(source.AfkMemberIds),

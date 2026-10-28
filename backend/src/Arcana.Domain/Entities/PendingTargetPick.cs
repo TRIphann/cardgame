@@ -37,7 +37,7 @@ public class PendingTargetPick
     // The eligible targets (member ids) at the moment the picker opened.
     // Used to auto-pick a random target on expiry and to validate the
     // client's choice.
-    public List<string> CandidateMemberIds { get; set; } = new();
+    public List<string> CandidateMemberIds { get; set; } = [];
 
     // Timestamp when this picker became pending. The background sweeper
     // checks this and auto-cancels the action after the picker timeout.

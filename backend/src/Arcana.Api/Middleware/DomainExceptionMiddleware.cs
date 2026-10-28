@@ -4,16 +4,10 @@ using Arcana.Shared.Contracts;
 
 namespace Arcana.Api.Middleware;
 
-public class DomainExceptionMiddleware
+public class DomainExceptionMiddleware(RequestDelegate next, ILogger<DomainExceptionMiddleware> logger)
 {
-    private readonly RequestDelegate _next;
-    private readonly ILogger<DomainExceptionMiddleware> _logger;
-
-    public DomainExceptionMiddleware(RequestDelegate next, ILogger<DomainExceptionMiddleware> logger)
-    {
-        _next = next;
-        _logger = logger;
-    }
+    private readonly RequestDelegate _next = next;
+    private readonly ILogger<DomainExceptionMiddleware> _logger = logger;
 
     public async Task InvokeAsync(HttpContext context)
     {

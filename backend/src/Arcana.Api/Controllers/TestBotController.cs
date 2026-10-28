@@ -13,30 +13,22 @@ namespace Arcana.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/test/bots")]
-public class TestBotController : ControllerBase
+public class TestBotController(
+    GameService gameService,
+    IActiveTestRoom activeTestRoom,
+    IRoomCache roomCache,
+    ILogger<TestBotController> logger) : ControllerBase
 {
-    private readonly GameService _gameService;
-    private readonly IActiveTestRoom _activeTestRoom;
-    private readonly IRoomCache _roomCache;
-    private readonly ILogger<TestBotController> _logger;
-
-    public TestBotController(
-        GameService gameService,
-        IActiveTestRoom activeTestRoom,
-        IRoomCache roomCache,
-        ILogger<TestBotController> logger)
-    {
-        _gameService = gameService;
-        _activeTestRoom = activeTestRoom;
-        _roomCache = roomCache;
-        _logger = logger;
-    }
+    private readonly GameService _gameService = gameService;
+    private readonly IActiveTestRoom _activeTestRoom = activeTestRoom;
+    private readonly IRoomCache _roomCache = roomCache;
+    private readonly ILogger<TestBotController> _logger = logger;
 
     /// <summary>
     /// Gets current bot status and settings for the active test room.
     /// </summary>
     [HttpGet("status")]
-    public async Task<IActionResult> GetBotStatus(CancellationToken ct)
+    public async Task<IActionResult> GetBotStatus()
     {
         var roomId = _activeTestRoom.CurrentRoomId;
         if (string.IsNullOrEmpty(roomId))
@@ -52,7 +44,7 @@ public class TestBotController : ControllerBase
         var botHands = new Dictionary<string, List<string>>();
         foreach (var member in room.Members.Where(m => m.IsBot))
         {
-            var hand = gs.Hands.TryGetValue(member.Id, out var h) ? h : new List<string>();
+            var hand = gs.Hands.TryGetValue(member.Id, out var h) ? h : [];
             botHands[member.Id] = new List<string>(hand);
         }
 
@@ -63,7 +55,7 @@ public class TestBotController : ControllerBase
             {
                 id = m.Id,
                 name = m.Name,
-                hand = gs.Hands.TryGetValue(m.Id, out var h) ? h : new List<string>(),
+                hand = gs.Hands.TryGetValue(m.Id, out var h) ? h : [],
                 isPlayCards = gs.PlayCardsBotIds?.Contains(m.Id) ?? false,
                 isDrawOnly = gs.DrawOnlyBotIds?.Contains(m.Id) ?? false,
             }),
@@ -85,7 +77,7 @@ public class TestBotController : ControllerBase
     /// Sets the hand for a specific bot (only works before game starts or with dealCards=false).
     /// </summary>
     [HttpPost("set-hand")]
-    public async Task<IActionResult> SetBotHand([FromBody] SetBotHandRequest request, CancellationToken ct)
+    public async Task<IActionResult> SetBotHand([FromBody] SetBotHandRequest request)
     {
         var roomId = _activeTestRoom.CurrentRoomId;
         if (string.IsNullOrEmpty(roomId))
@@ -133,7 +125,7 @@ public class TestBotController : ControllerBase
     /// Sets all bot hands at once (before game starts).
     /// </summary>
     [HttpPost("set-all-hands")]
-    public async Task<IActionResult> SetAllBotHands([FromBody] SetAllBotHandsRequest request, CancellationToken ct)
+    public async Task<IActionResult> SetAllBotHands([FromBody] SetAllBotHandsRequest request)
     {
         var roomId = _activeTestRoom.CurrentRoomId;
         if (string.IsNullOrEmpty(roomId))
@@ -164,7 +156,7 @@ public class TestBotController : ControllerBase
     /// Configures bot behavior (draw-only vs play-cards) for all bots.
     /// </summary>
     [HttpPost("configure")]
-    public async Task<IActionResult> ConfigureBots([FromBody] ConfigureBotsRequest request, CancellationToken ct)
+    public async Task<IActionResult> ConfigureBots([FromBody] ConfigureBotsRequest request)
     {
         var roomId = _activeTestRoom.CurrentRoomId;
         if (string.IsNullOrEmpty(roomId))
@@ -177,8 +169,8 @@ public class TestBotController : ControllerBase
         var gs = room.GameState;
 
         // Clear existing bot sets
-        gs.DrawOnlyBotIds ??= new HashSet<string>();
-        gs.PlayCardsBotIds ??= new HashSet<string>();
+        gs.DrawOnlyBotIds ??= [];
+        gs.PlayCardsBotIds ??= [];
         gs.DrawOnlyBotIds.Clear();
         gs.PlayCardsBotIds.Clear();
 
@@ -279,7 +271,7 @@ public class TestBotController : ControllerBase
             }
 
             // Otherwise, draw a card
-            var drawResult = await _gameService.DrawCardAsync(roomId, currentTurnId, ct);
+            var drawResult = await _gameService.DrawCardAsync(roomId, currentTurnId, ct: ct);
             _roomCache.Set(roomId, _roomCache.Get(roomId)!);
 
             return Ok(new
@@ -320,7 +312,7 @@ public class TestBotController : ControllerBase
         // Just draw a card to advance the turn
         try
         {
-            var result = await _gameService.DrawCardAsync(roomId, currentTurnId, ct);
+            var result = await _gameService.DrawCardAsync(roomId, currentTurnId, ct: ct);
             _roomCache.Set(roomId, _roomCache.Get(roomId)!);
 
             return Ok(new { skipped = true, drawn = result.DrawnCardKey });
@@ -335,12 +327,12 @@ public class TestBotController : ControllerBase
 public class SetBotHandRequest
 {
     public string BotId { get; set; } = "";
-    public List<string> Hand { get; set; } = new();
+    public List<string> Hand { get; set; } = [];
 }
 
 public class SetAllBotHandsRequest
 {
-    public Dictionary<string, List<string>> Hands { get; set; } = new();
+    public Dictionary<string, List<string>> Hands { get; set; } = [];
 }
 
 public class ConfigureBotsRequest

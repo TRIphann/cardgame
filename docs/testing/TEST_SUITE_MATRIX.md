@@ -1,6 +1,6 @@
 # Arcana — Test Suite Matrix & Test Plan
 
-> **Version:** 1.0 · **Updated:** 2026-10-25
+> **Version:** 1.2 · **Updated:** 2026-10-28
 > **Scope:** toàn bộ 4 tầng kiểm thử của dự án Arcana — Card Battle.
 
 Tài liệu này là **nguồn sự thật duy nhất** (single source of truth) mô tả:
@@ -16,13 +16,15 @@ Tài liệu này là **nguồn sự thật duy nhất** (single source of truth)
 
 | # | Tầng | Công cụ | Vị trí | Số test | Chạy trong CI | Thời gian |
 |---|------|---------|--------|---------|----------------|-----------|
-| 1 | **Unit — Backend** | xUnit 2 + coverlet | `backend/tests/unit/Arcana.UnitTests/` | **164** | ✅ `ci.yml` → `backend-build` | ~15s |
-| 2 | **Unit / Component — Frontend** | Vitest 2 + React Testing Library | `frontend/src/__tests__/` | **64** | ✅ `ci.yml` → `frontend-test` | ~15s |
-| 3 | **Integration — Backend REST** | PowerShell 7 + `Invoke-RestMethod` | `backend/tests/integration/` | **117** | ✅ `integration.yml` → `backend-integration` | ~8-12 phút |
-| 4 | **E2E / Automation — Browser** | Playwright (Chromium) | `frontend/e2e/` | **49** | ✅ `integration.yml` → `frontend-e2e` | ~5-8 phút |
+| 1 | **Unit — Backend** | xUnit 2 + coverlet | `backend/tests/unit/Arcana.UnitTests/` | **170** | ✅ `ci.yml` → `backend-build` | ~15s |
+| 2 | **Unit / Component — Frontend** | Vitest 2 + React Testing Library | `frontend/src/__tests__/` | **88** | ✅ `ci.yml` → `frontend-test` | ~30s |
+| 3 | **Integration — Backend REST** | PowerShell 7 + `Invoke-RestMethod` | `backend/tests/integration/` | **134** (15 suite) | ✅ `integration.yml` → `backend-integration` | ~10 phút |
+| 4 | **E2E / Automation — Browser** | Playwright (Chromium) | `frontend/e2e/` | **56** (52 pass + 4 skip) | ✅ `integration.yml` → `frontend-e2e` | ~2.5 phút |
 | — | **Manual — Browser** | Puppeteer-style scripts | `frontend/manual/` | 15 script | ❌ (theo yêu cầu, thủ công) | thủ công |
 
-**Tổng automated: 394 test cases** (164 + 64 + 117 + 49).
+**Tổng automated: ~448 test cases** (170 + 88 + 134 + 56).
+
+> **Kết quả chạy thực tế (28/10/2026):** Backend unit **170/170** ✅ · Frontend unit **88/88** ✅ · Backend integration **15/15 suite** (134 case) ✅ · Playwright E2E **52 passed / 4 skipped** ✅ · ESLint `src` + `e2e` **0 error 0 warning** ✅ · `npm run build` ✅ · `dotnet test` ✅
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
@@ -68,12 +70,15 @@ frontend/
 │   ├── setup.js                   ← jsdom stubs (matchMedia, AudioContext)
 │   ├── cardCloudinary.test.js
 │   ├── cardLabels.test.js
-│   ├── env.test.js
+│   ├── env.test.js                ← + session patch queue tests
+│   ├── coldStartCode.test.js      ← regression 26/10 + 28/10
+│   ├── landingProdBugs.test.js
 │   ├── Seats.test.jsx
 │   └── SummaryScreen.test.jsx
 │
-├── e2e/                           ← Playwright specs
+├── e2e/                           ← Playwright specs (được lint bằng typescript-eslint)
 │   ├── normal-game-flow.spec.ts   ← landing + lobby + multiplayer UI
+│   ├── lobby-code-queue.spec.ts   ← regression 28/10 (session queue + code reveal)
 │   ├── test-lobby-flow.spec.ts    ← Test Lobby sandbox
 │   ├── smoke-production.spec.ts   ← production read-only smoke
 │   ├── accessibility/             ← touch-target audit
@@ -90,7 +95,7 @@ frontend/
 
 **Vị trí:** `backend/tests/unit/Arcana.UnitTests/`
 **Lệnh:** `cd backend && dotnet test tests/unit/Arcana.UnitTests/Arcana.UnitTests.csproj`
-**Trạng thái:** ✅ **164/164 pass**
+**Trạng thái:** ✅ **170/170 pass**
 
 ### 3.1. Ma trận coverage
 
@@ -98,7 +103,7 @@ frontend/
 |-----------|---------|---------------------------|-------------------|
 | `Game/CardCatalogTests.cs` | 94 | `Arcana.Application/CardCatalog` | Deck composition 2–8 người; số lượng từng loại lá; combo detection (2-same / 3-same / 5-any); danh mục lá bài; validate key |
 | `Services/GameServiceTests.cs` | 25 | `Arcana.Application/GameService` | Start game; draw; play card; concede; turn advancement; nope window; pending action |
-| `Infrastructure/RoomSnapshotTests.cs` | 14 | `Arcana.Infrastructure/RoomSnapshot` | Deep-clone isolation — snapshot trả về không rò rỉ mutable state (Room & GameState) |
+| `Infrastructure/RoomSnapshotTests.cs` | 17 | `Arcana.Infrastructure/RoomSnapshot` | Deep-clone isolation — snapshot trả về không rò rỉ mutable state (Room & GameState); regression guards cho `OneCardBotCardMap` + `PendingTargetPick` |
 | `Services/DealingProtocolTests.cs` | 10 | `GameService.StartGameAsync` | **Bomb không bao giờ được chia vào tay**; mỗi người đúng **1 defuse + 4 action**; tổng số lá bất biến |
 | `Application/InvitationCodeGeneratorTests.cs` | 25 | `InvitationCodeGenerator` | Alphabet an toàn (loại ký tự nhầm lẫn); độ dài cố định; tính duy nhất |
 
@@ -127,7 +132,7 @@ frontend/
 
 **Vị trí:** `frontend/src/__tests__/`
 **Lệnh:** `cd frontend && npm run test` (hoặc `npm run test:coverage`)
-**Trạng thái:** ✅ **64/64 pass** · 5 test files
+**Trạng thái:** ✅ **88/88 pass** · 7 test files
 
 ### 4.1. Ma trận coverage
 
@@ -135,15 +140,17 @@ frontend/
 |-----------|---------|--------|-------------------|
 | `cardCloudinary.test.js` | 13 | `src/games/exploding-cats/cardCloudinary.js` | Mapping ảnh Cloudinary; URL fallback; card key chưa map → default art |
 | `cardLabels.test.js` | 12 | `src/pages/game/cardLabels.js` | Nhãn hiển thị từng lá; map hiệu ứng (`CARD_FX`) — bao gồm combo variants → `CARD_FX.combo` |
-| `env.test.js` | 15 | `src/config/env.js` | Route table; sessionStorage serialize/deserialize; custom event dispatch; API/HUB URL resolution |
+| `env.test.js` | 19 | `src/config/env.js` | Route table; sessionStorage serialize/deserialize; custom event dispatch; API/HUB URL resolution; **session patch queue (FIFO)** — 28/10 prod incident |
 | `SummaryScreen.test.jsx` | 11 | `SummaryScreen` component | Render bảng tổng kết; hiển thị người thắng; empty state |
 | `Seats.test.jsx` | 13 | `Seats` component | Vị trí ghế theo số người; render avatar; tương tác click |
+| `coldStartCode.test.js` | 13 | `src/hooks/useOptimisticRoom.js`, `src/pages/landing/LandingPage.jsx`, `src/pages/lobby/LobbyPage.jsx` | Regression 26/10 + 28/10 — không fake code, console hygiene, rollback về landing, **session patch queue**, background retry |
+| `landingProdBugs.test.js` | 7 | `src/pages/landing/` | Regression các bug production đã gặp trên landing page |
 
 ### 4.2. Coverage đo được
 
 | Nhóm file | % Stmts | % Branch | % Funcs |
 |-----------|---------|----------|---------|
-| `src/config/env.js` | 100 | 57.1 | 100 |
+| `src/config/env.js` | 98.8 | 63.6 | 100 |
 | `src/games/exploding-cats/cardCloudinary.js` | 100 | 100 | 100 |
 | `src/pages/game/cardFx.js` | 100 | 100 | 100 |
 | `src/pages/game/cardLabels.js` | 100 | 100 | 100 |
@@ -179,7 +186,7 @@ pwsh -NoProfile -File run-all.ps1 -Skip card-bomb,game-flow
 pwsh -NoProfile -File run-all.ps1 -List
 ```
 
-**Trạng thái:** ✅ **117 test cases** trong **15 suite**
+**Trạng thái:** ✅ **134 test cases** trong **15 suite** — 15/15 PASS (28/10/2026)
 
 ### 5.1. Registry suite (nguồn sự thật duy nhất — `_suites.ps1`)
 
@@ -200,6 +207,8 @@ pwsh -NoProfile -File run-all.ps1 -List
 | `normal-game-flow` | `flow/normal-game-flow.ps1` | normal | 20s | 18 | REST thuần: create/join/ready/kick/start/draw/heartbeat/concede/leave/rotate/snapshot |
 | `lobby-normal` | `lobby/lobby-normal-test.ps1` | normal | 25s | 25 | Lobby thật nhiều người (TC13) — create, join song song, ready, kick, leave, snapshot consistency |
 | `lobby-test-bot` | `lobby/lobby-test-bot-test.ps1` | test | 70s | 20 | Test Lobby bot modes + timer + defuse (TC14) |
+
+> **Tổng: 134 test case** (6+5+6+4+7+5+5+3+3+6+14+7+18+25+20).
 
 > **Family semantics:**
 > - `test` = dùng chung phòng `/api/test/room/current` → **phải chạy tuần tự**.
@@ -247,6 +256,12 @@ pwsh -NoProfile -File run-all.ps1 -List
 | 4 | `CachedRoomRepository` cache stale pre-write → member mới / member bị kick biến mất khỏi snapshot | `normal-game-flow` |
 | 5 | `FirestoreRoomRepository.RemoveMemberAsync` không filter member đã bị xoá → endpoint trả về victim còn trong room | `normal-game-flow` |
 | 6 | `FuturePeekSweeperService` ghi Firestore cho phòng Test Lobby → `DocumentNotFound` + log spam | `card-future` |
+| 7 | **`PendingTargetPick` bị drop ở cả 3 clone helper** → Favor phase-1 timeout không bao giờ fire, phòng kẹt vĩnh viễn | `timer` (TC-T6) |
+| 8 | **Favor phase 1 không set `PendingTargetPick`** → không có timeout 10s phía server, actor bỏ tab là treo cả phòng | `timer` (TC-T6) |
+| 9 | **Session patch không serialize** → write PENDING đè lên write REAL, lobby kẹt "••••••" (prod 28/10) | `env.test.js` + `lobby-code-queue.spec.ts` |
+| 10 | **React StrictMode double-invoke** chặn `GamePage` fetch snapshot → game page kẹt "Đang tải ván chơi…" | `normal-game-flow.spec.ts` (2.1) |
+| 11 | **143 touch target < 44×44px** (thiếu `flex-shrink: 0`, thiếu `min-height`) → vi phạm WCAG 2.5.5 | `visual/frontend-visual.spec.ts` (a11y) |
+| 12 | **HEAD request không gửi `Content-Type`** → mỗi poll/snapshot kích hoạt CORS preflight, tăng độ trễ & rủi ro block ở production | `env.test.js` |
 
 ---
 
@@ -264,20 +279,22 @@ npm run e2e:smoke           # chỉ production smoke
 npx playwright test e2e/normal-game-flow.spec.ts   # 1 file
 ```
 
-**Trạng thái:** ✅ **49 test** trong **8 spec file**
+**Trạng thái:** ✅ **56 test** trong **8 spec file** — 52 passed / 4 skipped (28/10/2026)
 
 ### 6.1. Ma trận coverage
 
 | Spec file | Số test | Phủ | Ghi chú |
 |-----------|---------|-----|---------|
-| `normal-game-flow.spec.ts` | 7 | Landing form → lobby; invite code reveal; **3 browser context** host+2 joiner; game page render; validation form; link Test Lobby | 2 test game-page bị skip (cần SignalR ổn định trong headless) |
+| `normal-game-flow.spec.ts` | 9 | Landing form → lobby; invite code reveal; **3 browser context** host+2 joiner; game page render; validation form; link Test Lobby | 2 test game-page bị skip (cần SignalR ổn định trong headless) |
 | `test-lobby-flow.spec.ts` | 8 | `/test` load; POST/DELETE room; empty hostName reject; race DELETE→create; snapshot; tab Bài/Deck/Bot; tạo room < 3s | Test Lobby sandbox |
 | `smoke-production.spec.ts` | 10 | SPA HTML; asset 404 sweep; `/health`; CORS preflight; `/test` route; fonts; SPA fallback; uptime; security headers (CSP, X-Frame-Options); debug endpoint 404 | **Read-only** — an toàn chạy trên production |
-| `layout/responsive-comprehensive.spec.ts` | 6 | 4 viewport (375×667 → 1920×1080); page entry fade; hover; counter buttons; toggle states; no-overlap | Touch target ≥ 44×44px |
-| `visual/frontend-visual.spec.ts` | 10 | Desktop / Tablet / Mobile / 360px / 2560px; draw animation; landscape mobile; contrast ratio; FPS; touch target | Visual + a11y |
-| `game-flow/game-animations.spec.ts` | 3 | Full flow desktop 1920×1080; responsive mobile 375×667; frame-rate check | |
+| `layout/responsive-comprehensive.spec.ts` | 10 | 4 viewport (375×667 → 1920×1080); page entry fade; hover; counter buttons; toggle states; no-overlap; game board scale | Touch target ≥ 44×44px |
+| `visual/frontend-visual.spec.ts` | 11 | Desktop / Tablet / Mobile / 360px / 2560px; draw animation; landscape mobile; contrast ratio; FPS; touch target; game page | Visual + a11y |
+| `game-flow/game-animations.spec.ts` | 3 | Full flow desktop 1920×1080; responsive mobile 375×667; frame-rate check | Chromium flags chống throttle |
 | `accessibility/touch-target-audit.spec.ts` | 1 | Liệt kê chi tiết mọi touch target < 44px | Báo cáo, không fail |
-| `layout/frontend-deep-test.spec.ts` | 0 | *(placeholder — chưa có test case)* | ⚠️ xem §8 |
+| `lobby-code-queue.spec.ts` | 4 | Regression 28/10 — eye-toggle hiện mã phòng thật; PENDING state không hiện code giả; **session patch queue** (last write wins); handover pending → real | Copy button phải enable khi có mã thật |
+
+> `layout/frontend-deep-test.spec.ts` tồn tại nhưng **0 test case** (placeholder) → xem §8 khoảng trống #3.
 
 ### 6.2. Chiến lược chia tầng
 
@@ -301,7 +318,7 @@ mà REST không expose — ví dụ animation, touch target, CORS).
 |-----|----------|-----------|--------------|
 | `backend-build` | `dotnet restore` → `build -c Release` → `dotnet test` (tất cả `*.UnitTests.csproj`) + coverage | **TẦNG 1** | `backend/**` |
 | `backend-lint` | `dotnet format --verify-no-changes` + grep chặn `Console.WriteLine`/TODO/FIXME | — | `backend/**` |
-| `frontend-build` | `npm ci` → `npm run lint` (max-warnings=0) → `npm run build` + verify `dist/` | — | `frontend/src/**` |
+| `frontend-build` | `npm ci` → `npm run lint` (max-warnings=0) → **`npm run lint:e2e`** → `npm run build` + verify `dist/` | — | `frontend/src/**` |
 | `frontend-test` | `npm run test:coverage` (Vitest) + upload coverage | **TẦNG 2** | `frontend/src/**` |
 | `ci-status` | Gate — chỉ merge khi cả 4 job xanh | — | — |
 
@@ -312,7 +329,7 @@ mà REST không expose — ví dụ animation, touch target, CORS).
 | Job | Nội dung | Tầng test |
 |-----|----------|-----------|
 | `backend-integration` | Dựng .NET API ephemeral (in-memory repo, **không** tốn Firestore quota) → 3 step: `normal-game-flow` → `bot-modes` → `run-all.ps1` fast suites → `run-all.ps1` slow suites (game-flow/card-bomb/timer/lobby-test-bot) | **TẦNG 3** |
-| `frontend-e2e` | `npm run build` → `vite preview :4173` → `npx playwright test` (reporter list/html/junit) | **TẦNG 4** |
+| `frontend-e2e` | `npm run lint:e2e` → `npm run build` → `vite preview :4173` → `npx playwright test` (reporter list/html/junit) | **TẦNG 4** |
 | `production-smoke` | Chỉ `e2e/smoke-production.spec.ts` — read-only, an toàn trên prod | **TẦNG 4 (subset)** |
 | `summary` | Gate — fail nếu backend-integration hoặc frontend-e2e fail | — |
 
@@ -450,16 +467,22 @@ pwsh upload-cards.ps1           # upload lên Cloudinary
 
 ## 11. Checklist trước khi merge
 
-- [ ] `dotnet test` — 164/164 xanh
-- [ ] `npm run test` — 64/64 xanh
+- [ ] `dotnet test` — 170/170 xanh
+- [ ] `npm run test` — 88/88 xanh
 - [ ] `npm run lint` — 0 warning
-- [ ] `dotnet format --verify-no-changes` — sạch
+- [ ] `npm run lint:e2e` — 0 warning (Playwright specs cũng được lint)
 - [ ] `npm run build` — thành công
 - [ ] `_check-syntax.ps1` — `ALL SYNTAX OK`
-- [ ] `run-all.ps1` — 117/117 xanh (nếu thay đổi backend logic)
-- [ ] `npm run e2e` — 49/49 xanh (nếu thay đổi UI flow)
+- [ ] `run-all.ps1` — 15/15 suite xanh (nếu thay đổi backend logic)
+- [ ] `npm run e2e` — 52 pass / 4 skip (nếu thay đổi UI flow)
 - [ ] Workflow YAML vẫn parse được
 - [ ] Tài liệu trong `docs/testing/` đã cập nhật
+
+> ⚠️ **Lưu ý về `dotnet format`:** job `backend-lint` trong `ci.yml` đang **fail sẵn từ 25/10** (trước các thay đổi hiện tại) vì `dotnet format --severity info` muốn chuyển hàng loạt class sang *primary constructor* style — kể cả những file không liên quan (`BotService.cs`, `ActiveTestRoom.cs`, `FirestoreRoomRepository.cs`…). Vấn đề này **không phải do code mới**. Cần một PR riêng để:
+> 1. Thêm `.editorconfig` với `dotnet_diagnostic.IDE0290.severity = none` (tắt primary-constructor style), **hoặc**
+> 2. Chạy `dotnet format` toàn repo một lần và commit kết quả.
+>
+> Deploy **không bị chặn** bởi job này: `deploy-backend.yml` chỉ cần job `validate` (build + validate `render.yaml`), còn `deploy-frontend.yml` kế thừa từ Netlify git integration.
 
 ---
 

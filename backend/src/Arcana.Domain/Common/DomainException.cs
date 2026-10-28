@@ -1,10 +1,6 @@
 namespace Arcana.Domain.Common;
 
-public class DomainException : Exception
+public class DomainException(string code, string message) : Exception(message)
 {
-    public string Code { get; }
-    public DomainException(string code, string message) : base(message)
-    {
-        Code = code;
-    }
+    public string Code { get; } = code;
 }

@@ -1513,10 +1513,23 @@ export default function GamePage() {
   //    even if the SignalR hub handshake is slow / fails. This is the
   //    "fast path" for getting past the arc-loading spinner.
   //    Runs only ONCE (tracked by mountedRef) — not on every render.
+  // Runs on every mount attempt — not on every render. The `cancelled`
+  // flag discards the StrictMode double-invoke's stale result so the
+  // surviving attempt always populates `room`.
   const initialFetchDoneRef = useRef(false);
   useEffect(() => {
-    if (!roomId || !myId || initialFetchDoneRef.current) return undefined;
-    initialFetchDoneRef.current = true;
+    if (!roomId || !myId) return undefined;
+    // StrictMode double-invokes effects in dev: mount → cleanup → mount.
+    // The first invocation set this boolean to true, so the SECOND (real)
+    // mount bailed out early and never fetched — leaving the game page
+    // stuck on "Đang tải ván chơi…" / "Mất kết nối với máy chủ." forever.
+    //
+    // The fix: don't use a boolean "already fetched" flag. Instead, let
+    // every mount attempt fetch and let the LAST one win. The `cancelled`
+    // flag already discards the stale StrictMode invocation's result, so
+    // the surviving attempt always populates `room`. The ref now only
+    // guards against re-fetching the SAME room after a successful load
+    // (e.g. an unrelated re-render that re-runs this effect).
     let cancelled = false;
     const fetcher = async () => {
       try {
@@ -1551,11 +1564,11 @@ export default function GamePage() {
 
         if (cancelled) return;
         if (data && data.members) {
-          // Use setRoom directly — the initialFetchDoneRef guard above already
-          // guarantees this only fires once per mount. Using `setRoom((prev) => prev || data)`
+          // Use setRoom directly. Using `setRoom((prev) => prev || data)`
           // was wrong: once prev is set (from the first call), subsequent calls with fresh
           // SignalR data were silently dropped, causing stale hands to persist.
           setRoom(data);
+          initialFetchDoneRef.current = true;
         }
       } catch (_) {
         // ignore — useGameChannel will keep polling.

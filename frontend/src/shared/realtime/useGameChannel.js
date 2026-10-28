@@ -28,23 +28,19 @@ const TURN_TIME_LIMIT_SEC = 10;
 // GameState.Hands for SignalR payloads (where no top-level myHand exists).
 function normalizeRoom(data, viewerId) {
   if (!data) return null;
-  console.log("[normalizeRoom] data keys:", Object.keys(data), "| viewerId:", viewerId);
   // Already camelCase (RoomDto from REST/snapshot endpoint)
   if (data.members && Array.isArray(data.members)) {
-    console.log("[normalizeRoom] already camelCase, myHand:", data.myHand, "MyHand:", data.MyHand);
     return data;
   }
   // PascalCase Room entity from SignalR broadcast
   if (data.Members && Array.isArray(data.Members)) {
     // Extract hands from GameState.Hands (Dictionary<memberId, List<cardKey>>)
     const gsHands = data.GameState?.Hands ?? {};
-    console.log("[normalizeRoom] PascalCase, gsHands keys:", Object.keys(gsHands), "| viewerId:", viewerId);
     const handsById = typeof gsHands === "object" && !Array.isArray(gsHands)
       ? Object.fromEntries(
           Object.entries(gsHands).map(([k, v]) => [k, Array.isArray(v) ? v : []])
         )
       : {};
-    console.log("[normalizeRoom] handsById:", handsById, "| viewerId:", viewerId);
 
     // Compute handCounts from the Hands dictionary so Seat components show
     // correct counts even when the Room entity doesn't carry Members.
@@ -79,7 +75,6 @@ function normalizeRoom(data, viewerId) {
     // If viewerId is not available, fall back to the host's hand (the human
     // player in a test room) so hand state is never lost on the first render
     // before myId is populated from the room snapshot.
-    console.log("[normalizeRoom] before myHand assign, viewerId:", viewerId, "handsById[viewerId]:", handsById[viewerId]);
     if (viewerId) {
       result.myHand = handsById[viewerId] ?? null;
     } else if (result.members?.length > 0) {
@@ -91,10 +86,8 @@ function normalizeRoom(data, viewerId) {
         result.myHand = handsById[human.id] ?? null;
         // This lets safeSetRoom derive myId when it's still undefined.
         result._viewerId = human.id;
-        console.log("[normalizeRoom] no viewerId, fallback to human:", human.id, "myHand:", result.myHand);
       }
     }
-    console.log("[normalizeRoom] final myHand:", result.myHand, "_viewerId:", result._viewerId);
     return result;
   }
   // Detection: if the payload looks like an error envelope (has `code` or
@@ -108,11 +101,9 @@ function normalizeRoom(data, viewerId) {
 // Converts to camelCase so safeSetRoom can read myHand correctly.
 export function normalizeRestRoom(roomData, memberId) {
   if (!roomData) return null;
-  console.log("[normalizeRestRoom] roomData keys:", Object.keys(roomData), "| memberId:", memberId);
 
   // Already camelCase
   if (roomData.members && Array.isArray(roomData.members)) {
-    console.log("[normalizeRestRoom] already camelCase, myHand:", roomData.myHand, "MyHand:", roomData.MyHand);
     return roomData;
   }
 
@@ -188,7 +179,6 @@ export function normalizeRestRoom(roomData, memberId) {
       _viewerId: memberId || null,
     };
 
-    console.log("[normalizeRestRoom] result.myHand:", result.myHand, "members:", result.members?.map(m => ({ id: m.id, handLen: m.hand?.length })));
     return result;
   }
 
@@ -324,14 +314,8 @@ export function useGameChannel({ roomId, memberId, onUpdate, onToast, enabled, t
 
         conn.on("room-updated", (payload) => {
           const data = payload?.snapshot ?? payload;
-          console.log("[SignalR room-updated] myHand:", data?.GameState?.Hands ? "from GameState.Hands" : "none", "| memberId:", memberId);
-          if (data?.GameState?.Hands) {
-            console.log("[SignalR] Hands keys:", Object.keys(data.GameState.Hands));
-            console.log("[SignalR] My hand:", data.GameState.Hands[memberId]);
-          }
           if (data && !disposed) {
             const normalized = normalizeRoom(data, memberId);
-            console.log("[SignalR] normalized myHand:", normalized?.myHand, "| members:", normalized?.members?.map(m => ({ id: m.id, handLen: m.hand?.length })));
             if (normalized) onUpdateRef.current?.(normalized);
           }
         });
@@ -371,14 +355,12 @@ export function useGameChannel({ roomId, memberId, onUpdate, onToast, enabled, t
         });
 
         await conn.start();
-        console.log("[SignalR] Connected!");
         if (disposed) {
           await conn.stop();
           return;
         }
         connRef.current = conn;
         await conn.invoke("JoinRoom", roomId, memberId);
-        console.log("[SignalR] Joined room:", roomId, "memberId:", memberId);
         setConnected(true);
         stopPoll();
       } catch (_) {

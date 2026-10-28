@@ -73,8 +73,12 @@ public class CardCatalogTests
 
         var actions = CardCatalog.GetActionCards(hand).ToList();
 
-        Assert.Equal(new[] { "attack", "ninja", "skip", "nope" }, actions);
+        Assert.Equal(expectedActionCardSet, actions);
     }
+
+    private static readonly string[] expectedActionCardSet = ["attack", "ninja", "skip", "nope"];
+
+    private static readonly string[] expectedActionCards = ["ninja", "robot"];
 
     [Fact]
     public void GetComboDefuseCards_KeepsOnlyComboVariants()
@@ -83,7 +87,7 @@ public class CardCatalogTests
 
         var combos = CardCatalog.GetComboDefuseCards(hand).ToList();
 
-        Assert.Equal(new[] { "ninja", "robot" }, combos);
+        Assert.Equal(expectedActionCards, combos);
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -279,7 +283,7 @@ public class CardCatalogTests
     [Fact]
     public void DetectCombo_ReturnsNull_ForEmptyHand()
     {
-        Assert.Null(CardCatalog.DetectCombo(Array.Empty<string>()));
+        Assert.Null(CardCatalog.DetectCombo([]));
     }
 
     [Fact]

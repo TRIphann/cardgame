@@ -7,6 +7,9 @@ import {
   saveSession,
   loadSession,
   clearSession,
+  queueSessionPatch,
+  pendingSessionQueueLength,
+  clearSessionQueue,
   saveLastName,
   loadLastName,
   clearLastName,
@@ -96,6 +99,81 @@ describe("env — session storage", () => {
     saveSession({ roomId: "room-1" });
 
     expect(sessionStorage.getItem(SESSION_STORAGE_KEY)).toBeTruthy();
+  });
+});
+
+describe("env — session patch queue (FIFO, prod incident 28/10)", () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+    clearSessionQueue();
+  });
+
+  it("flushes a single queued patch on a microtask", async () => {
+    saveSession({ roomId: "PENDING-1", roomCode: "", stage: "lobby" });
+
+    queueSessionPatch({ roomId: "real-id", roomCode: "ABC123" });
+    expect(pendingSessionQueueLength()).toBe(1);
+
+    await Promise.resolve();
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(pendingSessionQueueLength()).toBe(0);
+    const next = loadSession();
+    expect(next.roomId).toBe("real-id");
+    expect(next.roomCode).toBe("ABC123");
+    // Unpatched fields survive the merge.
+    expect(next.stage).toBe("lobby");
+  });
+
+  it("applies concurrent patches in arrival order — last write wins", async () => {
+    saveSession({ roomId: "PENDING-1", roomCode: "", playerId: "PENDING-me" });
+
+    // Simulate a double-click: two PENDING writes, then the REAL patch.
+    // Without the queue the REAL write could land first and be clobbered.
+    queueSessionPatch({ roomId: "PENDING-2", roomCode: "" });
+    queueSessionPatch({ roomId: "PENDING-3", roomCode: "" });
+    queueSessionPatch({ roomId: "real-id", roomCode: "XYZ789", playerId: "m-1" });
+
+    await Promise.resolve();
+    await new Promise((r) => setTimeout(r, 0));
+
+    const next = loadSession();
+    expect(next.roomId).toBe("real-id");
+    expect(next.roomCode).toBe("XYZ789");
+    expect(next.playerId).toBe("m-1");
+  });
+
+  it("emits exactly one session event per flush (not per patch)", async () => {
+    saveSession({ roomId: "PENDING-1" });
+    const handler = vi.fn();
+    window.addEventListener("arcana:session", handler);
+    handler.mockClear();
+
+    queueSessionPatch({ roomCode: "A" });
+    queueSessionPatch({ roomCode: "B" });
+    queueSessionPatch({ roomCode: "C" });
+
+    await Promise.resolve();
+    await new Promise((r) => setTimeout(r, 0));
+
+    // One flush → one event → one React re-render, not three.
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(loadSession().roomCode).toBe("C");
+
+    window.removeEventListener("arcana:session", handler);
+  });
+
+  it("clearSessionQueue drops pending patches", async () => {
+    saveSession({ roomId: "PENDING-1", roomCode: "" });
+
+    queueSessionPatch({ roomId: "real-id", roomCode: "ABC123" });
+    clearSessionQueue();
+
+    await Promise.resolve();
+    await new Promise((r) => setTimeout(r, 0));
+
+    // The dropped patch never lands.
+    expect(loadSession().roomId).toBe("PENDING-1");
   });
 });
 

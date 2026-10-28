@@ -6,7 +6,7 @@ public class PendingAction
     public string CardKey { get; set; } = string.Empty;
     public string? DiscardPickKey { get; set; }
     // The set of memberIds who have noped so far. Even count = cancelled, odd = proceeds.
-    public List<string> NopeChain { get; set; } = new();
+    public List<string> NopeChain { get; set; } = [];
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     // BUG-NEW fix: when true, committing/cancelling this action does NOT
     // advance the turn. Used for action cards whose effect doesn't end the

@@ -2,10 +2,10 @@ namespace Arcana.Domain.Entities;
 
 public class GameState
 {
-    public List<string> Deck { get; set; } = new();
-    public List<string> DiscardPile { get; set; } = new();
+    public List<string> Deck { get; set; } = [];
+    public List<string> DiscardPile { get; set; } = [];
     // Per-member hand (the local viewer sees only their own hand; others are hidden).
-    public Dictionary<string, List<string>> Hands { get; set; } = new();
+    public Dictionary<string, List<string>> Hands { get; set; } = [];
     // Snapshot of the deck order BEFORE the most recent Shuffle card was
     // played. Used by ChainNopeAsync to roll back the shuffle if a Nope
     // chain cancels the action. Null outside the 5s Shuffle window.
@@ -19,12 +19,12 @@ public class GameState
     // Attack: counter that says "the current player has to take N more turns"
     public int AttackCounter { get; set; } = 0;
     // Player stats for the summary screen.
-    public Dictionary<string, int> TurnsTaken { get; set; } = new();
-    public Dictionary<string, int> CardsPlayed { get; set; } = new();
+    public Dictionary<string, int> TurnsTaken { get; set; } = [];
+    public Dictionary<string, int> CardsPlayed { get; set; } = [];
     // Alive flags — dead members' hands get folded into the discard pile.
-    public Dictionary<string, bool> Alive { get; set; } = new();
+    public Dictionary<string, bool> Alive { get; set; } = [];
     // When did each player die (UTC). Null = still alive.
-    public Dictionary<string, DateTime?> DiedAt { get; set; } = new();
+    public Dictionary<string, DateTime?> DiedAt { get; set; } = [];
     public DateTime? StartedAt { get; set; }
     public DateTime? EndedAt { get; set; }
     public string? WinnerId { get; set; }
@@ -55,19 +55,19 @@ public class GameState
     // first entry is "thứ 1" (người đi trước), the last entry is "thứ N".
     // We expose this so the client can show "Bạn sẽ đi thứ X" the moment
     // a game starts.
-    public List<string> TurnOrder { get; set; } = new();
+    public List<string> TurnOrder { get; set; } = [];
 
     // ── Bot behavior (test mode) ─────────────────────────────
     // Bot IDs in this set are in "draw-only" mode: they only draw cards.
     // If a bomb is drawn and they have a defuse, they defuse and then die (no more turns).
     // If no defuse, they die immediately. No action cards are played.
-    public HashSet<string> DrawOnlyBotIds { get; set; } = new();
+    public HashSet<string> DrawOnlyBotIds { get; set; } = [];
     // Bot IDs in this set auto-draw AND play the best available action card.
-    public HashSet<string> PlayCardsBotIds { get; set; } = new();
+    public HashSet<string> PlayCardsBotIds { get; set; } = [];
     // Per-bot "play this exact card" map. The BotService looks up the current
     // player's entry and forces the card if present, falling back to normal
     // priority selection when the entry is missing.
-    public Dictionary<string, string> OneCardBotCardMap { get; set; } = new();
+    public Dictionary<string, string> OneCardBotCardMap { get; set; } = [];
     // When true, BotService will skip processing this room (for manual testing).
     public bool DisableBotService { get; set; } = false;
     // Override turn timer for bots (in seconds). Default 0 = use the
@@ -92,7 +92,7 @@ public class GameState
     // they're in this set, the server auto-draws on their turn immediately
     // (no 10s wait) and the UI prompts them with a "Bạn có đang chơi không?"
     // modal until they click "Tôi đã quay lại".
-    public HashSet<string> AfkMemberIds { get; set; } = new();
+    public HashSet<string> AfkMemberIds { get; set; } = [];
 
     // ── Future-peek field (persisted so SignalR re-fetch survives) ──
     // Set when a player plays the Future card; survives the SignalR snapshot

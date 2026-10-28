@@ -73,7 +73,7 @@ builder.Services.AddSingleton<StaleMemberPruner>();
 builder.Services.AddArcanaInfrastructure(builder.Configuration);
 
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
-    ?? Array.Empty<string>();
+    ?? [];
 
 builder.Services.AddCors(options =>
 {

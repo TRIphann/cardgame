@@ -7,22 +7,16 @@ using Arcana.Domain.Repositories;
 
 namespace Arcana.Application.Services;
 
-public class RoomService : Abstractions.IRoomService
+public class RoomService(
+    IRoomRepository repository,
+    Abstractions.IInvitationCodeGenerator codeGenerator) : Abstractions.IRoomService
 {
     private const int MaxPlayers = 7;
     private const int MaxCodeAttempts = 16;
     private static readonly TimeSpan OfflineAfter = TimeSpan.FromSeconds(35);
 
-    private readonly IRoomRepository _repository;
-    private readonly Abstractions.IInvitationCodeGenerator _codeGenerator;
-
-    public RoomService(
-        IRoomRepository repository,
-        Abstractions.IInvitationCodeGenerator codeGenerator)
-    {
-        _repository = repository;
-        _codeGenerator = codeGenerator;
-    }
+    private readonly IRoomRepository _repository = repository;
+    private readonly Abstractions.IInvitationCodeGenerator _codeGenerator = codeGenerator;
 
     public async Task<Room> CreateRoomAsync(string hostName, CancellationToken ct = default)
     {
@@ -78,10 +72,7 @@ public class RoomService : Abstractions.IRoomService
             JoinedAt = DateTime.UtcNow,
         };
 
-        var updated = await _repository.TryJoinRoomAsync(room.Id, member, ct);
-        if (updated is null)
-            throw new DomainException("room_full", "Phòng đã đủ người chơi hoặc đã bắt đầu.");
-
+        var updated = await _repository.TryJoinRoomAsync(room.Id, member, ct) ?? throw new DomainException("room_full", "Phòng đã đủ người chơi hoặc đã bắt đầu.");
         if (!updated.Members.Any(m => m.Id == member.Id))
             updated.Members.Add(member);
         return updated;
@@ -103,10 +94,7 @@ public class RoomService : Abstractions.IRoomService
         if (string.Equals(room.HostId, targetMemberId, StringComparison.Ordinal))
             throw new DomainException("cannot_kick_host", "Không thể đá chủ phòng.");
 
-        var updated = await _repository.RemoveMemberAsync(roomId, targetMemberId, ct);
-        if (updated is null)
-            throw new DomainException("member_not_found", "Thành viên không còn trong phòng.");
-
+        var updated = await _repository.RemoveMemberAsync(roomId, targetMemberId, ct) ?? throw new DomainException("member_not_found", "Thành viên không còn trong phòng.");
         return updated;
     }
 
@@ -115,10 +103,7 @@ public class RoomService : Abstractions.IRoomService
         var room = await _repository.GetByIdAsync(roomId, ct)
             ?? throw new DomainException("room_not_found", "Phòng không tồn tại.");
 
-        var member = room.Members.FirstOrDefault(m => m.Id == memberId);
-        if (member is null)
-            throw new DomainException("member_not_found", "Bạn không còn trong phòng.");
-
+        var member = room.Members.FirstOrDefault(m => m.Id == memberId) ?? throw new DomainException("member_not_found", "Bạn không còn trong phòng.");
         if (member.IsHost)
             throw new DomainException("not_host", "Chủ phòng không cần xác nhận sẵn sàng.");
 

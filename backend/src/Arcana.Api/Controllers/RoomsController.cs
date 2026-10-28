@@ -12,27 +12,18 @@ namespace Arcana.Api.Controllers;
 
 [ApiController]
 [Route("api/rooms")]
-public class RoomsController : ControllerBase
+public class RoomsController(
+    IRoomService roomService,
+    ITestRoomService testRoomService,
+    ITestRoomRepository testRoomRepository,
+    GameService gameService,
+    StaleMemberPruner stalePruner) : ControllerBase
 {
-    private readonly IRoomService _roomService;
-    private readonly ITestRoomService _testRoomService;
-    private readonly ITestRoomRepository _testRoomRepository;
-    private readonly GameService _gameService;
-    private readonly StaleMemberPruner _stalePruner;
-
-    public RoomsController(
-        IRoomService roomService,
-        ITestRoomService testRoomService,
-        ITestRoomRepository testRoomRepository,
-        GameService gameService,
-        StaleMemberPruner stalePruner)
-    {
-        _roomService = roomService;
-        _testRoomService = testRoomService;
-        _testRoomRepository = testRoomRepository;
-        _gameService = gameService;
-        _stalePruner = stalePruner;
-    }
+    private readonly IRoomService _roomService = roomService;
+    private readonly ITestRoomService _testRoomService = testRoomService;
+    private readonly ITestRoomRepository _testRoomRepository = testRoomRepository;
+    private readonly GameService _gameService = gameService;
+    private readonly StaleMemberPruner _stalePruner = stalePruner;
 
     /// <summary>
     /// Pick the room service for a given room id. Test rooms (rooms previously
@@ -235,7 +226,7 @@ public class RoomsController : ControllerBase
         [FromBody] DrawCardRequest request,
         CancellationToken ct)
     {
-        var result = await _gameService.DrawCardAsync(id, request.MemberId, ct);
+        var result = await _gameService.DrawCardAsync(id, request.MemberId, ct: ct);
         return Ok(new GameActionResponse(
             MapToDto(result.Room, request.MemberId),
             result.Toast, result.DrawnCardKey,
@@ -252,7 +243,7 @@ public class RoomsController : ControllerBase
         CancellationToken ct)
     {
         if (!Enum.TryParse<ComboKind>(request.ComboKind, true, out var ck))
-            throw new ArgumentException("combo_kind_invalid", nameof(request.ComboKind));
+            throw new ArgumentException("combo_kind_invalid", nameof(request));
         var result = await _gameService.CancelPendingActionAsync(
             id, request.MemberId, request.CardKey, ck, ct);
         return Ok(new GameActionResponse(
@@ -362,8 +353,8 @@ public class RoomsController : ControllerBase
             gs.TurnStartedAt.HasValue
                 ? Math.Max(0, (int)(GameService.TurnTimeLimitSeconds - (DateTime.UtcNow - gs.TurnStartedAt.Value).TotalSeconds))
                 : GameService.TurnTimeLimitSeconds,
-            gs.TurnOrder?.ToList() ?? new List<string>(),
-            futurePeek?.ToList() ?? new List<string>(),
+            gs.TurnOrder?.ToList() ?? [],
+            futurePeek?.ToList() ?? [],
             // Favor-pick pending DTO. The TARGET is the only player who
             // needs the candidate list — everyone else (including the
             // initiator) sees null so they don't accidentally pick for
@@ -375,10 +366,24 @@ public class RoomsController : ControllerBase
                     gs.PendingFavorPick.InitiatorId,
                     string.Equals(gs.PendingFavorPick.TargetMemberId, viewerMemberId, StringComparison.Ordinal)
                         ? gs.PendingFavorPick.ShuffledCandidates
-                        : new List<string>()),
+                        : []),
+            // Target-pick pending DTO (Favor phase 1 — "choose who to ask").
+            // The INITIATOR is the only player who needs the candidate list;
+            // everyone else sees the state but not the targets, so they
+            // can't pick on someone else's behalf.
+            gs.PendingTargetPick is null
+                ? null
+                : new PendingTargetPickDto(
+                    gs.PendingTargetPick.Kind.ToString(),
+                    gs.PendingTargetPick.CardKey,
+                    gs.PendingTargetPick.InitiatorId,
+                    string.Equals(gs.PendingTargetPick.InitiatorId, viewerMemberId, StringComparison.Ordinal)
+                        ? gs.PendingTargetPick.CandidateMemberIds
+                        : [],
+                    gs.PendingTargetPick.CreatedAt.ToString("O")),
             // AFK auto-play list — every viewer can see who is currently AFK
             // (the modal decides whether to show for the local player).
-            gs.AfkMemberIds?.ToList() ?? new List<string>(),
+            gs.AfkMemberIds?.ToList() ?? [],
             // Client-ready gate (see GameService.MarkClientReadyAsync and
             // GameState.ClientReady). Front-end uses this for info only;
             // the server is the source of truth for whether the clock is

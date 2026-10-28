@@ -11,21 +11,14 @@ namespace Arcana.Infrastructure;
 /// <see cref="GameService.ResolveExpiredNopeAsync"/>. Each tick resolves a
 /// fresh scope so we get the same scoped GameService the HTTP path uses.
 /// </summary>
-public sealed class NopeTimeoutHandler : INopeTimeoutHandler
+public sealed class NopeTimeoutHandler(
+    IServiceScopeFactory scopeFactory,
+    INopeWindowRegistry registry,
+    ILogger<NopeTimeoutHandler> logger) : INopeTimeoutHandler
 {
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly INopeWindowRegistry _registry;
-    private readonly ILogger<NopeTimeoutHandler> _logger;
-
-    public NopeTimeoutHandler(
-        IServiceScopeFactory scopeFactory,
-        INopeWindowRegistry registry,
-        ILogger<NopeTimeoutHandler> logger)
-    {
-        _scopeFactory = scopeFactory;
-        _registry = registry;
-        _logger = logger;
-    }
+    private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
+    private readonly INopeWindowRegistry _registry = registry;
+    private readonly ILogger<NopeTimeoutHandler> _logger = logger;
 
     public async Task HandleAsync(string roomId, CancellationToken ct = default)
     {

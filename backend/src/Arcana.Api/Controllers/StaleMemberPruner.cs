@@ -11,21 +11,15 @@ namespace Arcana.Api.Controllers;
 /// in <c>useRoomPolling.js</c> hits snapshot every 2-5s, so during a lobby
 /// wait you'd burn 10+ writes/min just to maintain member-online flags.
 /// </summary>
-public sealed class StaleMemberPruner
+public sealed class StaleMemberPruner(
+    IServiceScopeFactory scopeFactory,
+    TimeSpan? offlineAfter = null)
 {
     private const long PruneDebounceMs = 8000;
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly TimeSpan _offlineAfter;
+    private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
+    private readonly TimeSpan _offlineAfter = offlineAfter ?? TimeSpan.FromSeconds(35);
     private readonly Dictionary<string, long> _lastPruneTicks = new(StringComparer.Ordinal);
     private readonly object _lock = new();
-
-    public StaleMemberPruner(
-        IServiceScopeFactory scopeFactory,
-        TimeSpan? offlineAfter = null)
-    {
-        _scopeFactory = scopeFactory;
-        _offlineAfter = offlineAfter ?? TimeSpan.FromSeconds(35);
-    }
 
     /// <summary>
     /// Run a prune for <paramref name="roomId"/> unless one already ran

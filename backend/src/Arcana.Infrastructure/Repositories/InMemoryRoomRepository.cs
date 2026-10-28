@@ -16,19 +16,14 @@ namespace Arcana.Infrastructure.Repositories;
 /// local development and automated testing scenarios.
 /// </para>
 /// </summary>
-public sealed class InMemoryRoomRepository : ITestRoomRepository
+public sealed class InMemoryRoomRepository(IRoomCache? roomCache) : ITestRoomRepository
 {
     private readonly ConcurrentDictionary<string, Room> _rooms = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, string> _codeToRoomId = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _codeLock = new();
-    private readonly IRoomCache? _roomCache;
+    private readonly IRoomCache? _roomCache = roomCache;
 
     public InMemoryRoomRepository() : this(null) { }
-
-    public InMemoryRoomRepository(IRoomCache? roomCache)
-    {
-        _roomCache = roomCache;
-    }
 
     public Task<Room?> GetByIdAsync(string id, CancellationToken ct = default)
     {
@@ -213,10 +208,7 @@ public sealed class InMemoryRoomRepository : ITestRoomRepository
 
         // CRITICAL: Sync to IRoomCache so BotService (which reads from cache) sees the updated game state.
         // Without this, BotService's TickAsync() sees stale data and skips this room.
-        if (_roomCache != null)
-        {
-            _roomCache.Set(roomId, room);
-        }
+        _roomCache?.Set(roomId, room);
 
         return Task.FromResult<Room?>(room);
     }
@@ -291,14 +283,14 @@ public sealed class InMemoryRoomRepository : ITestRoomRepository
 
         return new GameState
         {
-            Deck = source.Deck.ToList(),
-            DiscardPile = source.DiscardPile.ToList(),
+            Deck = [.. source.Deck],
+            DiscardPile = [.. source.DiscardPile],
             PreShuffleDeck = source.PreShuffleDeck?.ToList(),
             PreAttackCounter = source.PreAttackCounter,
             CurrentTurnMemberId = source.CurrentTurnMemberId,
             AttackCounter = source.AttackCounter,
             TurnStartedAt = source.TurnStartedAt,
-            TurnOrder = source.TurnOrder.ToList(),
+            TurnOrder = [.. source.TurnOrder],
             WinnerId = source.WinnerId,
             StartedAt = source.StartedAt,
             EndedAt = source.EndedAt,
@@ -320,6 +312,13 @@ public sealed class InMemoryRoomRepository : ITestRoomRepository
             LastPlayedAt = source.LastPlayedAt,
             LastPlayedByNope = source.LastPlayedByNope,
             PendingFavorPick = source.PendingFavorPick,
+            // FIX: PendingTargetPick (Favor phase-1 / combo target picker)
+            // was missing from the clone, so the 10s picker-timeout state
+            // was dropped every time a room was read back from the
+            // repository. The sweeper then never saw a pending picker and
+            // the room stalled forever waiting for a target the server
+            // had forgotten about.
+            PendingTargetPick = ClonePendingTargetPick(source.PendingTargetPick),
             // FIX: OneCardBotCardMap was missing from the clone, so the
             // "play one specific card" bot mode silently degraded to
             // draw-only every time the room was read back from the
@@ -328,7 +327,7 @@ public sealed class InMemoryRoomRepository : ITestRoomRepository
             // designated card was never played.
             OneCardBotCardMap = source.OneCardBotCardMap != null
                 ? new Dictionary<string, string>(source.OneCardBotCardMap)
-                : new Dictionary<string, string>(),
+                : [],
             // Null-safe clone of bot configuration. The defensive `?? new
             // HashSet<string>()` avoids passing `null` into the HashSet
             // constructor (which would NRE); without it the build warns
@@ -336,13 +335,13 @@ public sealed class InMemoryRoomRepository : ITestRoomRepository
             DisableBotService = source.DisableBotService,
             DrawOnlyBotIds = source.DrawOnlyBotIds != null
                 ? new HashSet<string>(source.DrawOnlyBotIds)
-                : new HashSet<string>(),
+                : [],
             PlayCardsBotIds = source.PlayCardsBotIds != null
                 ? new HashSet<string>(source.PlayCardsBotIds)
-                : new HashSet<string>(),
+                : [],
             AfkMemberIds = source.AfkMemberIds != null
                 ? new HashSet<string>(source.AfkMemberIds)
-                : new HashSet<string>(),
+                : [],
             // FIX: BotTurnSeconds was missing from the clone, which silently
             // reset the bot turn window to 0 (= use the 10s default) on
             // every UpdateGameStateAsync. With BotTurnSeconds=1 (test mode)
@@ -362,7 +361,7 @@ public sealed class InMemoryRoomRepository : ITestRoomRepository
             CardKey = source.CardKey,
             DiscardPickKey = source.DiscardPickKey,
             CreatedAt = source.CreatedAt,
-            NopeChain = source.NopeChain.ToList(),
+            NopeChain = [.. source.NopeChain],
             // FIX: SkipTurnAdvance was missing from the clone, which caused
             // the in-memory repo to silently reset Future's `SkipTurnAdvance`
             // back to false on every UpdateGameStateAsync. After the 5s Nope
@@ -371,6 +370,19 @@ public sealed class InMemoryRoomRepository : ITestRoomRepository
             // automatically — which contradicts the rule "Future does NOT
             // advance the turn".
             SkipTurnAdvance = source.SkipTurnAdvance,
+        };
+    }
+
+    private static PendingTargetPick? ClonePendingTargetPick(PendingTargetPick? source)
+    {
+        if (source is null) return null;
+        return new PendingTargetPick
+        {
+            Kind = source.Kind,
+            CardKey = source.CardKey,
+            InitiatorId = source.InitiatorId,
+            CandidateMemberIds = [.. source.CandidateMemberIds],
+            CreatedAt = source.CreatedAt,
         };
     }
 }

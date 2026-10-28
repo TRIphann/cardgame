@@ -37,6 +37,9 @@ export function ExitTestButton({ roomId, style = {} }) {
         right: 20,
         zIndex: 2147483647, // Max safe z-index - always on top
         padding: "10px 20px",
+        // Min 44px touch target (WCAG 2.5.5) — the inline padding alone
+        // rendered a 43px-tall button, which failed the touch-target audit.
+        minHeight: 44,
         background: "rgba(220, 53, 69, 0.95)",
         color: "#fff",
         border: "2px solid #fff",

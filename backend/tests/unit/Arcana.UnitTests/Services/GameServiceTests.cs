@@ -238,7 +238,7 @@ public class GameServiceTests
         // hand check is the one that trips.
         var playerId = room.GameState!.CurrentTurnMemberId;
         var gs = room.GameState;
-        gs.Hands[playerId] = new List<string>();
+        gs.Hands[playerId] = [];
         await _repo.UpdateGameStateAsync("room-1", gs, null);
 
         var ex = await Assert.ThrowsAsync<DomainException>(
@@ -257,7 +257,7 @@ public class GameServiceTests
 
         var other = room.GameState!.Hands.Keys.First(k => k != "m1");
         var gs = room.GameState;
-        gs.Hands[other] = new List<string> { "attack" };
+        gs.Hands[other] = ["attack"];
         await _repo.UpdateGameStateAsync("room-1", gs, null);
 
         var ex = await Assert.ThrowsAsync<DomainException>(
@@ -282,8 +282,8 @@ public class GameServiceTests
 
         // Give the current player a known deck and an empty hand.
         var gs = (await _repo.GetByIdAsync("room-1"))!.GameState!;
-        gs.Deck = new List<string> { "attack", "skip", "favor" };
-        gs.Hands[playerId] = new List<string>();
+        gs.Deck = ["attack", "skip", "favor"];
+        gs.Hands[playerId] = [];
         await _repo.UpdateGameStateAsync("room-1", gs, null);
 
         var result = await service.DrawCardAsync("room-1", playerId);
@@ -306,9 +306,9 @@ public class GameServiceTests
 
         var playerId = room.GameState!.CurrentTurnMemberId;
         var gs = (await _repo.GetByIdAsync("room-1"))!.GameState!;
-        gs.Deck = new List<string> { CardCatalog.Bomb };
+        gs.Deck = [CardCatalog.Bomb];
         // The player holds a defuse, so the bomb must be defused rather than fatal.
-        gs.Hands[playerId] = new List<string> { CardCatalog.Defuse };
+        gs.Hands[playerId] = [CardCatalog.Defuse];
         await _repo.UpdateGameStateAsync("room-1", gs, null);
 
         var result = await service.DrawCardAsync("room-1", playerId);
@@ -327,8 +327,8 @@ public class GameServiceTests
 
         var playerId = room.GameState!.CurrentTurnMemberId;
         var gs = (await _repo.GetByIdAsync("room-1"))!.GameState!;
-        gs.Deck = new List<string> { CardCatalog.Bomb };
-        gs.Hands[playerId] = new List<string>();
+        gs.Deck = [CardCatalog.Bomb];
+        gs.Hands[playerId] = [];
         await _repo.UpdateGameStateAsync("room-1", gs, null);
 
         var result = await service.DrawCardAsync("room-1", playerId);
@@ -348,8 +348,8 @@ public class GameServiceTests
 
         var playerId = room.GameState!.CurrentTurnMemberId;
         var gs = (await _repo.GetByIdAsync("room-1"))!.GameState!;
-        gs.Deck = new List<string>();
-        gs.Hands[playerId] = new List<string>();
+        gs.Deck = [];
+        gs.Hands[playerId] = [];
         await _repo.UpdateGameStateAsync("room-1", gs, null);
 
         var ex = await Assert.ThrowsAsync<DomainException>(
@@ -372,7 +372,7 @@ public class GameServiceTests
 
         var gs = room.GameState!;
         var playerId = gs.CurrentTurnMemberId;
-        gs.Hands[playerId] = new List<string>();
+        gs.Hands[playerId] = [];
         gs.Alive[playerId] = true;
         await _repo.UpdateGameStateAsync("room-1", gs, null);
 
@@ -462,7 +462,7 @@ public class GameServiceTests
 
         var gs = room.GameState!;
         var playerId = gs.CurrentTurnMemberId;
-        gs.Hands[playerId] = new List<string> { "skip" };
+        gs.Hands[playerId] = ["skip"];
         await _repo.UpdateGameStateAsync("room-1", gs, null);
 
         await service.PlayCardAsync("room-1", playerId, "skip", null, null, null);
@@ -483,7 +483,7 @@ public class GameServiceTests
 
         var gs = room.GameState!;
         var playerId = gs.CurrentTurnMemberId;
-        gs.Hands[playerId] = new List<string> { "nope" };
+        gs.Hands[playerId] = ["nope"];
         await _repo.UpdateGameStateAsync("room-1", gs, null);
 
         var ex = await Assert.ThrowsAsync<DomainException>(
@@ -519,6 +519,137 @@ public class GameServiceTests
         await service.MarkClientReadyAsync("room-1", room.GameState!.CurrentTurnMemberId);
 
         Assert.Single(_turnClock.Snapshot());
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Favor phase-1 target picker (PendingTargetPick) + 10s auto-cancel
+    // ─────────────────────────────────────────────────────────────────────
+    //
+    // When the actor plays a Favor without a target the server arms a
+    // PendingTargetPick (unified 10s picker budget, same as every other
+    // picker). If the actor walks away, TargetPickAutoResolver calls
+    // AutoCancelPendingTargetPickAsync: the Favor is spent, the turn
+    // advances and nobody is asked for a card.
+    //
+    // These tests pin that flow through the public GameService API so a
+    // regression in the picker state (or the auto-cancel path) breaks the
+    // build instead of stalling a live room forever.
+
+    [Fact]
+    public async Task PlayFavor_WithoutTarget_ArmsPendingTargetPick()
+    {
+        await SeedRoomAsync(playerCount: 3);
+        var service = CreateService();
+        var room = await service.StartGameAsync(
+            "room-1", "m1", dealCards: false, disableBotService: true);
+
+        var gs = room.GameState!;
+        var actorId = gs.CurrentTurnMemberId;
+        gs.Hands[actorId] = [CardCatalog.Favor];
+        // Eligible targets: alive players other than the actor with cards.
+        foreach (var member in room.Members.Where(m => m.Id != actorId))
+        {
+            gs.Hands[member.Id] = ["attack"];
+            gs.Alive[member.Id] = true;
+        }
+        await _repo.UpdateGameStateAsync("room-1", gs, null);
+
+        var result = await service.PlayCardAsync(
+            "room-1", actorId, CardCatalog.Favor, null, null, null);
+
+        Assert.True(result.RequiresTargetPick);
+        Assert.NotNull(result.FavorCandidates);
+        Assert.Equal(2, result.FavorCandidates.Count);
+
+        var after = (await _repo.GetByIdAsync("room-1"))!.GameState!;
+        Assert.NotNull(after.PendingTargetPick);
+        Assert.Equal(TargetPickKind.FavorTarget, after.PendingTargetPick!.Kind);
+        Assert.Equal(actorId, after.PendingTargetPick.InitiatorId);
+        Assert.Equal(CardCatalog.Favor, after.PendingTargetPick.CardKey);
+    }
+
+    [Fact]
+    public async Task AutoCancelPendingTargetPick_SpendsFavorAndAdvancesTurn()
+    {
+        await SeedRoomAsync(playerCount: 3);
+        var service = CreateService();
+        var room = await service.StartGameAsync(
+            "room-1", "m1", dealCards: false, disableBotService: true);
+
+        var gs = room.GameState!;
+        var actorId = gs.CurrentTurnMemberId;
+        gs.Hands[actorId] = [CardCatalog.Favor];
+        foreach (var member in room.Members.Where(m => m.Id != actorId))
+        {
+            gs.Hands[member.Id] = ["attack"];
+            gs.Alive[member.Id] = true;
+        }
+        await _repo.UpdateGameStateAsync("room-1", gs, null);
+
+        await service.PlayCardAsync(
+            "room-1", actorId, CardCatalog.Favor, null, null, null);
+
+        var result = await service.AutoCancelPendingTargetPickAsync("room-1");
+
+        Assert.NotNull(result);
+        var after = (await _repo.GetByIdAsync("room-1"))!.GameState!;
+        // The picker is gone, the Favor is spent into the discard pile and
+        // the turn moved to the next player.
+        Assert.Null(after.PendingTargetPick);
+        Assert.DoesNotContain(CardCatalog.Favor, after.Hands[actorId]);
+        Assert.Contains(CardCatalog.Favor, after.DiscardPile);
+        Assert.NotEqual(actorId, after.CurrentTurnMemberId);
+    }
+
+    [Fact]
+    public async Task AutoCancelPendingTargetPick_ReturnsNull_WhenNoPickerIsPending()
+    {
+        await SeedRoomAsync(playerCount: 3);
+        var service = CreateService();
+        await service.StartGameAsync(
+            "room-1", "m1", dealCards: false, disableBotService: true);
+
+        var result = await service.AutoCancelPendingTargetPickAsync("room-1");
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task PlayFavor_WithTarget_ClearsPendingTargetPick()
+    {
+        await SeedRoomAsync(playerCount: 3);
+        var service = CreateService();
+        var room = await service.StartGameAsync(
+            "room-1", "m1", dealCards: false, disableBotService: true);
+
+        var gs = room.GameState!;
+        var actorId = gs.CurrentTurnMemberId;
+        var targetId = room.Members.First(m => m.Id != actorId).Id;
+        gs.Hands[actorId] = [CardCatalog.Favor];
+        gs.Hands[targetId] = ["attack", "skip"];
+        gs.Alive[targetId] = true;
+        foreach (var member in room.Members.Where(m => m.Id != actorId && m.Id != targetId))
+        {
+            gs.Hands[member.Id] = ["attack"];
+            gs.Alive[member.Id] = true;
+        }
+        await _repo.UpdateGameStateAsync("room-1", gs, null);
+
+        // Phase 1a: open the picker.
+        await service.PlayCardAsync(
+            "room-1", actorId, CardCatalog.Favor, null, null, null);
+        var pending = (await _repo.GetByIdAsync("room-1"))!.GameState!.PendingTargetPick;
+        Assert.NotNull(pending);
+
+        // Phase 1b: actor picks the target — the picker closes and phase 2
+        // (target picks which card to give) opens instead.
+        await service.PlayCardAsync(
+            "room-1", actorId, CardCatalog.Favor, targetId, null, null);
+
+        var after = (await _repo.GetByIdAsync("room-1"))!.GameState!;
+        Assert.Null(after.PendingTargetPick);
+        Assert.NotNull(after.PendingFavorPick);
+        Assert.Equal(targetId, after.PendingFavorPick!.TargetMemberId);
     }
 }
 

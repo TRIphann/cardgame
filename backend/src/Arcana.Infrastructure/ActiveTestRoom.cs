@@ -10,19 +10,13 @@ namespace Arcana.Infrastructure;
 /// When a new test room is created, any existing test room is automatically stopped.
 /// This ensures only one test room exists at a time, simplifying quota management.
 /// </summary>
-public sealed class ActiveTestRoom : IActiveTestRoom, IDisposable
+public sealed class ActiveTestRoom(ILogger<ActiveTestRoom> logger, IRoomCache roomCache) : IActiveTestRoom, IDisposable
 {
-    private readonly ILogger<ActiveTestRoom> _logger;
-    private readonly IRoomCache _roomCache;
+    private readonly ILogger<ActiveTestRoom> _logger = logger;
+    private readonly IRoomCache _roomCache = roomCache;
     private readonly object _lock = new();
     private string? _activeRoomId;
     private bool _disposed;
-
-    public ActiveTestRoom(ILogger<ActiveTestRoom> logger, IRoomCache roomCache)
-    {
-        _logger = logger;
-        _roomCache = roomCache;
-    }
 
     /// <summary>
     /// Gets the currently active test room ID, if any.
@@ -33,6 +27,13 @@ public sealed class ActiveTestRoom : IActiveTestRoom, IDisposable
         {
             lock (_lock)
             {
+                // A disposed instance owns no room any more — the room was
+                // removed from the cache in Dispose().
+                if (_disposed)
+                {
+                    return null;
+                }
+
                 // Verify the room still exists in cache
                 if (_activeRoomId != null && _roomCache.Get(_activeRoomId) == null)
                 {

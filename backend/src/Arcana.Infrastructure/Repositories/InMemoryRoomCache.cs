@@ -35,7 +35,7 @@ public sealed class InMemoryRoomCache : IRoomCache
         _rooms.TryRemove(roomId, out _);
     }
 
-    public IReadOnlyCollection<string> Keys() => _rooms.Keys.ToList();
+    public IReadOnlyCollection<string> Keys() => [.. _rooms.Keys];
 
     public int Count => _rooms.Count;
 }

@@ -137,7 +137,11 @@ jobs:
           # If a release with this tag already exists (e.g. created via
           # the GitHub UI manually), delete it first so gh release create
           # doesn't fail with "already_exists".
-          gh release delete "$TAG" --cleanup-tags --yes 2>/dev/null || true
+          #
+          # NOTE: the flag is `--cleanup-tag` (singular). `--cleanup-tags`
+          # does not exist in the GitHub CLI and makes gh exit with
+          # "unknown flag", which failed the whole publish-release job.
+          gh release delete "$TAG" --cleanup-tag --yes 2>/dev/null || true
           gh release create "$TAG" \
             --title "v$VERSION" \
             --notes "$NOTES" \

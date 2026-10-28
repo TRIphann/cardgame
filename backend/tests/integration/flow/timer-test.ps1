@@ -267,8 +267,22 @@ Run-Test "TC-T6 Favor picker timeout auto-cancels" {
   if (@($r.favorCandidates).Count -lt 1) {
     throw "favorCandidates should have at least 1 candidate"
   }
-  if (-not (Get-PendingAction $r.room)) {
-    throw "pendingAction should be set while the Favor picker is open"
+  # Phase 1a does NOT open a Nope window (the action isn't committed
+  # until a target is chosen) — but it DOES arm the 10s picker timeout via
+  # pendingTargetPick. Without that state the sweeper has nothing to
+  # auto-cancel and the room stalls forever.
+  if (Get-PendingAction $r.room) {
+    throw "pendingAction should NOT be set during Favor phase 1 (target picker)"
+  }
+  $ptp = $r.room.gameState.pendingTargetPick
+  if (-not $ptp) {
+    throw "pendingTargetPick should be set while the Favor target picker is open"
+  }
+  if ($ptp.kind -ne "FavorTarget") {
+    throw "pendingTargetPick.kind should be 'FavorTarget', got '$($ptp.kind)'"
+  }
+  if ($ptp.initiatorId -ne $hostMember.id) {
+    throw "pendingTargetPick.initiatorId should be the host, got '$($ptp.initiatorId)'"
   }
 
   # Đợi 13s cho picker timeout
@@ -276,12 +290,20 @@ Run-Test "TC-T6 Favor picker timeout auto-cancels" {
   Start-Sleep -Seconds 13
 
   $snap = Get-Snap -Room $room
+  # pendingTargetPick nên đã được clear (auto-cancel)
+  if ($snap.gameState.pendingTargetPick) {
+    throw "pendingTargetPick should be cleared after the picker timeout"
+  }
   # pendingFavorPick nên đã được clear (auto-cancel)
   if ($snap.gameState.pendingFavorPick) {
     throw "pendingFavorPick should be cleared after the picker timeout"
   }
   if (Get-PendingAction $snap) {
     throw "pendingAction should be cleared after the picker timeout"
+  }
+  # Lượt phải đã chuyển sang người kế (auto-cancel kết thúc lượt)
+  if ($snap.gameState.currentTurnMemberId -eq $hostMember.id) {
+    throw "Turn should have advanced after the Favor picker auto-cancelled"
   }
 }
 

@@ -2,13 +2,22 @@ import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 
-// Regression tests for the 26/10/2026 prod incident
-// (tricardgame.netlify.app): during a Render cold-start the UI
-// optimistically navigated to /lobby with a RANDOM placeholder code,
-// toasted "Đã tạo phòng XXXXXX", and let the player copy that fake code.
-// Seconds later the real response landed and patched sessionStorage to the
-// real code — but the toast/copy button still showed the fake one, and the
-// console filled with CORS + polling noise.
+// Regression tests for the 26/10/2026 + 28/10/2026 prod incidents
+// (tricardgame.netlify.app):
+//   26/10: during a Render cold-start the UI optimistically navigated to
+//     /lobby with a RANDOM placeholder code, toasted "Đã tạo phòng XXXXXX",
+//     and let the player copy that fake code. Seconds later the real response
+//     landed and patched sessionStorage to the real code — but the toast/copy
+//     button still showed the fake one, and the console filled with CORS +
+//     polling noise.
+//   28/10: lobby stuck on "••••••" with a DISABLED copy button forever, and
+//     the eye-toggle showed nothing. Two root causes:
+//     (a) the failure rollback routed through the landing onNavigate handler,
+//         which navigates to /lobby unconditionally → dead /lobby, no way out;
+//     (b) concurrent PENDING writes could clobber the REAL session patch
+//         (no serialisation). Fixed with the session patch queue in
+//         config/env.js + the background retry queue in useOptimisticRoom.js,
+//         and the rollback now uses the router directly.
 
 const repoRoot = path.resolve(__dirname, "..", "..");
 const read = (p) => fs.readFileSync(path.join(repoRoot, p), "utf8");
@@ -42,6 +51,72 @@ describe("cold-start room code — no fake placeholder", () => {
   it("lobby offline/prune guard reads the flattened session shape", () => {
     const src = read("src/pages/lobby/LobbyPage.jsx");
     expect(src).not.toContain("session?.session?.playerId");
+  });
+
+  it("rollback goes straight to landing via the router (28/10 dead-lobby fix)", () => {
+    const src = read("src/hooks/useOptimisticRoom.js");
+    // The rollback callback must call navigate(ROUTES.landing) directly —
+    // never onNavigate(ROUTES.landing), which the landing handlers treat
+    // as a room object and bounce back to /lobby.
+    expect(src).toContain("navigate(ROUTES.landing");
+    expect(src).not.toMatch(/onNavigate\s*\(\s*ROUTES\.landing/);
+  });
+
+  it("session writes go through the FIFO patch queue (28/10 clobber fix)", () => {
+    const hookSrc = read("src/hooks/useOptimisticRoom.js");
+    const envSrc = read("src/config/env.js");
+    // The hook must queue patches, not bare-save them, so a double-click
+    // PENDING write can never overwrite the REAL room patch.
+    expect(hookSrc).toContain("queueSessionPatch");
+    expect(envSrc).toContain("sessionPatchQueue");
+    expect(envSrc).toContain("queueSessionPatch");
+  });
+
+  it("background POST retries with backoff before rolling back", () => {
+    const src = read("src/hooks/useOptimisticRoom.js");
+    expect(src).toContain("enqueueBackgroundRetry");
+    expect(src).toContain("RETRY_MAX_ATTEMPTS");
+    expect(src).toContain("RETRY_BASE_DELAY_MS");
+  });
+
+  it("REAL room patch re-announces the code when already on /lobby", () => {
+    const src = read("src/pages/landing/LandingPage.jsx");
+    // The background POST resolves while the lobby is already mounted —
+    // the handler must toast the real code instead of navigating again.
+    expect(src).toContain("Phòng đã sẵn sàng");
+  });
+});
+
+describe("game page initial snapshot — StrictMode double-invoke fix", () => {
+  // Regression: the game page mounted and stayed on "Đang tải ván chơi…"
+  // forever ("Mất kết nối với máy chủ."). Root cause: the initial-snapshot
+  // effect used a boolean "already fetched" ref. React StrictMode
+  // double-invokes effects (mount → cleanup → mount), so the FIRST
+  // invocation set the flag and the SECOND (the one that actually renders)
+  // bailed out early — the snapshot was never applied and `room` stayed
+  // null for the whole session.
+  //
+  // The fix: let every mount attempt fetch and let the LAST one win. The
+  // per-attempt `cancelled` flag discards the stale StrictMode result.
+
+  it("does not gate the initial fetch behind a boolean ref check", () => {
+    const src = read("src/pages/game/GamePage.jsx");
+    // The bail-out must NOT depend on a boolean flag that StrictMode
+    // already tripped during the discarded first invocation.
+    expect(src).not.toMatch(/initialFetchDoneRef\.current\)\s*return/);
+    expect(src).not.toMatch(/!initialFetchDoneRef\.current/);
+  });
+
+  it("still cancels the stale StrictMode attempt so the last one wins", () => {
+    const src = read("src/pages/game/GamePage.jsx");
+    expect(src).toContain("if (cancelled) return;");
+    expect(src).toContain("cancelled = true;");
+  });
+
+  it("applies the snapshot to room when members are present", () => {
+    const src = read("src/pages/game/GamePage.jsx");
+    expect(src).toContain("if (data && data.members)");
+    expect(src).toContain("setRoom(data)");
   });
 });
 

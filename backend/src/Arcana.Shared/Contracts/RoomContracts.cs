@@ -70,6 +70,10 @@ public record GameStateDto(
     // Favor-pick pending state — surfaces which player must pick the card
     // they want to give, and the shuffled candidate list.
     PendingFavorPickDto? PendingFavorPick = null,
+    // Target-pick pending state (Favor phase 1 — "choose who to ask").
+    // Exposed so the client can render the player picker and so the
+    // 10s auto-cancel timeout is observable from the outside.
+    PendingTargetPickDto? PendingTargetPick = null,
     // AFK auto-play: list of memberIds the server has marked as AFK (their
     // first 10s turn timed out). Exposed so the client can render the
     // "Bạn có đang chơi không?" modal and surface a "X đã quay lại" toast
@@ -81,7 +85,7 @@ public record GameStateDto(
     // way the player has a full 60s window the moment the game UI renders,
     // instead of opening the tab to find they're already AFK.
     bool ClientReady = false,
-// Bot turn override: seconds a bot takes to act. 0 = instant action on
+    // Bot turn override: seconds a bot takes to act. 0 = instant action on
     // the bot's turn (default). Capped at GameService.TurnTimeLimitSeconds
     // (10s) so a slow bot can never outlive the player it shares a room with.
     int BotTurnSeconds = 0,
@@ -94,6 +98,13 @@ public record PendingFavorPickDto(
     string TargetMemberId,
     string InitiatorId,
     IReadOnlyList<string> ShuffledCandidates);
+
+public record PendingTargetPickDto(
+    string Kind,
+    string CardKey,
+    string InitiatorId,
+    IReadOnlyList<string> CandidateMemberIds,
+    string CreatedAt);
 
 public record PendingActionDto(string InitiatorId, string CardKey, IReadOnlyList<string> NopeChain, string CreatedAt);
 

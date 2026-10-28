@@ -10,6 +10,7 @@ import globals from "globals";
 import react from "eslint-plugin-react";
 import reactHooks from "eslint-plugin-react-hooks";
 import jsxA11y from "eslint-plugin-jsx-a11y";
+import tseslint from "typescript-eslint";
 
 export default [
   // Globals available in the browser. node:false so things like `process.env`
@@ -81,6 +82,44 @@ export default [
       // The build's automatic JSX transform handles JSX → React.createElement,
       // and we still need React for the explicit .X lookups elsewhere.
       "react/jsx-uses-react": "off",
+    },
+  },
+
+  // ── Playwright E2E specs (TypeScript) ───────────────────────────────
+  //
+  // The E2E suite used to be invisible to the linter — `npm run lint` only
+  // scans `src`, so a broken spec (typo in a selector, unused import, a
+  // `any` creeping in) only surfaced at runtime, minutes into CI. The
+  // typescript-eslint parser + the node/browser globals below make the
+  // specs a first-class lint target.
+  {
+    files: ["e2e/**/*.ts"],
+    languageOptions: {
+      parser: tseslint.parser,
+      ecmaVersion: 2022,
+      sourceType: "module",
+      globals: {
+        ...globals.browser,
+        ...globals.node,
+      },
+    },
+    plugins: {
+      "@typescript-eslint": tseslint.plugin,
+    },
+    rules: {
+      ...tseslint.configs.recommended.rules,
+      // Playwright fixtures are injected — no-undef can't see them, but
+      // no-unused-vars still can and should.
+      "no-unused-vars": "off",
+      "@typescript-eslint/no-unused-vars": ["warn", {
+        argsIgnorePattern: "^_",
+        varsIgnorePattern: "^_",
+        caughtErrorsIgnorePattern: "^_",
+      }],
+      // `any` is tolerated in specs (the API payloads are loosely typed) but
+      // flagged so it doesn't spread into production code.
+      "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/no-unused-vars": "warn",
     },
   },
 

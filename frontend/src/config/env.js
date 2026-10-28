@@ -82,6 +82,60 @@ export function saveSession(session) {
   } catch (_) { /* private mode / quota */ }
 }
 
+// ── Session patch queue (FIFO) ─────────────────────────────────────
+// Why a queue? During a Render cold-start the optimistic flow fires two
+// session writes seconds apart: PENDING first, then the REAL room when the
+// background POST resolves. If the player double-clicks "Tạo phòng" (or a
+// create + join race in two tabs sharing one renderer), the writes can land
+// out of order and the REAL code gets overwritten by a stale PENDING write —
+// leaving the lobby stuck on "••••••" with a disabled copy button forever
+// (prod incident 28/10). Queuing serialises every patch so the LAST write
+// always wins in arrival order, never in race order.
+//
+// Usage: queueSessionPatch(partialOrFull) — accepts either a full session
+// object or a partial; partials are shallow-merged over the stored session.
+// The queue flushes on a microtask, so callers stay synchronous.
+const sessionPatchQueue = [];
+let sessionQueueScheduled = false;
+
+function flushSessionQueue() {
+  sessionQueueScheduled = false;
+  if (sessionPatchQueue.length === 0) return;
+  try {
+    const current = loadSession() || {};
+    let next = { ...current };
+    for (const patch of sessionPatchQueue.splice(0)) {
+      if (patch && typeof patch === "object") {
+        next = { ...next, ...patch };
+      }
+    }
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(next));
+    emitSessionChange(next);
+  } catch (_) { /* private mode / quota — drop the queue */ }
+}
+
+export function queueSessionPatch(patch) {
+  sessionPatchQueue.push(patch);
+  if (!sessionQueueScheduled) {
+    sessionQueueScheduled = true;
+    // Microtask first (same tick if possible), fallback to macrotask.
+    if (typeof queueMicrotask === "function") {
+      queueMicrotask(flushSessionQueue);
+    } else {
+      setTimeout(flushSessionQueue, 0);
+    }
+  }
+}
+
+export function pendingSessionQueueLength() {
+  return sessionPatchQueue.length;
+}
+
+export function clearSessionQueue() {
+  sessionPatchQueue.length = 0;
+  sessionQueueScheduled = false;
+}
+
 export function loadSession() {
   try {
     const raw = sessionStorage.getItem(SESSION_KEY);

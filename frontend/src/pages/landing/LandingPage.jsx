@@ -4,7 +4,7 @@
 //                    second click posts /api/rooms/join and navigates.
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { ROUTES, saveLastName, loadLastName, API_BASE_URL } from "@config/env.js";
 import { useAudio } from "@shared/audio/AudioManager.jsx";
 import { useToast } from "@shared/ui/toast.jsx";
@@ -36,6 +36,7 @@ if (typeof window !== "undefined") {
 
 export default function LandingPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const audio = useAudio();
   const toast = useToast();
   const { t } = useI18n();
@@ -80,31 +81,60 @@ export default function LandingPage() {
   // Two separate navigate handlers so create/join get their own toast copy.
   // Cold-start guard: the optimistic path navigates with an EMPTY code and
   // patches the real one in seconds later — never toast/copy a blank code.
+  //
+  // IMPORTANT: these handlers double as the cold-start "wake-up" signal.
+  // useOptimisticRoom re-invokes onNavigate(realRoom) when the background
+  // POST resolves — the lobby is already mounted by then, but this lets us
+  // surface the real code in a toast AND forces a re-render even if the
+  // SessionProvider event was missed. Do NOT navigate here when the room
+  // is already real (we are on /lobby already) — just toast the code.
+  // The one exception is the failure-rollback path: useOptimisticRoom now
+  // navigates to landing directly via the router (never through here), so
+  // a "/" string reaching this handler can only be a stale call — ignore it.
   const onCreateNavigate = useCallback(
-    (room) => {
+    (roomOrPath) => {
+      if (typeof roomOrPath === "string") return; // stale rollback call — ignore
+      const room = roomOrPath;
       const code = room?.code && !String(room.code).startsWith("PENDING") ? room.code : "";
       if (!code) {
         toast.info("Đang khởi tạo phòng… mã phòng sẽ hiện sau vài giây.", { title: "Tạo phòng", duration: 2500 });
-      } else {
+        navigate(ROUTES.lobby, { replace: true });
+      } else if (room?.optimistic) {
+        toast.info("Đang khởi tạo phòng… mã phòng sẽ hiện sau vài giây.", { title: "Tạo phòng", duration: 2500 });
+        navigate(ROUTES.lobby, { replace: true });
+      } else if (!location.pathname.startsWith(ROUTES.lobby)) {
         audio.playSfx("roomCodeReveal");
         toast.success(`Đã tạo phòng ${code}`, { title: "Tạo phòng thành công", duration: 2000 });
+        navigate(ROUTES.lobby, { replace: true });
+      } else {
+        // Background POST just resolved while we are already on /lobby:
+        // announce the real code so the player knows copy now works.
+        audio.playSfx("roomCodeReveal");
+        toast.success(`Mã phòng của bạn: ${code}`, { title: "Phòng đã sẵn sàng", duration: 3000 });
       }
-      navigate(ROUTES.lobby, { replace: true });
     },
-    [audio, toast, navigate],
+    [audio, toast, navigate, location.pathname],
   );
   const onJoinNavigate = useCallback(
-    (room) => {
+    (roomOrPath) => {
+      if (typeof roomOrPath === "string") return; // stale rollback call — ignore
+      const room = roomOrPath;
       const code = room?.code && !String(room.code).startsWith("PENDING") ? room.code : "";
-      if (!code) {
+      if (!code || room?.optimistic) {
         toast.info("Đang vào phòng…", { title: "Vào phòng", duration: 2500 });
+        if (!location.pathname.startsWith(ROUTES.lobby)) {
+          navigate(ROUTES.lobby, { replace: true });
+        }
+      } else if (!location.pathname.startsWith(ROUTES.lobby)) {
+        audio.playSfx("roomCodeReveal");
+        toast.success(`Đã vào phòng ${code}`, { title: "Vào phòng thành công", duration: 2000 });
+        navigate(ROUTES.lobby, { replace: true });
       } else {
         audio.playSfx("roomCodeReveal");
         toast.success(`Đã vào phòng ${code}`, { title: "Vào phòng thành công", duration: 2000 });
       }
-      navigate(ROUTES.lobby, { replace: true });
     },
-    [audio, toast, navigate],
+    [audio, toast, navigate, location.pathname],
   );
 
   const { run: runCreate, busy: busyCreate } = useOptimisticRoom({ onNavigate: onCreateNavigate });

@@ -29,7 +29,10 @@ namespace Arcana.Api.HostedServices;
 /// guaranteed delay.
 /// </para>
 /// </summary>
-public sealed class FuturePeekSweeperService : BackgroundService
+public sealed class FuturePeekSweeperService(
+    IServiceScopeFactory scopeFactory,
+    IFuturePeekRegistry registry,
+    ILogger<FuturePeekSweeperService> logger) : BackgroundService
 {
     /// <summary>How often this loop scans the registry for expired entries.</summary>
     private const int PollIntervalMs = 10_000;
@@ -45,19 +48,9 @@ public sealed class FuturePeekSweeperService : BackgroundService
     /// </summary>
     public static readonly TimeSpan PeekLifetime = TimeSpan.FromSeconds(GameService.FuturePeekSeconds);
 
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly IFuturePeekRegistry _registry;
-    private readonly ILogger<FuturePeekSweeperService> _logger;
-
-    public FuturePeekSweeperService(
-        IServiceScopeFactory scopeFactory,
-        IFuturePeekRegistry registry,
-        ILogger<FuturePeekSweeperService> logger)
-    {
-        _scopeFactory = scopeFactory;
-        _registry = registry;
-        _logger = logger;
-    }
+    private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
+    private readonly IFuturePeekRegistry _registry = registry;
+    private readonly ILogger<FuturePeekSweeperService> _logger = logger;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {

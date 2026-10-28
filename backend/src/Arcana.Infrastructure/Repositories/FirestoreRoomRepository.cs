@@ -6,17 +6,11 @@ using Google.Cloud.Firestore;
 
 namespace Arcana.Infrastructure.Repositories;
 
-public class FirestoreRoomRepository : IRoomRepository
+public class FirestoreRoomRepository(FirestoreDb db, ICodeReservationService codeReservation) : IRoomRepository
 {
     private const string RoomsCollection = "rooms";
-    private readonly FirestoreDb _db;
-    private readonly ICodeReservationService _codeReservation;
-
-    public FirestoreRoomRepository(FirestoreDb db, ICodeReservationService codeReservation)
-    {
-        _db = db;
-        _codeReservation = codeReservation;
-    }
+    private readonly FirestoreDb _db = db;
+    private readonly ICodeReservationService _codeReservation = codeReservation;
 
     public async Task<Room?> GetByIdAsync(string id, CancellationToken ct = default)
     {
@@ -86,7 +80,7 @@ public class FirestoreRoomRepository : IRoomRepository
             if (!room.Members.Any(m => m.Id == candidate.Id))
                 room.Members.Add(candidate);
             return room;
-        });
+        }, cancellationToken: ct);
     }
 
     public async Task<Room?> RemoveMemberAsync(string roomId, string memberId, CancellationToken ct = default)
@@ -118,7 +112,7 @@ public class FirestoreRoomRepository : IRoomRepository
             var dropped = room.Members.FirstOrDefault(m => m.Id == memberId);
             if (dropped != null) room.Members.Remove(dropped);
             return room;
-        });
+        }, cancellationToken: ct);
     }
 
     public async Task<RoomMember?> UpdateMemberFieldAsync(
@@ -161,7 +155,7 @@ public class FirestoreRoomRepository : IRoomRepository
                 IsOnline = true,
                 IsBot = updated.TryGetValue("isBot", out var ib) && ib is bool ibb && ibb,
             };
-        });
+        }, cancellationToken: ct);
     }
 
     public async Task<int> MarkStaleMembersOfflineAsync(string roomId, TimeSpan offlineAfter, CancellationToken ct = default)
@@ -343,7 +337,7 @@ public class FirestoreRoomRepository : IRoomRepository
             Status = Enum.TryParse<RoomStatus>(data.TryGetValue("status", out var s) ? s as string : null, true, out var rs) ? rs : RoomStatus.Waiting,
             MaxPlayers = data.TryGetValue("maxPlayers", out var mp) && mp is long mpL ? (int)mpL : 7,
             CreatedAt = data.TryGetValue("createdAt", out var ca) && ca is Timestamp ts ? ts.ToDateTime().ToUniversalTime() : DateTime.UtcNow,
-            Members = new List<RoomMember>(),
+            Members = [],
         };
 
         if (data.TryGetValue("gameState", out var gsRaw) && gsRaw is Dictionary<string, object> gsDoc && gsDoc.Count > 0)
@@ -453,7 +447,7 @@ public class FirestoreRoomRepository : IRoomRepository
                 CreatedAt = paDict.TryGetValue("createdAt", out var pca) && pca is Timestamp cats ? cats.ToDateTime().ToUniversalTime() : DateTime.UtcNow,
                 NopeChain = paDict.TryGetValue("nopeChain", out var nc) && nc is IEnumerable<object> ncList
                     ? ncList.Select(n => n as string ?? string.Empty).Where(s => s.Length > 0).ToList()
-                    : new List<string>(),
+                    : [],
             };
             // Clean empty strings to null
             if (string.IsNullOrEmpty(gs.PendingAction.DiscardPickKey)) gs.PendingAction.DiscardPickKey = null;

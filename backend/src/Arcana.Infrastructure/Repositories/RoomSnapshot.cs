@@ -59,22 +59,22 @@ public static class RoomSnapshot
 
         return new GameState
         {
-            Deck = source.Deck.ToList(),
-            DiscardPile = source.DiscardPile.ToList(),
+            Deck = [.. source.Deck],
+            DiscardPile = [.. source.DiscardPile],
             PreShuffleDeck = source.PreShuffleDeck?.ToList(),
             PreAttackCounter = source.PreAttackCounter,
             CurrentTurnMemberId = source.CurrentTurnMemberId,
             AttackCounter = source.AttackCounter,
             TurnStartedAt = source.TurnStartedAt,
-            TurnOrder = source.TurnOrder.ToList(),
+            TurnOrder = [.. source.TurnOrder],
             WinnerId = source.WinnerId,
             StartedAt = source.StartedAt,
             EndedAt = source.EndedAt,
             ClientReady = source.ClientReady,
-            DrawOnlyBotIds = source.DrawOnlyBotIds.ToHashSet(),
-            PlayCardsBotIds = source.PlayCardsBotIds.ToHashSet(),
+            DrawOnlyBotIds = [.. source.DrawOnlyBotIds],
+            PlayCardsBotIds = [.. source.PlayCardsBotIds],
             DisableBotService = source.DisableBotService,
-            AfkMemberIds = source.AfkMemberIds.ToHashSet(),
+            AfkMemberIds = [.. source.AfkMemberIds],
             FuturePeek = source.FuturePeek?.ToList(),
             FuturePeekAt = source.FuturePeekAt,
             PendingAction = ClonePendingAction(source.PendingAction),
@@ -92,6 +92,12 @@ public static class RoomSnapshot
             LastPlayedAt = source.LastPlayedAt,
             LastPlayedByNope = source.LastPlayedByNope,
             PendingFavorPick = source.PendingFavorPick,
+            // FIX: PendingTargetPick (Favor phase-1 / combo target picker)
+            // was missing from the clone, so the 10s picker-timeout state
+            // was dropped every time a room was read back from the cache.
+            // The sweeper then never saw a pending picker and the room
+            // stalled forever waiting for a target the server had forgotten.
+            PendingTargetPick = ClonePendingTargetPick(source.PendingTargetPick),
             // FIX: OneCardBotCardMap was missing from the clone, so the
             // "play one specific card" bot mode silently degraded to
             // draw-only every time a room was read back from the cache.
@@ -100,7 +106,7 @@ public static class RoomSnapshot
             // was never played.
             OneCardBotCardMap = source.OneCardBotCardMap != null
                 ? new Dictionary<string, string>(source.OneCardBotCardMap)
-                : new Dictionary<string, string>(),
+                : [],
             // FIX: BotTurnSeconds was missing, causing bots to never act when
             // read from cache (BotService and TurnClockService both read from cache).
             BotTurnSeconds = source.BotTurnSeconds,
@@ -116,9 +122,22 @@ public static class RoomSnapshot
             CardKey = source.CardKey,
             DiscardPickKey = source.DiscardPickKey,
             CreatedAt = source.CreatedAt,
-            NopeChain = source.NopeChain.ToList(),
+            NopeChain = [.. source.NopeChain],
             // FIX: SkipTurnAdvance was missing from the clone.
             SkipTurnAdvance = source.SkipTurnAdvance,
+        };
+    }
+
+    private static PendingTargetPick? ClonePendingTargetPick(PendingTargetPick? source)
+    {
+        if (source is null) return null;
+        return new PendingTargetPick
+        {
+            Kind = source.Kind,
+            CardKey = source.CardKey,
+            InitiatorId = source.InitiatorId,
+            CandidateMemberIds = [.. source.CandidateMemberIds],
+            CreatedAt = source.CreatedAt,
         };
     }
 }

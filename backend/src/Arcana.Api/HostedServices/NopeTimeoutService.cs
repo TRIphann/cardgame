@@ -15,7 +15,10 @@ namespace Arcana.Api.HostedServices;
 /// so the scoped GameService / repository are the same ones the HTTP path
 /// uses.
 /// </summary>
-public sealed class NopeTimeoutService : BackgroundService
+public sealed class NopeTimeoutService(
+    IServiceScopeFactory scopeFactory,
+    INopeWindowRegistry registry,
+    ILogger<NopeTimeoutService> logger) : BackgroundService
 {
     /// <summary>How often this loop scans for stale Nope windows.</summary>
     private const int PollIntervalMs = 500;
@@ -23,19 +26,9 @@ public sealed class NopeTimeoutService : BackgroundService
     /// <summary>Total window length — unified 10s rule, mirrors GameService.NopeWindowSeconds.</summary>
     public const int NopeWindowSeconds = 10;
 
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly INopeWindowRegistry _registry;
-    private readonly ILogger<NopeTimeoutService> _logger;
-
-    public NopeTimeoutService(
-        IServiceScopeFactory scopeFactory,
-        INopeWindowRegistry registry,
-        ILogger<NopeTimeoutService> logger)
-    {
-        _scopeFactory = scopeFactory;
-        _registry = registry;
-        _logger = logger;
-    }
+    private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
+    private readonly INopeWindowRegistry _registry = registry;
+    private readonly ILogger<NopeTimeoutService> _logger = logger;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {

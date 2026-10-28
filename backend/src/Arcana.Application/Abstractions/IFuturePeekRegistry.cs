@@ -53,7 +53,7 @@ public sealed class FuturePeekRegistry : IFuturePeekRegistry
         lock (_gate)
         {
             // Return a snapshot so callers can iterate without holding the lock.
-            return _entries.Values.ToList();
+            return [.. _entries.Values];
         }
     }
 

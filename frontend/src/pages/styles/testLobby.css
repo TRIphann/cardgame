@@ -227,6 +227,10 @@
 
 .btn-first {
   flex-shrink: 0;
+  /* Min 44px touch target (WCAG 2.5.5 / iOS HIG). The visual padding stays
+     compact but the hit area meets the 44px minimum. */
+  min-height: 44px;
+  min-width: 44px;
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.2);
@@ -270,6 +274,9 @@
 }
 
 .toggle-btn {
+  /* Min 44px touch target (WCAG 2.5.5). */
+  min-height: 44px;
+  min-width: 44px;
   padding: 0.35rem 0.75rem;
   border-radius: 6px;
   border: 1px solid rgba(255, 255, 255, 0.2);
@@ -310,6 +317,8 @@
 
 .tab-btn {
   flex: 1;
+  /* Min 44px touch target (WCAG 2.5.5). */
+  min-height: 44px;
   padding: 0.6rem 0.5rem;
   border: none;
   border-bottom: 2px solid transparent;
@@ -348,6 +357,23 @@
   gap: 0.5rem;
   margin-bottom: 1rem;
   flex-wrap: wrap;
+}
+
+/* Bot-speed stepper (− Ns +). The stepper had no CSS at all, so the
+   flex algorithm squeezed the 44px buttons down to 29px wide and broke
+   the touch-target guarantee. */
+.speed-control {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.speed-value {
+  min-width: 3ch;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  color: #d0d0d0;
 }
 
 .member-card-section {
@@ -461,7 +487,13 @@
      22x22 which failed the Playwright touch-target audit on mobile. The
      visual circle is still small (border-radius + flex centering) so it
      doesn't dominate the card, but the hit area meets accessibility
-     standards on every viewport. */
+     standards on every viewport.
+
+     `flex-shrink: 0` is REQUIRED: these buttons live inside flex rows
+     (the per-bot card counters, the bot-speed stepper). Without it the
+     flex algorithm squeezed them down to 29px wide, which silently broke
+     the 44x44 touch-target guarantee the audit checks. */
+  flex-shrink: 0;
   border-radius: 50%;
   border: 1px solid rgba(255, 255, 255, 0.25);
   background: rgba(255, 255, 255, 0.08);
@@ -668,6 +700,8 @@
 
 /* ─── Buttons ──────────────────────────────────────────────── */
 .btn-secondary {
+  /* Min 44px touch target (WCAG 2.5.5). */
+  min-height: 44px;
   padding: 0.5rem 0.9rem;
   border-radius: 6px;
   border: 1px solid rgba(255, 255, 255, 0.15);
@@ -700,6 +734,8 @@
 }
 
 .btn-leave, .btn-start {
+  /* Min 44px touch target (WCAG 2.5.5). */
+  min-height: 44px;
   padding: 0.75rem 1.5rem;
   border-radius: 8px;
   font-size: 0.95rem;

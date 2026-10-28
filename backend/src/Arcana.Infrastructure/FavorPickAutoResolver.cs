@@ -17,21 +17,14 @@ namespace Arcana.Infrastructure;
 // auto-pick is a cross-cutting concern (it runs continuously across all
 // rooms without a player request) and Poll-and-resolve is its natural
 // shape. The background sweeper just calls ResolveAsync for each hit.
-public sealed class FavorPickAutoResolver : IFavorPickAutoResolver
+public sealed class FavorPickAutoResolver(
+    IRoomCache roomCache,
+    IServiceScopeFactory scopeFactory,
+    ILogger<FavorPickAutoResolver> logger) : IFavorPickAutoResolver
 {
-    private readonly IRoomCache _roomCache;
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ILogger<FavorPickAutoResolver> _logger;
-
-    public FavorPickAutoResolver(
-        IRoomCache roomCache,
-        IServiceScopeFactory scopeFactory,
-        ILogger<FavorPickAutoResolver> logger)
-    {
-        _roomCache = roomCache;
-        _scopeFactory = scopeFactory;
-        _logger = logger;
-    }
+    private readonly IRoomCache _roomCache = roomCache;
+    private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
+    private readonly ILogger<FavorPickAutoResolver> _logger = logger;
 
     // Unified 10-second picker rule: matches GameService.PickerTimeoutSeconds.
     // The Favor target/card picker, Combo 2/3 picker and Bomb placement

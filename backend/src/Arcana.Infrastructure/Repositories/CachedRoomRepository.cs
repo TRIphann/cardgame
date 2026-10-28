@@ -22,21 +22,14 @@ namespace Arcana.Infrastructure.Repositories;
 ///     isolation so they bypass the cache).
 /// </para>
 /// </summary>
-public sealed class CachedRoomRepository : IRoomRepository
+public sealed class CachedRoomRepository(
+    FirestoreRoomRepository inner,
+    IRoomCache cache,
+    ILogger<CachedRoomRepository> logger) : IRoomRepository
 {
-    private readonly FirestoreRoomRepository _inner;
-    private readonly IRoomCache _cache;
-    private readonly ILogger<CachedRoomRepository> _logger;
-
-    public CachedRoomRepository(
-        FirestoreRoomRepository inner,
-        IRoomCache cache,
-        ILogger<CachedRoomRepository> logger)
-    {
-        _inner = inner;
-        _cache = cache;
-        _logger = logger;
-    }
+    private readonly FirestoreRoomRepository _inner = inner;
+    private readonly IRoomCache _cache = cache;
+    private readonly ILogger<CachedRoomRepository> _logger = logger;
 
     // ── Reads: cache-first ────────────────────────────────────────
 

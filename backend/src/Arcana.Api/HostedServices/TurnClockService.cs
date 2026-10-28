@@ -25,7 +25,10 @@ namespace Arcana.Api.HostedServices;
 /// so the project isn't drained.
 /// </para>
 /// </summary>
-public sealed class TurnClockService : BackgroundService
+public sealed class TurnClockService(
+    IServiceScopeFactory scopeFactory,
+    ITurnClockRegistry registry,
+    ILogger<TurnClockService> logger) : BackgroundService
 {
     /// <summary>How often the background loop scans the registry.</summary>
     private const int PollIntervalMs = 2_000;
@@ -44,20 +47,10 @@ public sealed class TurnClockService : BackgroundService
     /// </summary>
     public const int TurnTimeLimitSeconds = GameService.TurnTimeLimitSeconds;
 
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ITurnClockRegistry _registry;
-    private readonly ILogger<TurnClockService> _logger;
+    private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
+    private readonly ITurnClockRegistry _registry = registry;
+    private readonly ILogger<TurnClockService> _logger = logger;
     private long _quotaCooldownUntilTicks;
-
-    public TurnClockService(
-        IServiceScopeFactory scopeFactory,
-        ITurnClockRegistry registry,
-        ILogger<TurnClockService> logger)
-    {
-        _scopeFactory = scopeFactory;
-        _registry = registry;
-        _logger = logger;
-    }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -118,7 +111,7 @@ public sealed class TurnClockService : BackgroundService
         for (var e = ex; e != null; e = e.InnerException)
         {
             var msg = e.Message;
-            if (msg != null && msg.IndexOf("Quota exceeded", StringComparison.OrdinalIgnoreCase) >= 0)
+            if (msg != null && msg.Contains("Quota exceeded", StringComparison.OrdinalIgnoreCase))
                 return true;
         }
         return false;

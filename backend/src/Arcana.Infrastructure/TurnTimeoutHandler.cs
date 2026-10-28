@@ -18,21 +18,14 @@ namespace Arcana.Infrastructure;
 /// that to DrawCardAsync so we never draw for the wrong person — race-free
 /// because the read happens inside the same scope that performs the write.
 /// </summary>
-public sealed class TurnTimeoutHandler : ITurnTimeoutHandler
+public sealed class TurnTimeoutHandler(
+    IServiceScopeFactory scopeFactory,
+    ITurnClockRegistry registry,
+    ILogger<TurnTimeoutHandler> logger) : ITurnTimeoutHandler
 {
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ITurnClockRegistry _registry;
-    private readonly ILogger<TurnTimeoutHandler> _logger;
-
-    public TurnTimeoutHandler(
-        IServiceScopeFactory scopeFactory,
-        ITurnClockRegistry registry,
-        ILogger<TurnTimeoutHandler> logger)
-    {
-        _scopeFactory = scopeFactory;
-        _registry = registry;
-        _logger = logger;
-    }
+    private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
+    private readonly ITurnClockRegistry _registry = registry;
+    private readonly ILogger<TurnTimeoutHandler> _logger = logger;
 
     public async Task HandleAsync(string roomId, CancellationToken ct = default)
     {
@@ -87,7 +80,7 @@ public sealed class TurnTimeoutHandler : ITurnTimeoutHandler
             // own GetByIdAsync (saves 1 read per auto-draw — important for
             // AFK auto-play chains that fire every 2s).
             var drawResult = await gameService.DrawCardAsync(
-                roomId, memberId, room, ct, isAutoDraw: true);
+                roomId, memberId, room, isAutoDraw: true, ct: ct);
 
             // The fresh room snapshot is already on drawResult.Room from
             // DrawCardAsync's final read — use it directly to re-register
