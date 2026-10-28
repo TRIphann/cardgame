@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { createStartedGame, openGameAsHost, dismissTurnIntro } from '../helpers/game';
 
 // Test suite for Exploding Kittens frontend
 const BASE_URL = process.env.BASE_URL || 'http://localhost:5173';
@@ -166,12 +167,30 @@ test.describe('Frontend Visual & Responsive Tests', () => {
 });
 
 // Test game page if room exists
-test.describe('Game Page Tests (if room active)', () => {
-  test.skip('Game Page: Card animations and layout', async ({ page }) => {
-    // This would require actual game room
-    await page.goto(`${BASE_URL}/game/test-room-id`);
-    
-    await page.waitForTimeout(1000);
+test.describe('Game Page Tests', () => {
+  test('Game Page: Card animations and layout', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    const game = await createStartedGame('VisualHost');
+    await openGameAsHost(page, game);
+    await dismissTurnIntro(page);
+
+    // Hand cards enter with an anime.js fan-in; wait until they are fully
+    // opaque instead of sleeping a fixed time, then verify they animated in
+    // to a visible, laid-out state.
+    const cards = page.locator('.hand-card');
+    await expect.poll(async () => {
+      const opacities = await cards.evaluateAll((els) =>
+        els.map((el) => parseFloat(getComputedStyle(el).opacity)));
+      return opacities.length > 0 && opacities.every((o) => o > 0.99);
+    }, { timeout: 5_000 }).toBe(true);
+
+    // Cards in the fan are laid out left→right without collapsing onto
+    // each other (each one starts to the right of the previous one).
+    const xs = await cards.evaluateAll((els) => els.map((el) => el.getBoundingClientRect().x));
+    for (let i = 1; i < xs.length; i++) {
+      expect(xs[i]).toBeGreaterThan(xs[i - 1]);
+    }
+
     await page.screenshot({ path: './outputs/screenshots/game-page.png', fullPage: true });
   });
 });

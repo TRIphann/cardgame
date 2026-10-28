@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { createStartedGame, openGameAsHost, dismissTurnIntro } from '../helpers/game';
 
 const WEB_URL = process.env.BASE_URL || 'http://localhost:5173';
 
@@ -150,11 +151,43 @@ test.describe('Animation Quality', () => {
 });
 
 test.describe('Game Page Responsive', () => {
-  test.skip('Game board scales properly', async ({ page }) => {
-    // Skip for now - requires actual game session
-    // TODO: Add game session setup and test card animations
-    void page;
-  });
+  for (const viewport of viewports) {
+    test(`Game board scales properly - ${viewport.name} (${viewport.width}×${viewport.height})`, async ({ page }) => {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      const game = await createStartedGame(`Resp${viewport.width}`);
+      await openGameAsHost(page, game);
+      await dismissTurnIntro(page);
+
+      // Core table pieces render at every size.
+      await expect(page.locator('.game-table')).toBeVisible();
+      await expect(page.locator('.deck-pile').first()).toBeVisible();
+      await expect(page.locator('.hand-arc').first()).toBeVisible();
+
+      // The page must not scroll sideways.
+      const { bodyWidth, viewportWidth } = await page.evaluate(() => ({
+        bodyWidth: document.body.scrollWidth,
+        viewportWidth: window.innerWidth,
+      }));
+      expect(bodyWidth).toBeLessThanOrEqual(viewportWidth + 1);
+
+      // The fanned hand's container must stay inside the viewport width.
+      const arc = await page.locator('.hand-arc').first().boundingBox();
+      expect(arc).not.toBeNull();
+      expect(arc!.x).toBeGreaterThanOrEqual(-1);
+      expect(arc!.x + arc!.width).toBeLessThanOrEqual(viewport.width + 1);
+
+      // Every card keeps a usable, non-collapsed size.
+      const cards = page.locator('.hand-card');
+      const n = await cards.count();
+      expect(n).toBeGreaterThan(0);
+      for (let i = 0; i < n; i++) {
+        const box = await cards.nth(i).boundingBox();
+        expect(box, `card ${i} has no box`).not.toBeNull();
+        expect(box!.width).toBeGreaterThan(40);
+        expect(box!.height).toBeGreaterThan(50);
+      }
+    });
+  }
 });
 
 test.describe('Visual Regression - Layout Integrity', () => {
