@@ -18,6 +18,22 @@ Environment.SetEnvironmentVariable("DOTNET_fileWatcher__enabled", "false");
 
 var builder = WebApplication.CreateBuilder(args);
 
+// ── Ephemeral / CI mode ──────────────────────────────────────────
+// Firestore:UseInMemoryRepository=true swaps the room store for the
+// in-memory implementation. The CI integration workflow sets this so the
+// test run never touches the shared Firestore quota and never needs the
+// service-account JSON (which doesn't exist on a GitHub runner).
+//
+// It is read HERE (before the DI container is built) and also forced into
+// the configuration, so it works regardless of how the host was started
+// (`dotnet run`, the published binary, or a container).
+var useInMemoryRepository =
+    builder.Configuration.GetValue<bool?>("Firestore:UseInMemoryRepository") ?? false;
+if (useInMemoryRepository)
+{
+    builder.Configuration["Firestore:UseInMemoryRepository"] = "true";
+}
+
 // Render / Docker: bind to the runtime-injected $PORT.
 // (Docker bakes ENV at build time, so ASPNETCORE_URLS can't see Render's
 // runtime PORT — read it here instead. Falls back to launchSettings locally.)
@@ -44,6 +60,7 @@ builder.Services.AddHostedService<TurnClockService>();
 builder.Services.AddHostedService<NopeTimeoutService>();
 builder.Services.AddHostedService<FuturePeekSweeperService>();
 builder.Services.AddHostedService<FavorPickAutoResolverService>();
+builder.Services.AddHostedService<TargetPickAutoResolverService>();
 
 // Debounced background pruner so /snapshot endpoints don't pay a
 // Firestore read+write per request — the polling hook fires snapshot
@@ -91,7 +108,14 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment())
+// Swagger UI is a development convenience only — it exposes the entire API
+// surface, and the production smoke test asserts /swagger 404s.
+//
+// It is skipped in BOTH cases:
+//   - a non-Development environment (Render/production), and
+//   - ephemeral/CI mode, where the API is reachable by anyone with the
+//     runner URL and the production-like posture must match prod.
+if (app.Environment.IsDevelopment() && !useInMemoryRepository)
 {
     app.UseSwagger();
     app.UseSwaggerUI();

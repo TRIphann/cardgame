@@ -83,11 +83,9 @@ jobs:
     needs: [validate]
     uses: ./.github/workflows/deploy-backend.yml
     with:
-      # The deploy-backend workflow doesn't take any `with` inputs today;
-      # this `uses:` is enough to trigger it. The deploy hook fires on
-      # every push to main, but for releases we want the explicit
-      # re-deploy to lock the version.
-      ref: refs/tags/${{ needs.validate.outputs.tag }}
+      # Pin the deploy to the release tag — the backend must go live with
+      # exactly the commit the release was cut from.
+      ref: ${{ needs.validate.outputs.tag }}
     secrets: inherit
 
   deploy-front-end:
@@ -95,7 +93,8 @@ jobs:
     needs: [validate]
     uses: ./.github/workflows/deploy-frontend.yml
     with:
-      ref: refs/tags/${{ needs.validate.outputs.tag }}
+      ref: ${{ needs.validate.outputs.tag }}
+      target: production
     secrets: inherit
 
   publish-release:

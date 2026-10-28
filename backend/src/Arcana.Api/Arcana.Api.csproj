@@ -10,10 +10,16 @@
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
     <!-- SignalR: real-time push so all players see the same game state
          without each tab polling every 1-2s. The Hub broadcasts
-         "room-updated" after every GameService mutation. -->
+         "room-updated" after every GameService mutation.
+
+         Version note: 8.0.10 is vulnerable to CVE-2026-70159
+         (GHSA-334f-vvp4-7g6p, CVSS 7.5) — a SignalR stateful-reconnect
+         client can indefinitely block broadcasts via MessageBuffer
+         backpressure and retain resources (remote DoS). 8.0.32 is the
+         patched release on the .NET 8 branch. -->
     <PackageReference Include="Microsoft.AspNetCore.SignalR" Version="1.2.0" />
-    <PackageReference Include="Microsoft.AspNetCore.SignalR.Common" Version="8.0.10" />
-    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="8.0.10" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Common" Version="8.0.32" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="8.0.32" />
   </ItemGroup>
 
   <ItemGroup>

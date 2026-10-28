@@ -1,8 +1,10 @@
 import { test, expect } from '@playwright/test';
 
+const WEB_URL = process.env.BASE_URL || 'http://localhost:5173';
+
 test.describe('Touch Target Detailed Audit', () => {
   test('List all small touch targets with details', async ({ page }) => {
-    await page.goto('http://localhost:5173/test');
+    await page.goto(`${WEB_URL}/test`);
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(1000); // Wait for animations
 

@@ -1,7 +1,7 @@
-import { test, expect, devices } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 
 // Test suite for Exploding Kittens frontend
-const BASE_URL = 'http://localhost:5173';
+const BASE_URL = process.env.BASE_URL || 'http://localhost:5173';
 
 test.describe('Frontend Visual & Responsive Tests', () => {
   
@@ -80,7 +80,7 @@ test.describe('Frontend Visual & Responsive Tests', () => {
   });
 
   // Test 6: Animation - Draw card (if game is running)
-  test('Animation: Draw card transition', async ({ page, context }) => {
+  test('Animation: Draw card transition', async ({ page }) => {
     // This would require actual game state, so we test the CSS
     await page.goto(BASE_URL);
     

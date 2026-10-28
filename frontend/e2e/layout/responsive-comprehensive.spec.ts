@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test';
 
+const WEB_URL = process.env.BASE_URL || 'http://localhost:5173';
+
 const viewports = [
   { name: 'Mobile', width: 375, height: 667 },
   { name: 'Mobile Landscape', width: 667, height: 375 },
@@ -11,7 +13,7 @@ test.describe('Responsive Layout - Test Lobby', () => {
   for (const viewport of viewports) {
     test(`${viewport.name} (${viewport.width}×${viewport.height})`, async ({ page }) => {
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
-      await page.goto('http://localhost:5173/test');
+      await page.goto(`${WEB_URL}/test`);
       await page.waitForLoadState('networkidle');
 
       // Wait for the lobby to actually populate. The header + tab strip +
@@ -66,7 +68,7 @@ test.describe('Responsive Layout - Test Lobby', () => {
 
 test.describe('Animation Quality', () => {
   test('Page entry fade-in', async ({ page }) => {
-    await page.goto('http://localhost:5173/test');
+    await page.goto(`${WEB_URL}/test`);
     await page.waitForLoadState('networkidle');
     
     // Check page has animated entry
@@ -81,7 +83,7 @@ test.describe('Animation Quality', () => {
   });
 
   test('Button hover effects', async ({ page }) => {
-    await page.goto('http://localhost:5173/test');
+    await page.goto(`${WEB_URL}/test`);
     await page.waitForLoadState('networkidle');
     
     const startBtn = page.locator('.btn-start');
@@ -104,7 +106,7 @@ test.describe('Animation Quality', () => {
   });
 
   test('Counter button interactions', async ({ page }) => {
-    await page.goto('http://localhost:5173/test');
+    await page.goto(`${WEB_URL}/test`);
     await page.waitForLoadState('networkidle');
     
     const plusBtn = page.locator('.btn-count-sm').filter({ hasText: '+' }).first();
@@ -126,7 +128,7 @@ test.describe('Animation Quality', () => {
   });
 
   test('Toggle button on/off states', async ({ page }) => {
-    await page.goto('http://localhost:5173/test');
+    await page.goto(`${WEB_URL}/test`);
     await page.waitForLoadState('networkidle');
     
     // Find first toggle button (Deal cards toggle - defaults to "on")
@@ -151,13 +153,14 @@ test.describe('Game Page Responsive', () => {
   test.skip('Game board scales properly', async ({ page }) => {
     // Skip for now - requires actual game session
     // TODO: Add game session setup and test card animations
+    void page;
   });
 });
 
 test.describe('Visual Regression - Layout Integrity', () => {
   test('Test lobby - no overlapping elements', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
-    await page.goto('http://localhost:5173/test');
+    await page.goto(`${WEB_URL}/test`);
     await page.waitForLoadState('networkidle');
     
     // Get all interactive elements

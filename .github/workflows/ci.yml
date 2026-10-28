@@ -26,22 +26,26 @@ on:
     paths:
       - 'backend/**'
       - 'frontend/src/**'
+      - 'frontend/e2e/**'
       - 'frontend/package.json'
       - 'frontend/package-lock.json'
       - 'frontend/eslint.config.js'
       - 'frontend/vite.config.js'
       - 'frontend/vitest.config.js'
+      - 'frontend/playwright.config.ts'
       - '.github/workflows/ci.yml'
   pull_request:
     branches: [main, dev]
     paths:
       - 'backend/**'
       - 'frontend/src/**'
+      - 'frontend/e2e/**'
       - 'frontend/package.json'
       - 'frontend/package-lock.json'
       - 'frontend/eslint.config.js'
       - 'frontend/vite.config.js'
       - 'frontend/vitest.config.js'
+      - 'frontend/playwright.config.ts'
       - '.github/workflows/ci.yml'
   workflow_dispatch:
 
@@ -85,7 +89,13 @@ jobs:
         with:
           dotnet-version: 8.0.x
           cache: true
-          cache-dependency-path: backend/**/packages.lock.json
+          # The cache key is derived from this file's hash. The old value
+          # pointed at `backend/**/packages.lock.json`, which does not exist
+          # in this repo (no project uses RestorePackagesWithLockFile), so
+          # setup-dotnet fell back to a random key and the NuGet cache was
+          # effectively never restored. Point it at the project files that
+          # actually determine the dependency graph.
+          cache-dependency-path: 'backend/**/*.csproj'
 
       - name: Restore dependencies
         run: dotnet restore Arcana.sln
@@ -192,6 +202,12 @@ jobs:
 
       - name: ESLint (max-warnings=0)
         run: npm run lint
+
+      - name: ESLint E2E specs (max-warnings=0)
+        # The Playwright specs are TypeScript — they used to be invisible to
+        # the linter, so a broken selector only surfaced at runtime, minutes
+        # into CI. Now they are a first-class lint target.
+        run: npm run lint:e2e
 
       - name: Production build
         # Inject the production API endpoints at build time so the bundle

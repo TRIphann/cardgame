@@ -20,6 +20,18 @@ public static class DependencyInjection
     {
         services.Configure<FirebaseOptions>(configuration.GetSection(FirebaseOptions.Section));
 
+        // ── Ephemeral / CI mode ─────────────────────────────────────────
+        // When Firestore:UseInMemoryRepository=true the whole room store is
+        // swapped for the in-memory implementation. This is what the CI
+        // integration workflow sets so the test run NEVER touches the shared
+        // Firestore quota (and never needs the service-account JSON).
+        //
+        // Before this flag existed the workflow exported the setting but the
+        // code ignored it, so the CI backend still booted the Firestore
+        // repository — every request either 500'd (no credentials in the
+        // runner) or wrote into the production database.
+        var useInMemoryRepository = configuration.GetValue<bool?>("Firestore:UseInMemoryRepository") ?? false;
+
         // Redis connection for code reservation and session storage.
         // Redis is OPTIONAL in production — if it isn't reachable (cold start,
         // free-tier sleep, missing connection string) we fall back to the
@@ -121,20 +133,26 @@ public static class DependencyInjection
         services.AddSingleton<INopeWindowRegistry, InMemoryNopeWindowRegistry>();
         services.AddSingleton<IFuturePeekRegistry, FuturePeekRegistry>();
         services.AddScoped<IFavorPickAutoResolver, FavorPickAutoResolver>();
+        // Phase-1 sibling of the Favor resolver: auto-cancels a pending
+        // "choose who to ask" picker (Favor phase 1) after the 10s budget.
+        services.AddScoped<ITargetPickAutoResolver, TargetPickAutoResolver>();
         // In-memory room cache: singleton so all requests share the same warm cache.
         // Server restart clears it (cold start), but gameplay reads are near-zero Firestore.
         services.AddSingleton<IRoomCache, InMemoryRoomCache>();
         // Singleton room repository for test mode - zero Firestore reads/writes.
-        services.AddSingleton<ITestRoomRepository>(sp =>
-        {
-            var cache = sp.GetRequiredService<IRoomCache>();
-            return new InMemoryRoomRepository(cache);
-        });
+        //
+        // IMPORTANT: the concrete type and the ITestRoomRepository interface
+        // must resolve to the SAME instance. Registering them as two
+        // independent factories created two separate stores, so a room
+        // created through /api/test/room was invisible to the code path
+        // that writes through IRoomRepository (and vice versa) — gameplay
+        // writes landed in an empty store and the room state never changed.
         services.AddSingleton<InMemoryRoomRepository>(sp =>
         {
             var cache = sp.GetRequiredService<IRoomCache>();
             return new InMemoryRoomRepository(cache);
         });
+        services.AddSingleton<ITestRoomRepository>(sp => sp.GetRequiredService<InMemoryRoomRepository>());
         // Singleton to track the single active test room.
         services.AddSingleton<IActiveTestRoom, ActiveTestRoom>();
         services.AddSingleton<ActiveTestRoom>(); // Keep concrete type for direct access if needed
@@ -142,7 +160,21 @@ public static class DependencyInjection
         // reference (which is safe to reuse but benefits from per-request lifetime).
         services.AddScoped<FirestoreRoomRepository>();
         // CachedRoomRepository decorates FirestoreRoomRepository with the IRoomCache.
-        services.AddScoped<IRoomRepository, CachedRoomRepository>();
+        //
+        // EXCEPTION — ephemeral/CI mode (Firestore:UseInMemoryRepository=true):
+        // the production repository is swapped for the in-memory one so the CI
+        // run never touches the shared Firestore quota and never needs the
+        // service-account JSON (which doesn't exist on a GitHub runner).
+        // Without this the CI backend booted Firestore-backed repos and every
+        // request 500'd on missing credentials.
+        if (useInMemoryRepository)
+        {
+            services.AddScoped<IRoomRepository>(sp => sp.GetRequiredService<InMemoryRoomRepository>());
+        }
+        else
+        {
+            services.AddScoped<IRoomRepository, CachedRoomRepository>();
+        }
         services.AddScoped<ITurnTimeoutHandler, TurnTimeoutHandler>();
         services.AddScoped<INopeTimeoutHandler, NopeTimeoutHandler>();
         services.AddScoped<IRoomService, RoomService>();

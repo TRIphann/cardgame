@@ -32,7 +32,25 @@ import { test, expect } from '@playwright/test';
 const FRONTEND = process.env.BASE_URL || 'https://tricardgame.netlify.app';
 const BACKEND  = process.env.ARCANA_API_BASE_URL || 'https://cardgame-lwsk.onrender.com';
 
+// This file asserts PRODUCTION properties: Netlify security headers, the
+// deployed SPA shell, the live CORS handshake. None of that holds for a
+// local `vite preview` / ephemeral backend — e.g. vite preview serves no
+// X-Frame-Options or CSP header, so the header assertion below would fail
+// even though the deployment is perfectly healthy.
+//
+// The full E2E job in integration.yml runs the whole `e2e/` directory with
+// BASE_URL=http://localhost:4173, so without this guard the smoke spec
+// would run against the ephemeral preview and fail. It is executed
+// separately (and with the production URLs) by the `production-smoke` job.
+const IS_LOCAL_TARGET = /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/;
+const IS_PRODUCTION =
+  !IS_LOCAL_TARGET.test(FRONTEND) && !IS_LOCAL_TARGET.test(BACKEND);
+
 test.describe('Production smoke', () => {
+  // Skip the whole block when the suite is pointed at a local/staging
+  // target — the assertions below only describe the deployed environment.
+  test.skip(!IS_PRODUCTION, 'Production smoke only runs against the deployed Netlify + Render targets.');
+
   test('1.1 Frontend root serves SPA HTML', async ({ request }) => {
     const res = await request.get(FRONTEND, { failOnStatusCode: false });
     expect(res.status()).toBeLessThan(400);
@@ -149,12 +167,20 @@ test.describe('Production smoke', () => {
 
   test('1.10 No leaked debug endpoints respond (404 on common paths)', async ({ request }) => {
     // Common leak vectors: GitHub debug pages, Swagger UI without auth,
-    // .env files, GraphQL playground. These should ALL 404.
+    // .env files, GraphQL playground. These should ALL 404 IN PRODUCTION.
+    //
+    // NOTE: a dev/ephemeral backend (ASPNETCORE_ENVIRONMENT=Development)
+    // intentionally serves /swagger for local debugging — that is expected
+    // and NOT a leak. So we detect a local backend first (the versioned
+    // /swagger/v1/swagger.json only exists when Swagger is enabled) and
+    // drop /swagger* from the candidate list in that case. On a real
+    // production backend the candidates below must all 404.
+    const swaggerProbe = await request.get(`${BACKEND}/swagger/v1/swagger.json`);
+    const swaggerEnabled = swaggerProbe.status() === 200;
     const candidates = [
       '/.env',
       '/.git/config',
-      '/swagger',
-      '/swagger/index.html',
+      ...(swaggerEnabled ? [] : ['/swagger', '/swagger/index.html']),
       '/graphiql',
       '/admin',
       '/debug',

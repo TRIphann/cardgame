@@ -1,4 +1,4 @@
-import { test, expect, Browser, BrowserContext, Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 
 // Helper: create a room via API (faster than driving the landing form for setup)
 async function createRoom(apiUrl: string, hostName: string) {
@@ -37,8 +37,8 @@ async function setReady(apiUrl: string, roomId: string, memberId: string, isRead
   });
 }
 
-const API_URL = 'http://localhost:5000';
-const WEB_URL = 'http://localhost:5173';
+const API_URL = process.env.ARCANA_API_BASE_URL || 'http://localhost:5000';
+const WEB_URL = process.env.BASE_URL || 'http://localhost:5173';
 
 // ─────────────────────────────────────────────────────────────────────
 //  Test 1: Landing page → Create room → Lobby page (normal flow)
@@ -58,7 +58,7 @@ test.describe('Normal game flow - landing + lobby', () => {
     expect(page.url()).toContain('/lobby');
   });
 
-  test('1.2 Lobby page: shows invite code, seats, start button (host)', async ({ page, request }) => {
+  test('1.2 Lobby page: shows invite code, seats, start button (host)', async ({ page }) => {
     // Set up a 3-player room so the start button becomes enabled.
     const room = await createRoom(API_URL, 'Bob');
     const join2 = await joinRoom(API_URL, room.code, 'Player2');
@@ -106,7 +106,7 @@ test.describe('Normal game flow - landing + lobby', () => {
     await expect(page.locator('.player-count')).toBeVisible();
   });
 
-  test('1.3 Lobby code reveal: clicking the eye shows/hides the code', async ({ page, request }) => {
+  test('1.3 Lobby code reveal: clicking the eye shows/hides the code', async ({ page }) => {
     const room = await createRoom(API_URL, 'Charlie');
     await page.goto(WEB_URL);
     await page.evaluate((r) => {
@@ -130,9 +130,9 @@ test.describe('Normal game flow - landing + lobby', () => {
     await expect(codeEl).toBeVisible();
     // Click the visibility toggle
     await page.locator('.code-visibility').click();
-    // After clicking, the code text should match the room code (or show mask).
-    // Just verify the element is still rendered (no crash).
-    await expect(codeEl).toBeVisible();
+    // After clicking, the REAL code must be revealed (this used to stay
+    // masked forever when the session patch was clobbered).
+    await expect(codeEl).toHaveText(code, { timeout: 10_000 });
   });
 });
 

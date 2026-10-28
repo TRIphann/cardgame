@@ -13,8 +13,8 @@
 
 import { test, expect } from '@playwright/test';
 
-const BASE = 'http://localhost:5173';
-const API = 'http://localhost:5000';
+const BASE = process.env.BASE_URL || 'http://localhost:5173';
+const API = process.env.ARCANA_API_BASE_URL || 'http://localhost:5000';
 
 test.describe('Test Lobby (test sandbox)', () => {
   test('1.1 /test page loads, shows loading state, then renders lobby', async ({ page }) => {

@@ -28,6 +28,16 @@ on:
         required: false
         type: string
         default: 'manual re-deploy'
+  # Reusable entry point — release.yml calls this workflow to deploy the
+  # release tag. Without `workflow_call` the `uses:` reference in release.yml
+  # fails validation and the release pipeline never deploys the backend.
+  workflow_call:
+    inputs:
+      ref:
+        description: 'Git ref to deploy (branch, tag or SHA).'
+        required: false
+        type: string
+        default: ''
 
 concurrency:
   group: deploy-backend-${{ github.ref }}
@@ -47,6 +57,10 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Honour the ref supplied by the caller (release.yml passes the
+          # release tag). Defaults to the triggering ref.
+          ref: ${{ inputs.ref || github.ref }}
 
       - name: Verify the render.yaml blueprint
         # Cheap schema check so a typo in render.yaml doesn't break Render.

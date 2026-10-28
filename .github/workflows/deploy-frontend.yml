@@ -41,6 +41,21 @@ on:
           - production
           - preview
           - draft
+  # Reusable entry point — release.yml calls this workflow to deploy the
+  # release tag. Without `workflow_call` the `uses:` reference in release.yml
+  # fails validation and the release pipeline never deploys the frontend.
+  workflow_call:
+    inputs:
+      ref:
+        description: 'Git ref to deploy (branch, tag or SHA).'
+        required: false
+        type: string
+        default: ''
+      target:
+        description: 'Netlify deploy target'
+        required: false
+        type: string
+        default: 'production'
 
 concurrency:
   group: deploy-frontend-${{ github.ref }}
@@ -63,7 +78,11 @@ jobs:
   gate:
     name: Pre-deploy gate
     runs-on: ubuntu-latest
-    if: github.event_name != 'workflow_dispatch' && github.event_name != 'release'
+    # The gate only applies to the automatic paths (push / workflow_run).
+    # A `workflow_call` from release.yml and a manual dispatch are explicit
+    # operator actions — they must not be blocked by the upstream check
+    # (otherwise the release pipeline could never deploy).
+    if: github.event_name != 'workflow_dispatch' && github.event_name != 'release' && github.event_name != 'workflow_call'
     outputs:
       should-deploy: ${{ steps.check.outputs.should-deploy }}
     steps:
@@ -89,12 +108,15 @@ jobs:
     name: Build & deploy
     runs-on: ubuntu-latest
     needs: [gate]
-    if: needs.gate.outputs.should-deploy != 'false' || github.event_name == 'workflow_dispatch' || github.event_name == 'release'
+    if: needs.gate.outputs.should-deploy != 'false' || github.event_name == 'workflow_dispatch' || github.event_name == 'release' || github.event_name == 'workflow_call'
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
+          # Honour the ref supplied by the caller (release.yml passes the
+          # release tag). Defaults to the triggering ref.
+          ref: ${{ inputs.ref || github.ref }}
 
       - name: Determine deploy target
         id: target
@@ -103,6 +125,8 @@ jobs:
           if [ "$EVENT" = "release" ]; then
             echo "target=production" >> "$GITHUB_OUTPUT"
             echo "Deploying release ${{ github.event.release.tag_name }} to production"
+          elif [ "$EVENT" = "workflow_call" ]; then
+            echo "target=${{ inputs.target || 'production' }}" >> "$GITHUB_OUTPUT"
           elif [ "$EVENT" = "workflow_dispatch" ]; then
             echo "target=${{ inputs.target }}" >> "$GITHUB_OUTPUT"
           elif [ "${{ github.ref }}" = "refs/heads/main" ]; then
