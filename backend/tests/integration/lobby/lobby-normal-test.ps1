@@ -357,22 +357,29 @@ Run-Test "N.12 Player 3's played card is visible to Player 1" {
     -Body (@{ memberId = $turnNow; cardKey = "skip" } | ConvertTo-Json) `
     -ContentType "application/json" -TimeoutSec 5
 
-  # Chờ cửa sổ Nope đóng để action commit
-  $after = Wait-NopeResolve -Room @{ roomId = $script:roomId }
-
-  # Player 1 (host) đọc snapshot -> phải thấy lá vừa đánh
+  # lastPlayedCardKey / lastPlayedBy là "cinematic" của cửa sổ Nope: backend
+  # chủ đích xoá chúng (ClearActionCinematic) ngay khi cửa sổ đóng. Vì vậy
+  # Player 1 phải thấy lá vừa đánh TRONG lúc cửa sổ còn mở, không phải sau đó.
   $hostSnap = Invoke-RestMethod -Uri "$api/api/rooms/$($script:roomId)/snapshot?memberId=$($script:hostId)" -Method Get -TimeoutSec 5
   if (-not $hostSnap.gameState.lastPlayedCardKey) {
-    throw "Player 1 should see lastPlayedCardKey after Player 3 played a card"
+    throw "Player 1 should see lastPlayedCardKey while the Nope window is open"
+  }
+  if ($hostSnap.gameState.lastPlayedCardKey -ne "skip") {
+    throw "lastPlayedCardKey should be 'skip', got $($hostSnap.gameState.lastPlayedCardKey)"
   }
   if ($hostSnap.gameState.lastPlayedBy -ne $turnNow) {
     throw "lastPlayedBy should be the player who played ($turnNow), got $($hostSnap.gameState.lastPlayedBy)"
   }
-  $playedAfter = Get-CounterTotal $hostSnap "cardsPlayed"
+  Write-Output "  Player 1 sees lastPlayed=$($hostSnap.gameState.lastPlayedCardKey) by $($hostSnap.gameState.lastPlayedBy)"
+
+  # Chờ cửa sổ Nope đóng để action commit; lúc này cinematic đã bị xoá và
+  # chỉ còn bộ đếm cardsPlayed (state bền) là bằng chứng lá bài đã được đánh.
+  $after = Wait-NopeResolve -Room @{ roomId = $script:roomId }
+  $hostAfter = Invoke-RestMethod -Uri "$api/api/rooms/$($script:roomId)/snapshot?memberId=$($script:hostId)" -Method Get -TimeoutSec 5
+  $playedAfter = Get-CounterTotal $hostAfter "cardsPlayed"
   if ($playedAfter -le $playedBefore) {
     throw "cardsPlayed should increase: was $playedBefore, got $playedAfter"
   }
-  Write-Output "  Player 1 sees lastPlayed=$($hostSnap.gameState.lastPlayedCardKey) by $($hostSnap.gameState.lastPlayedBy)"
 }
 
 # ─────────────────────────────────────────────────────────────────────
