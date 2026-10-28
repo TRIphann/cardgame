@@ -61,6 +61,13 @@ updates:
       time: "08:00"
       timezone: "Asia/Ho_Chi_Minh"
     open-pull-requests-limit: 5
+    # @vitejs/plugin-react 6.x requires Vite 8 as a peer dep, but this repo
+    # pins Vite 5 — Dependabot's 4.x→6.x PR ships a lockfile npm cannot
+    # resolve (`edgesOut` crash), which breaks every Netlify build until the
+    # PR is closed. Hold the plugin on v4 until the Vite 8 upgrade is planned.
+    ignore:
+      - dependency-name: "@vitejs/plugin-react"
+        update-types: ["version-update:semver-major"]
     groups:
       react:
         patterns:
