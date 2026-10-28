@@ -19,7 +19,7 @@
          patched release on the .NET 8 branch. -->
     <PackageReference Include="Microsoft.AspNetCore.SignalR" Version="1.2.0" />
     <PackageReference Include="Microsoft.AspNetCore.SignalR.Common" Version="8.0.32" />
-    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="8.0.32" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.14" />
   </ItemGroup>
 
   <ItemGroup>
