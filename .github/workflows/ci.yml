@@ -85,7 +85,7 @@ jobs:
           lfs: false
 
       - name: Setup .NET 8.0
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 8.0.x
           cache: true
@@ -153,7 +153,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Setup .NET 8.0
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 8.0.x
 

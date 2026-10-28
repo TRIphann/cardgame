@@ -108,7 +108,7 @@ jobs:
       # -- Ephemeral backend (only when not pointed at staging/prod) --------
       - name: Setup .NET 8.0
         if: steps.resolve-url.outputs.url == 'http://localhost:5000'
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 8.0.x
 
@@ -261,7 +261,7 @@ jobs:
       # uses. Firestore is never touched (see Firestore:UseInMemoryRepository).
       - name: Setup .NET 8.0
         if: steps.resolve-fe.outputs.url == 'http://localhost:4173'
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 8.0.x
 
